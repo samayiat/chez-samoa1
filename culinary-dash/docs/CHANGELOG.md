@@ -7,6 +7,34 @@ Commit history, newest first. Each entry: `## YYYY-MM-DD — title` + bullets of
 
 ---
 
+## 2026-07-16 (k) — HP-gated attack stages: the health bar itself picks the moveset
+
+Part of the boss-night overhaul ("use the health bar to initiate different attack stages"). Every boss's
+attack rotation used to be a flat cycle-count round-robin, completely blind to HP — the exact same moves
+in the exact same order whether a boss was at full health or one hit from death.
+
+- **`bossPhase(B)`**: pure, testable — `>66% HP` is Stage 1, `33-66%` is Stage 2, `<=33%` is Stage 3
+  ("enraged"). **`bossRotation(B)`** picks which rotation array a boss's HP currently calls for.
+- Each boss gained `rotation2` (same moves, reordered toward the harder-hitting ones) and `rotation3` (adds
+  one new signature finisher) — additive fields; the original `rotation` arrays are untouched (the existing
+  test pinning Vince's base rotation at exactly 5 moves still passes verbatim).
+- **Tempo escalates by phase, but ONLY the anticipation** — `bossWindupT(B)` scales `windup` by
+  `{1:1, 2:0.85, 3:0.68}`. `recover` (the strike window) is never touched by phase, on purpose: an enraged
+  boss commits to attacks faster, but the player is never punished harder for actually landing an opening.
+- **Three new Stage-3 signature attacks**, one per boss, each built on an existing attack's exact shape at
+  bigger numbers, and routed through last slice's `bossBigHit()` instead of a text banner:
+  - Vince's **WRECKING BALL** (reuses "pound"'s remembered-spot AOE, `wreckR:72` vs `slamR:40`).
+  - The Inspector's **CONDEMNED** (reuses "citation"'s frozen-at-her-spot AOE, `condemnR:55` vs `citationR:16`).
+  - Bruno's **HAYMAKER** (reuses "jab"'s shape, bigger + a fling like Vince's grab).
+
+  All three still resolve into `"recover"` within a bounded state walk — the one hard invariant every
+  attack in this game has always had, unchanged.
+
+### Tests
++27 checks (**927 total**): phase thresholds at both boundaries; each boss picks the right rotation array
+per phase; windup shortens phase-over-phase while `recover` stays fixed; each new Stage-3 attack resolves
+into recover, is routed through `bossBigHit`, and actually connects (haymaker's fling included).
+
 ## 2026-07-16 (j) — The devastating-hit juice layer: HIT.devastating, embers, shockwave rings, screen-punch
 
 Part of the boss-night overhaul (bigger asks: "way too much juice," particles/sparks/flames, screen effects

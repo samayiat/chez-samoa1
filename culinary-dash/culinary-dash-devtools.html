@@ -1654,34 +1654,56 @@ const BOSSES=[
     // a proximity punish that preempts whichever rotation slot was due if she's hugging him. EVERY one of
     // the six still resolves into "recover" — the strike window never goes away, only what precedes it varies.
     rotation:["charge","pound","paper","stomp","dcharge"],
+    // Stage 2 (<=66% HP) reorders toward the punishing moves; Stage 3 (<=33%) adds a signature finisher.
+    // Same 6 base attacks either way — bossRotation() picks WHICH array, per boss HP, see bossPhase().
+    rotation2:["stomp","dcharge","charge","pound","paper"],
+    rotation3:["dcharge","stomp","wreckingball"],
     chargeTime:0.55, chargeSpeed:200, hitR:14, chargeDmg:4,             // 1. charge: telegraphed lunge
     slamTele:1.1, slamR:40, slamDmg:6,                                  // 2. pound: AOE at a remembered spot
     paperAim:0.7, paperSpeed:260, paperR:10, paperDmg:3,                // 3. paper: ranged eviction-notice throw
     grabR:16, grabTele:0.35, grabDmg:5,                                 // 4. grab: punishes standing too close
     stompTele:0.5, stompR:26, stompDmg:3,                               // 5. stomp: faster AOE centred on HIM now
-    dchargeTime:0.4, dchargeSpeed:230, dchargeDmg:3 },                  // 6. dcharge: a two-hit charge combo
+    dchargeTime:0.4, dchargeSpeed:230, dchargeDmg:3,                    // 6. dcharge: a two-hit charge combo
+    wreckTele:1.8, wreckR:72, wreckDmg:10 },                            // 7. Stage 3: WRECKING BALL (reuses pound's shape, huge)
   { id:"inspector", name:"The Health Inspector", tagline:"this kitchen is CONDEMNED.", kind:"zoner",
     hp:50, windup:0.8, recover:1.5, reach:20, koChance:0.05, reward:6500, recLevel:9,
     // A ranged "zoner" — the counterpoint to Vince's melee charger. Four distinct attacks, none of them
     // a lunge: a positional trap, a multi-point AOE, a projectile fan, and pressure from roaming adds.
     // Every one still resolves into "recover" — same guarantee as Vince's six.
     rotation:["citation","zones","spread","summon"],
+    rotation2:["zones","spread","citation","summon"],
+    rotation3:["spread","zones","condemned"],
     citationTele:0.6, citationR:16, citationDmg:3,                      // 1. citation: a circle at HER spot, frozen at the telegraph
     zonesTele:0.9, zonesN:3, zoneR:14, zoneDmg:4, zoneSpread:22,        // 2. zones: several circles around her, find the gap
     spreadCount:3, spreadSpeed:200, spreadR:9, spreadDmg:2, spreadFan:0.5, // 3. spread: a fan of projectiles, not one straight line
-    addHP:1, addSpeed:26, addDmg:1, addLife:6, addCount:2, addR:8 },    // 4. summon: roaming pressure, doesn't gate the strike window
+    addHP:1, addSpeed:26, addDmg:1, addLife:6, addCount:2, addR:8,      // 4. summon: roaming pressure, doesn't gate the strike window
+    condemnTele:1.4, condemnR:55, condemnDmg:6 },                       // 5. Stage 3: CONDEMNED (reuses citation's shape, room-covering)
   { id:"ringer", name:"Chef Bruno \u201cThe Ringer\u201d", tagline:"you're not the only one who can throw hands.", kind:"trickster",
     hp:55, windup:0.7, recover:1.4, reach:20, koChance:0.05, reward:8000, recLevel:12,
     // A trickster \u2014 the counterpoint to Vince (positioning) and the Inspector (zone-awareness): this one
     // tests TIMING. feint and jab share the exact same telegraph so she can't tell them apart on sight;
     // combo has a deliberate gap before its 2nd hit; counter is a SUSTAINED stance, not an instant punish.
     rotation:["feint","jab","combo","counter"],
+    rotation2:["combo","counter","jab","feint"],
+    rotation3:["counter","combo","haymaker"],
     feintTele:0.5,                                                      // 1. feint: looks identical to jab, resolves to nothing
     jabTele:0.3, jabR:16, jabDmg:2,                                      // 2. jab: fast, short telegraph, low dmg
     comboTele:0.4, comboR:18, comboGap:0.35, comboDmg1:2, comboDmg2:3,   // 3. combo: 2 hits with a gap between
-    counterTime:1.3, counterR:22, counterDmg:4 },                       // 4. counter: sustained proximity hazard
+    counterTime:1.3, counterR:22, counterDmg:4,                         // 4. counter: sustained proximity hazard
+    haymakerTele:1.0, haymakerR:24, haymakerDmg:5 },                    // 5. Stage 3: HAYMAKER (reuses jab's shape, bigger + a fling)
 ];
 function pickBoss(){ const idx=Math.min(BOSSES.length-1, run.bossesBeaten||0); return BOSSES[idx].id; }
+// HP-gated attack stages: the health bar itself picks the moveset. Stage 1 (>66% HP) is the original
+// rotation; Stage 2 (33-66%) reorders toward the harder-hitting moves; Stage 3 (<=33%, "enraged") adds
+// one new signature finisher AND ramps tempo (shorter windups only — recover, the strike window, never
+// shrinks, so the player is never punished harder for getting an opening).
+function bossPhase(B){ const f=B.hp/B.maxHP; return f>0.66?1:(f>0.33?2:3); }
+const PHASE_TEMPO={1:1, 2:0.85, 3:0.68};
+function bossWindupT(B){ return B.def.windup*PHASE_TEMPO[bossPhase(B)]; }
+function bossRotation(B){
+  const D=B.def, p=bossPhase(B);
+  return p===1 ? D.rotation : (p===2 ? (D.rotation2||D.rotation) : (D.rotation3||D.rotation2||D.rotation));
+}
 function bossNightExposed(){ return !!bossFight && bossFight.state==="recover"; }
 function startBossNight(id){
   if(!run) return;
@@ -1732,7 +1754,7 @@ function updateVince(dt){
     if(B.t<=0){
       B.cycle=(B.cycle||0)+1;
       const close = Math.hypot(chef.x-B.x,chef.y-B.y) < D.grabR;
-      const move = close ? "grab" : D.rotation[(B.cycle-1)%D.rotation.length];
+      const move = close ? "grab" : bossRotation(B)[(B.cycle-1)%bossRotation(B).length];
       if(move==="pound"){
         B.state="slamtele"; B.t=D.slamTele; B.slamX=B.x; B.slamY=B.y;
         flash(B.x,B.y-24,"GROUND POUND!","#c8452e"); sfx("burnt");
@@ -1752,6 +1774,8 @@ function updateVince(dt){
       } else if(move==="grab"){
         B.state="grabtele"; B.t=D.grabTele;
         flash(B.x,B.y-24,"GOTCHA!","#c8452e"); sfx("burnt");
+      } else if(move==="wreckingball"){
+        B.state="wreckplant"; B.t=D.wreckTele; B.wreckX=B.x; B.wreckY=B.y; sfx("burnt");
       } else {   // "charge" — the default, also what a rotation lookup miss falls back to
         const dx=chef.x-B.x, dy=chef.y-B.y, d=Math.hypot(dx,dy)||1;
         B.chargeDX=dx/d; B.chargeDY=dy/d; B.hitThisCharge=false;
@@ -1847,8 +1871,19 @@ function updateVince(dt){
       impact(HIT.hurt, (B.x<chef.x?1:-1), 0, chef.x, chef.y-12); sfx("hurt");
     }
     if(B.t<=0){ B.state="recover"; B.t=D.recover; flash(B.x,B.y-24,"WINDED \u2014 GET HIM!","#ffd86b"); }
+  } else if(B.state==="wreckplant"){        // 7. Stage 3: a huge remembered-spot AOE, telegraphed far longer
+    B.t-=dt;
+    if(B.t<=0){
+      B.state="wreckslam"; B.t=0.22;
+      if(Math.hypot(chef.x-B.wreckX, chef.y-B.wreckY)<D.wreckR){
+        B.chefHP-=D.wreckDmg*guardMult(); B.hurtFlash=0.6;
+        bossBigHit(chef.x,chef.y-16,(B.wreckX<chef.x?1:-1),0,"#ff3c32");
+      }
+    }
+  } else if(B.state==="wreckslam"){
+    B.t-=dt; if(B.t<=0){ B.state="recover"; B.t=D.recover; }
   } else if(B.state==="recover"){
-    B.t-=dt; if(B.t<=0){ B.state="windup"; B.t=D.windup; }
+    B.t-=dt; if(B.t<=0){ B.state="windup"; B.t=bossWindupT(B); }
   }
 }
 function vinceStrike(){
@@ -1878,7 +1913,7 @@ function updateInspector(dt){
     B.t-=dt;
     if(B.t<=0){
       B.cycle=(B.cycle||0)+1;
-      const move = D.rotation[(B.cycle-1)%D.rotation.length];
+      const move = bossRotation(B)[(B.cycle-1)%bossRotation(B).length];
       if(move==="zones"){
         B.zones=[];
         for(let i=0;i<D.zonesN;i++){ const ang=(i/D.zonesN)*Math.PI*2 + B.cycle*0.7;
@@ -1895,6 +1930,9 @@ function updateInspector(dt){
       } else if(move==="summon"){
         B.state="summontele"; B.t=0.4;
         flash(B.x,B.y-24,"BACKUP INSPECTORS!","#c8452e"); sfx("burnt");
+      } else if(move==="condemned"){
+        B.condemnX=chef.x; B.condemnY=chef.y;
+        B.state="condemntele"; B.t=D.condemnTele; sfx("burnt");
       } else {   // "citation" — the default, also what a rotation lookup miss falls back to
         B.citeX=chef.x; B.citeY=chef.y;
         B.state="citetele"; B.t=D.citationTele;
@@ -1947,8 +1985,19 @@ function updateInspector(dt){
       B.state="recover"; B.t=D.recover;
       flash(B.x,B.y-24,"GET TO WORK!","#c8452e");
     }
+  } else if(B.state==="condemntele"){       // 5. Stage 3: room-covering AOE, frozen at her spot at the telegraph
+    B.t-=dt;
+    if(B.t<=0){
+      B.state="condemnhit"; B.t=0.22;
+      if(Math.hypot(chef.x-B.condemnX, chef.y-B.condemnY)<D.condemnR){
+        B.chefHP-=D.condemnDmg*guardMult(); B.hurtFlash=0.6;
+        bossBigHit(chef.x,chef.y-16,(B.condemnX<chef.x?1:-1),0,"#ffb43c");
+      }
+    }
+  } else if(B.state==="condemnhit"){
+    B.t-=dt; if(B.t<=0){ B.state="recover"; B.t=D.recover; }
   } else if(B.state==="recover"){
-    B.t-=dt; if(B.t<=0){ B.state="windup"; B.t=D.windup; }
+    B.t-=dt; if(B.t<=0){ B.state="windup"; B.t=bossWindupT(B); }
   }
   if(B.adds && B.adds.length){              // roaming adds tick every frame, independent of the state above
     for(const a of B.adds){
@@ -1972,7 +2021,7 @@ function updateRinger(dt){
     B.t-=dt;
     if(B.t<=0){
       B.cycle=(B.cycle||0)+1;
-      const move = D.rotation[(B.cycle-1)%D.rotation.length];
+      const move = bossRotation(B)[(B.cycle-1)%bossRotation(B).length];
       if(move==="jab"){
         B.state="jabtele"; B.t=D.jabTele;
         flash(B.x,B.y-24,"...!","#ffd86b"); sfx("burnt");
@@ -1982,6 +2031,8 @@ function updateRinger(dt){
       } else if(move==="counter"){
         B.state="counter"; B.t=D.counterTime; B.counterHit=false;
         flash(B.x,B.y-24,"COME AT ME!","#c8452e"); sfx("burnt");
+      } else if(move==="haymaker"){
+        B.state="haymakertele"; B.t=D.haymakerTele; sfx("burnt");
       } else {   // "feint" \u2014 the default, also what a rotation lookup miss falls back to
         B.state="feinttele"; B.t=D.feintTele;
         flash(B.x,B.y-24,"...!","#ffd86b"); sfx("burnt");   // SAME text/telegraph as jab \u2014 the mixup is the point
@@ -2034,8 +2085,22 @@ function updateRinger(dt){
       impact(HIT.heavy, (B.x<chef.x?1:-1), 0, chef.x, chef.y-12); sfx("hurt");
     }
     if(B.t<=0){ B.state="recover"; B.t=D.recover; flash(B.x,B.y-24,"OKAY, OKAY \u2014 GET ME!","#ffd86b"); }
+  } else if(B.state==="haymakertele"){      // 5. Stage 3: a long, deliberately readable windup, then a fling
+    B.t-=dt;
+    if(B.t<=0){
+      B.state="haymakerhit"; B.t=0.22;
+      if(Math.hypot(chef.x-B.x,chef.y-B.y)<D.haymakerR){
+        B.chefHP-=D.haymakerDmg*guardMult(); B.hurtFlash=0.6;
+        bossBigHit(chef.x,chef.y-16,(B.x<chef.x?1:-1),0,"#c020a0");
+        chef.x = (B.x<W/2) ? FLOOR.x1-12 : FLOOR.x0+12;
+        chef.y = (B.y<H/2) ? FLOOR.y1-12 : FLOOR.y0+12;
+        joy.vx=0; joy.vy=0;
+      }
+    }
+  } else if(B.state==="haymakerhit"){
+    B.t-=dt; if(B.t<=0){ B.state="recover"; B.t=D.recover; }
   } else if(B.state==="recover"){
-    B.t-=dt; if(B.t<=0){ B.state="windup"; B.t=D.windup; }
+    B.t-=dt; if(B.t<=0){ B.state="windup"; B.t=bossWindupT(B); }
   }
 }
 function bossNightSwing(){

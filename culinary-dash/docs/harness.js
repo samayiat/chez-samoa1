@@ -944,6 +944,65 @@ const probe = `
       return ok1; })()); }
   { rings.length=0; particles.length=0; screenPunchT=0; screenPunchAmp=0; }
 
+  // ---- HP-gated attack stages: the health bar itself picks the moveset (Roadmap #40, slice K/2) ----
+  startCampaign(); customers=[]; phase="play"; startBossNight("vince"); bossFight.introT=0;
+  { const B=bossFight;
+    B.hp=B.maxHP; ok("100% HP is phase 1", bossPhase(B)===1);
+    B.hp=B.maxHP*0.67; ok("67% HP is still phase 1", bossPhase(B)===1);
+    B.hp=B.maxHP*0.66; ok("66% HP is phase 2 (boundary)", bossPhase(B)===2);
+    B.hp=B.maxHP*0.5; ok("50% HP is phase 2", bossPhase(B)===2);
+    B.hp=B.maxHP*0.33; ok("33% HP is phase 3 (boundary)", bossPhase(B)===3);
+    B.hp=B.maxHP*0.1; ok("10% HP is phase 3", bossPhase(B)===3);
+  }
+  for(const id of ["vince","inspector","ringer"]){
+    startCampaign(); customers=[]; phase="play"; startBossNight(id); bossFight.introT=0;
+    const B=bossFight, D=B.def;
+    B.hp=B.maxHP; ok(id+": phase 1 uses the base rotation", bossRotation(B)===D.rotation);
+    B.hp=B.maxHP*0.5; ok(id+": phase 2 uses rotation2", bossRotation(B)===D.rotation2);
+    B.hp=B.maxHP*0.2; ok(id+": phase 3 uses rotation3 (has the new signature move)", bossRotation(B)===D.rotation3);
+  }
+  startCampaign(); customers=[]; phase="play"; startBossNight("vince"); bossFight.introT=0;
+  { const B=bossFight, D=B.def;
+    B.hp=B.maxHP; const w1=bossWindupT(B);
+    B.hp=B.maxHP*0.5; const w2=bossWindupT(B);
+    B.hp=B.maxHP*0.1; const w3=bossWindupT(B);
+    ok("windup shortens phase 1 -> 2 -> 3 (enraged = faster anticipation)", w1>w2 && w2>w3);
+    ok("...but D.recover itself is never touched by phase", D.recover===1.6); }
+
+  // Each Stage-3 signature attack still resolves into "recover" within a bounded walk (the hard invariant
+  // every attack has always had) AND is routed through bossBigHit() (arms the screen-punch), not flash().
+  { function walkToRecover(maxSteps){
+      let steps=0;
+      while(bossFight.state!=="recover" && steps<maxSteps){ updateBossNight(1/60); steps++; }
+      return bossFight.state==="recover"; }
+
+    startCampaign(); customers=[]; phase="play"; startBossNight("vince"); bossFight.introT=0;
+    { const B=bossFight; chef.x=B.x+30; chef.y=B.y;   // not ON him: that trips his proximity-grab override
+      B.hp=B.maxHP*0.1; B.state="windup"; B.t=0.001; B.cycle=2;
+      screenPunchT=0; screenPunchAmp=0; const hp0=B.chefHP;
+      ok("vince's Stage-3 WRECKING BALL resolves into recover", walkToRecover(400));
+      ok("...and it's routed through bossBigHit (arms the screen-punch)", screenPunchT>0);
+      ok("...and it actually connects", B.chefHP<hp0); }
+
+    startCampaign(); customers=[]; phase="play"; startBossNight("inspector"); bossFight.introT=0;
+    { const B=bossFight; chef.x=B.x; chef.y=B.y;
+      B.hp=B.maxHP*0.1; B.state="windup"; B.t=0.001; B.cycle=2;
+      screenPunchT=0; screenPunchAmp=0; const hp0=B.chefHP;
+      ok("inspector's Stage-3 CONDEMNED resolves into recover", walkToRecover(400));
+      ok("...and it's routed through bossBigHit (arms the screen-punch)", screenPunchT>0);
+      ok("...and it actually connects", B.chefHP<hp0); }
+
+    startCampaign(); customers=[]; phase="play"; startBossNight("ringer"); bossFight.introT=0;
+    { const B=bossFight; chef.x=B.x; chef.y=B.y;
+      B.hp=B.maxHP*0.1; B.state="windup"; B.t=0.001; B.cycle=2;
+      screenPunchT=0; screenPunchAmp=0; const hp0=B.chefHP;
+      ok("ringer's Stage-3 HAYMAKER resolves into recover", walkToRecover(400));
+      ok("...and it's routed through bossBigHit (arms the screen-punch)", screenPunchT>0);
+      ok("...and it actually connects", B.chefHP<hp0);
+      ok("...and flings the chef away, like Vince's grab", Math.hypot(chef.x-B.x, chef.y-B.y)>30); }
+  }
+  bossFight=null; phase="play"; screenPunchT=0; screenPunchAmp=0; rings.length=0; particles.length=0;
+
   // routing: results -> office -> next day
   startCampaign(); run.dow=0; tips=100; finishDay();
   ok("day ends on results", phase==="over");
