@@ -397,7 +397,10 @@ function onDown(e){
     if(phase==="title"){
       continueOrStart(); return;                    // #8: continue a saved run, else open Day 1 (Monday)
     }
-    if(phase==="over"){ enterOffice(); return; }     // results -> the back office (spend), then next day
+    if(phase==="over"){                              // results -> the back office (spend), then next day
+      if(saveCodeRect && L.x>=saveCodeRect.x&&L.x<=saveCodeRect.x+saveCodeRect.w&&L.y>=saveCodeRect.y&&L.y<=saveCodeRect.y+saveCodeRect.h){ copySaveCode(); return; }  // #8: tap the button -> copy, don't fall through to the office
+      enterOffice(); return;
+    }
     if(phase==="gameover"){ startCampaign(); return; }  // EVICTED -> start a fresh run
     if(dialogue){ advanceDialogue(); return; }   // any tap advances the box
     if(waveoff){ return; }                        // locked during the shoo
@@ -4458,6 +4461,15 @@ function drawGameOver(){
 }
 function drawEnd(){
   X.fillStyle="rgba(11,8,16,.86)"; X.fillRect(0,0,W,H);
+  // #8: copy-save-code button. Auto-save already persisted the run; this is the PORTABLE code (backup /
+  // move between devices). The code is shown on-screen once tapped, so it works even if the clipboard is
+  // blocked (cross-origin iframe) — she can read or screenshot it.
+  saveCodeRect={x:W/2-54,y:3,w:108,h:13};
+  X.fillStyle=shownSaveCode?"#2f5a34":"#2b2450"; X.fillRect(saveCodeRect.x,saveCodeRect.y,saveCodeRect.w,saveCodeRect.h);
+  X.textAlign="center"; X.textBaseline="alphabetic"; X.font="7px monospace"; X.fillStyle=shownSaveCode?"#bfeaa0":"#c9b8ff";
+  X.fillText(shownSaveCode?"✓ SAVE CODE COPIED":"COPY SAVE CODE", W/2, 12);
+  if(shownSaveCode){ X.fillStyle="#8be27a"; X.font="6px monospace"; X.fillText(shownSaveCode, W/2, 20); }
+  X.textAlign="left";
   X.fillStyle="#ffd86b"; X.font="12px monospace"; X.textAlign="center"; X.textBaseline="alphabetic";
   X.fillText("SERVICE OVER", W/2, 34);
   if(run){ X.fillStyle="#c79ad8"; X.font="7px monospace"; X.fillText(dowName().toUpperCase()+" \u00b7 WEEK "+run.week+(isNightDay()?"  (after hours)":""), W/2, 46); }
@@ -4553,6 +4565,13 @@ function persistRun(){ if(!run) return; try{ if(typeof localStorage!=="undefined
 function clearSave(){ try{ if(typeof localStorage!=="undefined") localStorage.removeItem(SAVE_KEY); }catch(e){} }                                    // a finished run leaves nothing to continue
 function loadSave(){ try{ if(typeof localStorage!=="undefined") return decodeSave(localStorage.getItem(SAVE_KEY)); }catch(e){} return null; }
 function continueOrStart(){ const s=loadSave(); if(s) restoreRun(s); else startCampaign(); }   // #8: a valid save continues; otherwise a fresh Day 1
+let saveCodeRect=null, shownSaveCode=null;         // #8: the results-screen copy button + the code it last emitted
+function copySaveCode(){                            // the PORTABLE code — backup / move between devices (localStorage can be cleared)
+  if(!run) return;
+  shownSaveCode=encodeSave(run);
+  try{ if(navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(shownSaveCode).catch(()=>{}); }catch(e){}  // a cross-origin iframe can block the clipboard; the on-screen code is the fallback
+  sfx("coin");
+}
 function nextDay(){         // leave the office -> advance the calendar -> (rent on Mondays) -> next day
   const newWeek = run.dow===6;
   run.dow++; if(run.dow>6){ run.dow=0; run.week++; }
@@ -4572,6 +4591,7 @@ function finishDay(){       // day (+ optional night) is over: bank the take, lo
     if(run.beliHist.length>BELI_WINDOW) run.beliHist.shift();
   }
   persistRun();               // #8: the day's earnings survive closing the app on the results screen
+  shownSaveCode=null;         // a fresh results screen starts with no code shown
   phase="over";
 }
 /* ---- Phase 2: back-office spend screen ---- */

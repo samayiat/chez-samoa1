@@ -2838,6 +2838,13 @@ const probe = `
       run=mk(); persistRun(); clearSave();
       ok("clearing the save (eviction) leaves nothing to continue", loadSave()===null);
     } finally { localStorage=_ls; }
+    // the results-screen COPY button: drawEnd wires a hit-rect; tapping it emits a decodable code
+    run=mk(); shownSaveCode=null; phase="over"; drawEnd();
+    ok("the results screen exposes a copy-save-code hit-rect", saveCodeRect && saveCodeRect.w>0 && saveCodeRect.h>0);
+    copySaveCode();
+    ok("tapping copy emits a valid, decodable code and shows it on screen",
+       shownSaveCode && decodeSave(shownSaveCode) && decodeSave(shownSaveCode).bank===4820);
+    phase="title";
   })();
 
   globalThis.__RESULT = R;
