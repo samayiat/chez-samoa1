@@ -108,6 +108,24 @@ assumption):
    forces you to keep backing off rather than just avoiding one fixed point.
 6. **dcharge** (double charge) — two lunges back-to-back, re-aimed at her position between hits.
 
+### A second boss (2026-07-16): The Health Inspector, a ranged zoner
+`BOSSES[1]` — `kind:"zoner"`, the counterpoint to Vince's melee charger. `pickBoss()` already escalates by
+`run.bossesBeaten`, so beating Vince once hands you the Inspector next, no new plumbing needed. Four
+attacks, `rotation:["citation","zones","spread","summon"]`, none of them a lunge:
+1. **citation** — a danger circle frozen at wherever she was standing at the telegraph. Pure positional:
+   sidestepping counters it completely, standing still doesn't.
+2. **zones** — several circles placed around her current position; overlapping ANY of them at resolution
+   is a hit, so she has to find the actual gap rather than dodge one point.
+3. **spread** — a FAN of projectiles (not Vince's single straight paper) — forces lateral movement, since
+   backing straight up stays in the fan's spread.
+4. **summon** — spawns 1-2 roaming adds that chase and tag her once each before expiring. Deliberately
+   **not a gate**: the strike window opens in the same resolve as the adds spawn, so the boss himself is
+   never made unhittable by summoning — the adds are pressure on top of the fight, not a wall around it.
+
+`bossNightStrike()` is kind-agnostic (it only reads `B.def.reach`/`koChance` + `punchDmg()`), so the same
+strike handler works on both bosses with zero new code. Same structural guarantee as Vince: every one of
+the Inspector's four attacks — citation/zones/spread/summon — resolves into `"recover"` too.
+
 ### Fight structure (reuses combat)
 - New `phase==="boss"` encounters run on the impact spine like Brandon does today: chef HP bar, mash to
   strike in the exposed window, KO fall. `chefMaxHP()`, `punchDmg()`, `guardMult()`, `fightSpeedMult()`

@@ -7,6 +7,36 @@ Commit history, newest first. Each entry: `## YYYY-MM-DD — title` + bullets of
 
 ---
 
+## 2026-07-16 (e) — A second boss: The Health Inspector, a ranged zoner (Roadmap #40, slice D)
+
+Built blind ahead of a playtest, per request. Vince was a melee charger; the roster needed a boss that
+*doesn't* play the same way, so the second entry is entirely ranged/positional — a "zoner."
+
+### The Health Inspector
+`BOSSES[1]`, `kind:"zoner"`. Four attacks, none of them a lunge:
+- **citation** — a danger circle frozen at wherever she was standing the instant it's telegraphed. Purely
+  positional: stepping away beats it completely; standing still doesn't.
+- **zones** — several circles dropped around her current spot; overlapping *any* of them when they resolve
+  is a hit, so she has to find the actual gap instead of dodging one point.
+- **spread** — a FAN of projectiles (unlike Vince's single straight paper throw), so backing straight up
+  isn't a universal answer — the fan still covers that line.
+- **summon** — spawns 1-2 roaming adds that chase her and tag once each before expiring. Deliberately **not
+  a gate**: the strike window opens in the same resolve the adds spawn in. Adds are pressure layered on
+  the fight, never a wall that makes the boss himself untouchable.
+
+### Escalation and reuse, for free
+`pickBoss()` already indexes off `run.bossesBeaten`, so beating Vince once now hands you the Inspector next
+— zero new plumbing. `bossNightStrike()` turned out to be entirely kind-agnostic (it only reads
+`B.def.reach`/`koChance` and `punchDmg()`), so the exact same strike handler works on both bosses. Stats
+(2a) apply to the Inspector too: his chef HP is `chefMaxHP()`, same as Vince and the brawl.
+
+### Tests
++12 checks (**828 total**): the roster is provably 2 distinct bosses, escalation picks the right one at the
+right win count, the Inspector boots as a zoner with stat-scaled HP, each of his four attacks fires and
+connects when it should (including a same-side miss check for citation, and confirming summon's adds tick
+independently of the main state machine), the shared strike dispatcher works on him, and — matching Vince's
+own guarantee — every one of his four attacks still resolves into the strike window.
+
 ## 2026-07-16 (d) — Triple Vince's moveset: 2 attacks -> 6 (Roadmap #40, slice C)
 
 Per request: more variety in the boss fight, on the condition the strike window never disappears — the

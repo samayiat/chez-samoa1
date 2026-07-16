@@ -692,6 +692,62 @@ const probe = `
       if(B.state!=="recover") allReachRecover=false;
     }
     ok("EVERY one of the 6 attacks still resolves into the strike window — she can always fight back", allReachRecover); }
+
+  // ---- a second boss: The Health Inspector, a ranged ZONER (Roadmap #40, slice D) ----
+  ok("the roster now has two bosses", BOSSES.length===2 && BOSSES.some(b=>b.id==="inspector"));
+  startCampaign(); run.bossesBeaten=1;
+  ok("pickBoss escalates to the Inspector after one win", pickBoss()==="inspector");
+  startCampaign(); run.bossesBeaten=0;
+  ok("...and stays on Vince for a fresh run", pickBoss()==="vince");
+
+  startCampaign(); customers=[]; startBossNight("inspector");
+  ok("the inspector boots as a zoner with stat-scaled HP (2a applies to every boss, not just Vince)",
+     bossFight.kind==="zoner" && bossFight.chefHP===chefMaxHP());
+
+  { const B=bossFight; B.state="citetele"; B.t=0.0001; B.citeX=chef.x; B.citeY=chef.y;
+    const hp0=B.chefHP; updateInspector(1/60);
+    ok("citation (1st attack) lands if she's still in the frozen circle", B.chefHP<hp0); }
+  startCampaign(); customers=[]; startBossNight("inspector");
+  { const B=bossFight; B.state="citetele"; B.t=0.0001; B.citeX=chef.x+500; B.citeY=chef.y+500;
+    const hp0=B.chefHP; updateInspector(1/60);
+    ok("...but whiffs once she's stepped out of it", B.chefHP===hp0); }
+
+  startCampaign(); customers=[]; startBossNight("inspector");
+  { const B=bossFight; B.state="zonestele"; B.t=0.0001; B.zones=[{x:chef.x,y:chef.y}];
+    const hp0=B.chefHP; updateInspector(1/60);
+    ok("zones (2nd attack): standing in ANY violation circle damages", B.chefHP<hp0); }
+
+  startCampaign(); customers=[]; startBossNight("inspector");
+  { const B=bossFight; B.state="spreadfly"; B.t=1;
+    B.papers=[{x:chef.x-2,y:chef.y,dx:1,dy:0,hit:false},{x:-999,y:-999,dx:1,dy:0,hit:false}];
+    const hp0=B.chefHP; updateInspector(1/60);
+    ok("spread (3rd attack): a fan of projectiles, one connecting is enough", B.chefHP<hp0 && B.papers[0].hit===true); }
+
+  startCampaign(); customers=[]; startBossNight("inspector");
+  { const B=bossFight; B.state="summontele"; B.t=0.0001; updateInspector(1/60);
+    ok("summon (4th attack) spawns adds AND opens the strike window in the same resolve — adds never gate it",
+       B.adds && B.adds.length===B.def.addCount && B.state==="recover"); }
+  startCampaign(); customers=[]; startBossNight("inspector");
+  { const B=bossFight; B.adds=[{x:chef.x+1,y:chef.y,hp:1,life:5,hitDone:false}];
+    const hp0=B.chefHP; updateInspector(1/60);
+    ok("...and a roaming add still deals its own touch damage", B.chefHP<hp0 && B.adds[0].hitDone===true); }
+
+  { const terminal=["citetele","citehit","zonestele","zoneshit","spreadfly","summontele"];
+    let allReach=true;
+    for(const st of terminal){
+      startCampaign(); customers=[]; startBossNight("inspector");
+      const B=bossFight; chef.x=205; chef.y=100; B.x=200; B.y=100;
+      B.state=st; B.t=0; B.citeX=B.x; B.citeY=B.y; B.zones=[]; B.papers=[]; B.adds=[];
+      let steps=0; while(B.state!=="recover" && steps<600){ updateInspector(1/60); steps++; }
+      if(B.state!=="recover") allReach=false;
+    }
+    ok("EVERY one of the Inspector's 4 attacks also resolves into the strike window", allReach); }
+
+  startCampaign(); customers=[]; startBossNight("inspector");
+  { const B=bossFight; B.hp=1; B.state="recover"; B.t=1; B.x=chef.x; B.y=chef.y;
+    bossNightStrike();
+    ok("the shared strike dispatcher (bossNightStrike) works on the Inspector too, not just Vince",
+       B.hp<=0 || B.outcome==="win"); }
   run.stats={}; startCampaign(); customers=[]; boss=null; bossFight=null; phase="play";
 
   // routing: results -> office -> next day
