@@ -1415,6 +1415,51 @@ const probe = `
   // The lean rides on chef.x, so it must survive her whole walk band, not just the middle.
   ok("the lean tracks her across the entire walk band",
      leanCam(0,0,0,10,109).x < leanCam(0,0,0,160,109).x && leanCam(0,0,0,160,109).x < leanCam(0,0,0,310,109).x);
+
+  /* --- #20 GOING-LIVE CINEMATIC. A focal zoom onto the streamer while the sim is frozen. It runs through
+     the SAME camMatrix/camPanClamp the lean does, so the edge-safety invariant is the lean's, generalised
+     to a focal point that can sit hard against a wall. Pure envelope + focus, so the whole move is testable;
+     the loop only advances the clock and names the streamer. */
+  const HOLD = CINE_IN + CINE_HOLD/2;                      // a time inside the HOLD: envelope fully open
+  ok("the cinematic is quiescent before it starts and after it ends (camera back to normal)",
+     cineFrac(0)===0 && cineFrac(-1)===0 && cineFrac(CINE_TOTAL)===0 && cineFrac(CINE_TOTAL+1)===0);
+  ok("the envelope holds fully open through the HOLD", cineFrac(HOLD)===1);
+  (()=>{ let inRange=true, monoUp=true, monoDown=true, prev=-1;
+    for(let t=0;t<=CINE_IN;t+=CINE_IN/40){ const f=cineFrac(t); if(f<prev-1e-9) monoUp=false; prev=f; }
+    prev=2; for(let t=CINE_IN+CINE_HOLD;t<=CINE_TOTAL;t+=CINE_OUT/40){ const f=cineFrac(t); if(f>prev+1e-9) monoDown=false; prev=f; }
+    for(let t=-0.2;t<=CINE_TOTAL+0.2;t+=0.01){ const f=cineFrac(t); if(f<-1e-9||f>1+1e-9) inRange=false; }
+    ok("the envelope stays in [0,1] the whole run", inRange);
+    ok("...and eases monotonically OPEN through the swing-in (no snap)", monoUp);
+    // The swing-OUT must actually swing back — a pan-back, not a hold-then-snap when the loop cuts the cine.
+    ok("...and eases monotonically CLOSED through the swing-out (a pan-back, not a snap)", monoDown);
+    ok("...with the swing-out genuinely mid-transit partway through (not flat)",
+       (()=>{ const f=cineFrac(CINE_IN+CINE_HOLD+CINE_OUT*0.5); return f>0.05 && f<0.95; })()); })();
+  ok("the zoom eases from the combat zoom out to the focal zoom and back",
+     Math.abs(cineZoomAt(0)-COMBAT_ZOOM)<1e-9 && Math.abs(cineZoomAt(HOLD)-CINE_ZOOM)<1e-9 && Math.abs(cineZoomAt(CINE_TOTAL)-COMBAT_ZOOM)<1e-9);
+  (()=>{ let floored=true; for(let t=0;t<=CINE_TOTAL;t+=0.02) if(cineZoomAt(t) < COMBAT_ZOOM-1e-9) floored=false;
+    ok("the focal zoom only ever TIGHTENS — it never undercuts the combat zoom", floored); })();
+  ok("the focus sits on the room centre when closed, and exactly ON the streamer at full hold",
+     (()=>{ const a=cineFocus(0,40,150), b=cineFocus(HOLD,40,150);
+            return Math.abs(a.x-W/2)<1e-9 && Math.abs(a.y-H/2)<1e-9 && Math.abs(b.x-40)<1e-9 && Math.abs(b.y-150)<1e-9; })());
+  // THE invariant, generalised from the lean: a streamer hard against ANY wall, at full focal zoom, must
+  // never tear the baked floor off the frame. Same camPanClamp the lean rides; a gentle zoom is MORE
+  // edge-constrained, so the clamp — not the authored zoom — has final say.
+  const cineCovers=(fx,fy)=>{ const f=cineFocus(HOLD,fx,fy);
+    return camCovers(0,0,0,f.x,f.y) &&
+           (M=>M.e<=1e-9 && M.a*W+M.e>=W-1e-9 && M.f<=1e-9 && M.a*H+M.f>=H-1e-9)(camMatrix(0,0,0,f.x,f.y,0,0,cineZoomAt(HOLD))); };
+  let cineEdgeOK=true;
+  for(const fx of [0,5,40,160,280,315,320]) for(const fy of [0,5,52,90,150,175,180]) if(!cineCovers(fx,fy)) cineEdgeOK=false;
+  ok("the cinematic never tears the room off the edge — streamer anywhere, incl. hard against a wall", cineEdgeOK);
+  // ...and it must actually MOVE. A mutation dropping the focal term (centre no-op) makes this scream.
+  ok("the cinematic actually swings the camera onto an off-centre streamer (not a centred no-op)",
+     (()=>{ const z=cineZoomAt(HOLD), f=cineFocus(HOLD,40,150);
+            const Mf=camMatrix(0,0,0,f.x,f.y,0,0,z), Mc=camMatrix(0,0,0,W/2,H/2,0,0,z);
+            return Math.abs(Mf.camX-Mc.camX)>5 && Math.abs(Mf.camY-Mc.camY)>3; })());
+  // The focal zoom is a real zoom-IN past the combat zoom (or it's not a cinematic).
+  ok("...and it zooms IN past the fight's own zoom", cineZoomAt(HOLD) > COMBAT_ZOOM + 0.3);
+  // The plumbing: camMatrix must ACT on the cinematic zoom, not just compute it beside the transform.
+  ok("camMatrix carries the cinematic zoom into the transform (and defaults to the combat zoom without it)",
+     Math.abs(camMatrix(0,0,0,W/2,H/2,0,0,CINE_ZOOM).a - CINE_ZOOM)<1e-9 && Math.abs(camMatrix(0,0,0,W/2,H/2,0,0).a - COMBAT_ZOOM)<1e-9);
   phase=_ph;
   /* HITSTOP must freeze the camera with the sim — a camera that drifts through the held frame un-holds
      it. That's bought by tickCamLean living in update(), which the loop already gates behind

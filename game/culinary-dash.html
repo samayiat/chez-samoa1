@@ -837,9 +837,9 @@ const ZOOM_SAFETY=1.35;                                 // crop this much MORE t
    whatever the sky sent in. The room is 320x180 and the floor is baked at exactly that, so the zoom is
    the only thing keeping the edge covered; the max() must never become a min(). */
 const COMBAT_ZOOM=1.22;
-function camZoom(sx,sy){
+function camZoom(sx,sy,want){
   const safety = 1 + Math.max(2*Math.abs(sx)/W, 2*Math.abs(sy)/H) * ZOOM_SAFETY;
-  const want = (phase==="brawl"||phase==="boss") ? COMBAT_ZOOM : 1;
+  if(want==null) want = (phase==="brawl"||phase==="boss") ? COMBAT_ZOOM : 1;   // #20: the cinematic passes its own zoom; the safety is STILL a floor, the max() never a min()
   return Math.max(want, safety);
 }
 /* CAMERA LEAN — it leans toward her; it does NOT follow her, and at this zoom it can't.
@@ -877,12 +877,32 @@ function tickCamLean(dt){                      // eases the TARGET only — the 
    The camera could be deleted and the suite stayed green. Everything but the setTransform call itself
    now lives here, so the untestable residue is one line that can only pass this through.
    Returns the matrix the loop hands to setTransform (pre-SS): screen = a*world + e. */
-function camMatrix(shk, kx, ky, leanX, leanY, sx, sy){
+function camMatrix(shk, kx, ky, leanX, leanY, sx, sy, want){
   const offX = shk+Math.abs(kx)+1, offY = shk+Math.abs(ky)+1;   // the SMOOTH bounds; never the raw sx/sy
-  const z = camZoom(offX, offY);
+  const z = camZoom(offX, offY, want);
   const camX = camPanClamp(leanX, W, z, offX), camY = camPanClamp(leanY, H, z, offY);
   return { a:z, e: sx + W/2 - z*camX, f: sy + H/2 - z*camY, camX, camY };
 }
+/* GOING-LIVE CINEMATIC (#20). A recorder goes live; the fight freezes and the camera swings onto them,
+   holds, and swings back to reveal the now-feral mob. The trap the whole design pays for: HITSTOP freezes
+   the sim AND the camera (tickCamLean lives in update()), so a cinematic driven off the sim clock would
+   freeze on frame one and never move. This runs on REAL time in the loop instead; the sim stays frozen.
+   The zoom + focus are pure envelopes so the whole move is testable — the loop only advances the clock and
+   names the streamer. The focal point can sit against a wall, so it goes through the SAME camPanClamp the
+   lean does: the edge-safety invariant is the lean's, generalised. A gentler zoom is MORE edge-constrained
+   (the reachable band is (z-1)-proportional), which is exactly why the clamp, not the author, has final say. */
+const CINE_IN=0.42, CINE_HOLD=0.62, CINE_OUT=0.46;   // seconds: swing in, hold on the streamer, swing back
+const CINE_TOTAL = CINE_IN+CINE_HOLD+CINE_OUT;
+const CINE_ZOOM=1.9;                                 // focal zoom (camPanClamp still guarantees the room covers)
+function cineEase(u){ u = u<0?0:(u>1?1:u); return u*u*(3-2*u); }              // smoothstep, both ends flat
+function cineFrac(t){                                                        // 0..1 envelope: ease in -> hold at 1 -> ease out
+  if(t<=0 || t>=CINE_TOTAL) return 0;
+  if(t<CINE_IN) return cineEase(t/CINE_IN);
+  if(t<CINE_IN+CINE_HOLD) return 1;
+  return cineEase((CINE_TOTAL-t)/CINE_OUT);
+}
+function cineZoomAt(t){ return COMBAT_ZOOM + (CINE_ZOOM-COMBAT_ZOOM)*cineFrac(t); }   // never below COMBAT_ZOOM by construction
+function cineFocus(t, fx, fy){ const f=cineFrac(t); return { x: W/2+(fx-W/2)*f, y: H/2+(fy-H/2)*f }; }  // centre -> streamer -> centre
 // Fire one impact for one blow. dx/dy = the direction the force travels (the screen kicks that way).
 // x/y = where it landed, so the sparks come from the contact point rather than a polite circle.
 // Returns the clamped weight so callers/tests can rank blows without re-deriving anything.
@@ -1764,7 +1784,7 @@ function startBrawl(){
     hurtFlash:0, drinking:false, specialT:0, specFx:0, stumbleT:0, stumbleVx:0, stumbleVy:0,  // Phase D: chef stagger
     chain:0, chainT:0, whiffT:0, whiffDir:1, bufT:0,   // punch rhythm + the visible miss + buffered input
     ghosts:[], ghostT:0,                      // drunk afterimages (see wastedAmt)
-    spectators:[], critics:0, criticPresent:false, live:false, liveT:0, mobBuff:false, liveDelay:LIVE_DELAY_MIN+Math.random()*(LIVE_DELAY_MAX-LIVE_DELAY_MIN), beliDelta:0 };
+    spectators:[], critics:0, criticPresent:false, live:false, liveT:0, mobBuff:false, cine:null, liveDelay:LIVE_DELAY_MIN+Math.random()*(LIVE_DELAY_MAX-LIVE_DELAY_MIN), beliDelta:0 };
   brawl.partner = { x:ODOOR.x+12, y:ODOOR.y+13, hp:PARTNER_HP, maxhp:PARTNER_HP, dir:"right", punchT:0, punchDur:PARTNER_CD, hurtFlash:0, downed:false, moving:false, doorT:0.9 };  // the OTHER chef bursts out of the OFFICE
   officeDoorOpen=1;
   flash(W/2,72,"YOUR PARTNER'S GOT YOUR BACK","#8be27a");
@@ -1792,7 +1812,9 @@ function triggerGoLive(){          // once per brawl: a recorder goes live -> th
   const sp=B.spectators[Math.floor(Math.random()*B.spectators.length)]; sp.live=true;
   flash(sp.x, sp.y-30, "I'M GOING LIVE", "#e0674e");
   flash(W/2, 54, "\u25CF THE MOB GOES FERAL", "#c8452e");
-  sfx("waveoff"); addShake(3.2);
+  sfx("waveoff");
+  B.cine={ t:0, fx:sp.x, fy:sp.y };            // #20: freeze the fight and swing the camera onto the streamer
+  shake=0; kick.x=0; kick.y=0;                 // a frozen cinematic holds still \u2014 DECISIONS: shake is 0 during a cine
   for(const e of B.enemies){ if(e.state==="ko") continue;   // full heal + RAGE swap
     e.rage=true; e.hp = (e.buffed||e.riot) ? ENEMY_HP+2 : ENEMY_HP;
     burst(e.x,e.y-12,6,["#c8452e","#e0674e","#f7f3ea"],{sp:34,up:10,life:0.5}); }
@@ -4888,7 +4910,9 @@ function loop(now){
   // update(), keep drawing. The kick decays with the sim so it holds through the freeze too.
   pollPad();                                    // before the hitstop gate: update() is skipped while
                                                 // frozen, and a press eaten there is a press you made
-  if(!paused && !tickHitstop(dt)){ update(dt); tickKick(dt); }
+  const cine = (phase==="brawl" && brawl.cine) ? brawl.cine : null;   // #20: the GOING-LIVE cinematic freezes the sim, like hitstop/pause
+  if(!paused && !cine && !tickHitstop(dt)){ update(dt); tickKick(dt); }
+  if(cine){ cine.t+=dt; if(cine.t>=CINE_TOTAL) brawl.cine=null; }      // ...but the camera advances on REAL time while the sim is frozen
   // world (with shake + directional kick + punch-zoom)
   const sx = Math.round((shake>0 ? (Math.random()*2-1)*shake : 0) + kick.x);
   const sy = Math.round((shake>0 ? (Math.random()*2-1)*shake : 0) + kick.y);
@@ -4897,7 +4921,9 @@ function loop(now){
   // exceed shake+|kick.x| (+1 for the rounding), so this still covers the offset — smoothly.
   // Zoom + pan live in camMatrix() so they're testable — the loop can't be. Outside a brawl camLean*
   // sit at centre, so this is exactly the old expression: cam=W/2 => sx+W/2-z*W/2 == sx-(z-1)*W/2.
-  const M = camMatrix(shake, kick.x, kick.y, camLeanX, camLeanY, sx, sy);
+  let M;
+  if(cine){ const f=cineFocus(cine.t, cine.fx, cine.fy); M=camMatrix(0,0,0, f.x, f.y, 0, 0, cineZoomAt(cine.t)); }  // #20: focal zoom on the streamer, shake forced to 0
+  else M=camMatrix(shake, kick.x, kick.y, camLeanX, camLeanY, sx, sy);
   const z = M.a;
   X.setTransform(SS,0,0,SS,0,0);
   X.clearRect(-8,-8,W+16,H+16);
