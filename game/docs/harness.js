@@ -2805,6 +2805,41 @@ const probe = `
     ok("flashes are bounded (a mash can't leak)", iflashes.length<=IFLASH_MAX);
     resetFx(); iflashes.length=0; })();
 
+  /* ---- #8 SAVE: coins + day + shop, versioned + checksummed, localStorage-backed. The whole point is
+     that she closes the game and re-opens it with her money intact, so the test that matters is the FULL
+     loop: play -> auto-save -> a fresh launch -> CONTINUE, through a real (in-memory) localStorage. */
+  (()=>{
+    const hasUp = UPGRADES.length>0, upId = hasUp?UPGRADES[0].id:null;
+    const mk=()=>({ week:3, dow:2, bank:4820, upgrades: hasUp?{[upId]:true}:{}, rep:0, lastRent:0, evictedRent:0, beliHist:[1,2], dayRating:6 });
+    const back=decodeSave(encodeSave(mk()));
+    ok("save round-trips coins + day"+(hasUp?" + shop":""),
+       back && back.bank===4820 && back.week===3 && back.dow===2 && (!hasUp || back.upgrades[upId]===true));
+    const code=encodeSave(mk());
+    ok("the save code is a compact, copyable string", typeof code==="string" && code.slice(0,2)==="CD" && code.length<120 && !/\s/.test(code));
+    ok("a tampered code is REJECTED, never half-loaded", decodeSave(code.replace("4820","9999"))===null);
+    ok("garbage / truncation / null are rejected", decodeSave("hello")===null && decodeSave("")===null && decodeSave("CD1~2")===null && decodeSave(null)===null);
+    // valid checksum but a version from the FUTURE -> refuse, don't misread an unknown shape
+    const fbody=["9","3","2","4820",""].join("~");
+    ok("a save from a NEWER build is refused rather than misread", decodeSave("CD"+fbody+"~"+saveChk(fbody))===null);
+    // restore rebuilds a FULL, valid run: saved fields back, the rest fresh (no half-run)
+    restoreRun(back);
+    ok("restore brings back coins + day"+(hasUp?" + upgrade":""), run.bank===4820 && run.week===3 && run.dow===2 && (!hasUp || run.upgrades[upId]===true));
+    ok("...and the un-saved run fields default fresh (no half-run)", Array.isArray(run.beliHist) && run.beliHist.length===0 && run.lastRent===0 && typeof run.dayRating==="number");
+    // THE loop, through a real localStorage: save -> "new session" -> continue
+    const _ls=localStorage, mem={};
+    localStorage={ getItem:k=>(k in mem?mem[k]:null), setItem:(k,v)=>{mem[k]=String(v)}, removeItem:k=>{delete mem[k]} };
+    try{
+      run=mk(); persistRun();                 // auto-save at a day boundary
+      run=null; continueOrStart();            // a fresh launch that finds a save
+      ok("a fresh launch CONTINUES the saved run (coins + day + shop intact)",
+         !!run && run.bank===4820 && run.week===3 && run.dow===2 && (!hasUp || run.upgrades[upId]===true));
+      clearSave(); run=null; continueOrStart();
+      ok("with no save present, a launch starts a brand-new Day 1", !!run && run.week===1 && run.dow===0 && run.bank===START_BANK);
+      run=mk(); persistRun(); clearSave();
+      ok("clearing the save (eviction) leaves nothing to continue", loadSave()===null);
+    } finally { localStorage=_ls; }
+  })();
+
   globalThis.__RESULT = R;
 })();
 `;
