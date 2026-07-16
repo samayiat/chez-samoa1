@@ -352,14 +352,22 @@ function onDown(e){
         // NB: any unhandled tap in here RESUMES the game, so every dev row must return —
         // including a tap on the middle of a row, or tweaking waves would un-pause you.
         const step=r=> !inR(r) ? 0 : (L.x < r.x+16 ? -1 : (L.x > r.x+r.w-16 ? 1 : 0));
-        let s=step(devWaveRect);
-        if(s){ devWaves = Math.max(1, Math.min(9, waveCount()+s)); sfx("seat"); return; }
-        s=step(devEnemyRect);
-        if(s){ devEnemies = Math.max(1, Math.min(24, waveSize()+s)); sfx("seat"); return; }
-        s=step(devDrinkRect);
-        if(s){ devDrinks = Math.max(0, Math.min(9, startDrinks()+s)); sfx("seat"); return; }
-        if(inR(devBrawlRect)){ paused=false; devSeedBrawl(); return; }   // straight into the fight
-        if(inR(devWaveRect) || inR(devEnemyRect) || inR(devDrinkRect)) return;   // middle of a row: swallow the tap
+        if(inR(devPageRect)){ devPage=(devPage+1)%2; sfx("seat"); return; }   // flip between the two dev pages
+        if(devPage===0){
+          let s=step(devWaveRect);
+          if(s){ devWaves = Math.max(1, Math.min(9, waveCount()+s)); sfx("seat"); return; }
+          s=step(devEnemyRect);
+          if(s){ devEnemies = Math.max(1, Math.min(24, waveSize()+s)); sfx("seat"); return; }
+          s=step(devDrinkRect);
+          if(s){ devDrinks = Math.max(0, Math.min(9, startDrinks()+s)); sfx("seat"); return; }
+          if(inR(devBrawlRect)){ paused=false; devSeedBrawl(); return; }   // straight into the fight
+          if(inR(devWaveRect) || inR(devEnemyRect) || inR(devDrinkRect)) return;   // middle of a row: swallow the tap
+        } else {
+          const s=step(devBossRect);
+          if(s){ devBossIdx=((devBossIdx+s)%BOSSES.length+BOSSES.length)%BOSSES.length; sfx("seat"); return; }
+          if(inR(devBossStartRect)){ paused=false; startBossNight(BOSSES[devBossIdx].id); return; }   // straight into that boss's intro
+          if(inR(devBossRect)) return;   // middle of the row: swallow the tap
+        }
       }
       if(canPause()) paused=false; return;
     }
@@ -5237,6 +5245,8 @@ function drawPauseButton(){
 }
 let pauseToggleRect=null, envToggleRect=null;
 let devWaveRect=null, devEnemyRect=null, devDrinkRect=null, devBrawlRect=null;
+let devPageRect=null, devBossRect=null, devBossStartRect=null;
+let devPage=0, devBossIdx=0;   // page 0 = brawl controls (unchanged); page 1 = pick + start a boss instantly
 const DEV_BOTTOM=H-30;   // last dev row must end above this: the resume text lives below it
 /* ---- DEV menu (pause). Only drawn when DEV; the rects stay null in the shipped build, and a
    null rect can never be hit, so this is inert for her rather than merely invisible. ---- */
@@ -5253,16 +5263,29 @@ function devRow(x,y,w,label,val){
 function drawDevMenu(){
   // 320x180 has no room for guessing: the rows must not overlap each other, and the last one must
   // clear the "tap here to resume" text at y=H-22 (an 8px font, so it starts ~8px above baseline).
-  // DEV_BOTTOM is that limit, and a test asserts the layout respects it.
-  X.fillStyle="#e0674e"; X.font="6px monospace"; X.fillText("\u2014 DEV \u2014", W/2, 92);
-  devWaveRect  = devRow(W/2-56,  95, 112, "Waves",        waveCount());
-  devEnemyRect = devRow(W/2-56, 109, 112, "Enemies/wave", waveSize());
-  devDrinkRect = devRow(W/2-56, 123, 112, "Start drinks", startDrinks());
-  devBrawlRect = {x:W/2-56, y:137, w:112, h:12};
-  X.fillStyle="#3a1f1a"; X.fillRect(devBrawlRect.x,devBrawlRect.y,devBrawlRect.w,devBrawlRect.h);
-  X.strokeStyle="#e0674e"; X.lineWidth=1;
-  X.strokeRect(devBrawlRect.x+0.5,devBrawlRect.y+0.5,devBrawlRect.w-1,devBrawlRect.h-1);
-  X.fillStyle="#e0674e"; X.font="7px monospace"; X.fillText("START BRAWL NOW", W/2, 145);
+  // DEV_BOTTOM is that limit, and a test asserts the layout respects it. Two PAGES share this same
+  // budget rather than fighting for it: page 0 is the untouched brawl dev menu; page 1 (new) is a
+  // boss picker + instant-start, reusing devRow()'s exact geometry so nothing here is bespoke.
+  X.fillStyle="#e0674e"; X.font="6px monospace";
+  X.fillText("\u2014 DEV ("+(devPage+1)+"/2) \u2014 tap to flip \u2014", W/2, 92);
+  devPageRect = {x:W/2-56, y:88, w:112, h:6};   // the header row IS the page toggle — sits in the existing gap above Waves
+  if(devPage===0){
+    devWaveRect  = devRow(W/2-56,  95, 112, "Waves",        waveCount());
+    devEnemyRect = devRow(W/2-56, 109, 112, "Enemies/wave", waveSize());
+    devDrinkRect = devRow(W/2-56, 123, 112, "Start drinks", startDrinks());
+    devBrawlRect = {x:W/2-56, y:137, w:112, h:12};
+    X.fillStyle="#3a1f1a"; X.fillRect(devBrawlRect.x,devBrawlRect.y,devBrawlRect.w,devBrawlRect.h);
+    X.strokeStyle="#e0674e"; X.lineWidth=1;
+    X.strokeRect(devBrawlRect.x+0.5,devBrawlRect.y+0.5,devBrawlRect.w-1,devBrawlRect.h-1);
+    X.fillStyle="#e0674e"; X.font="7px monospace"; X.fillText("START BRAWL NOW", W/2, 145);
+  } else {
+    devBossRect = devRow(W/2-56, 95, 112, "Boss", BOSSES[devBossIdx].name);
+    devBossStartRect = {x:W/2-56, y:109, w:112, h:12};
+    X.fillStyle="#3a1f1a"; X.fillRect(devBossStartRect.x,devBossStartRect.y,devBossStartRect.w,devBossStartRect.h);
+    X.strokeStyle="#e0674e"; X.lineWidth=1;
+    X.strokeRect(devBossStartRect.x+0.5,devBossStartRect.y+0.5,devBossStartRect.w-1,devBossStartRect.h-1);
+    X.fillStyle="#e0674e"; X.font="7px monospace"; X.fillText("START BOSS NIGHT NOW", W/2, 117);
+  }
 }
 function drawPausedOverlay(){
   X.fillStyle="rgba(8,6,14,.8)"; X.fillRect(0,14,W,H-14);

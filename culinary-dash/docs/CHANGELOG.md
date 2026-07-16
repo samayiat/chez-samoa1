@@ -7,6 +7,32 @@ Commit history, newest first. Each entry: `## YYYY-MM-DD — title` + bullets of
 
 ---
 
+## 2026-07-16 (g) — Dev menu: pick + instantly start any boss
+
+Requested for testing the live boss roster without waiting on the random telegraph. Adds a **2nd page**
+to the existing pause-menu dev tools (Waves/Enemies/Start drinks/START BRAWL NOW) — a boss picker + an
+instant-start button. Dev-only: the rects stay null in the shipped build (`DEV=false` in source), exactly
+like every other dev control, so this is inert in the live game.
+
+### Why a second page, not more rows
+320x180 had exactly 1px of vertical slack left in the existing dev menu — nowhere to add a boss selector
+plus a start button without either overlapping the "tap to resume" text or shrinking the existing rows
+below their tested 11px-minimum tap-target height. Rather than compress anything, the header line itself
+("— DEV (1/2) — tap to flip —") became the page toggle, sitting in an 8px gap that already existed above
+the Waves row untouched. Page 0 is byte-identical to before; page 1 reuses `devRow()`'s exact geometry for
+a `Boss: <name>` picker (cycles via the same -/+ pads as Waves/Enemies/Drinks) plus a
+`START BOSS NIGHT NOW` button styled like the existing brawl button, calling `startBossNight()` directly.
+
+### Tests
++11 checks (**869 total**): page 0 is provably unchanged (same rects, same non-overlap, same DEV_BOTTOM
+clearance), page 1's two new rows don't collide with the toggle or each other and both clear DEV_BOTTOM,
+both are tall enough to tap on a phone, boss-index cycling wraps correctly in both directions across all
+3 roster entries, and picking each boss and starting actually boots that exact boss.
+
+**Noted, not touched:** the harness has a pre-existing ~6% flake in `vinceStrike()`'s KO-chance roll
+(unseeded `Math.random()` — tracked separately under the lockstep-co-op seeding work, Roadmap #32..#34).
+Confirmed unrelated to this change (5/5 clean reruns) and out of scope here.
+
 ## 2026-07-16 (f) — A third boss + a proper boss-intro cinematic (Roadmap #40, slices E+F)
 
 Built blind, per request ("keep inventing"), plus a mid-review addition (a cinematic reveal, added while

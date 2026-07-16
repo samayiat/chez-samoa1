@@ -1888,6 +1888,36 @@ const probe = `
   ok("the -/+ pads don't overlap each other", devWaveRect.w > 32);
   ok("the dev block starts below the existing pause rows",
      devWaveRect.y >= envToggleRect.y+envToggleRect.h);
+
+  // ---- dev menu page 2: pick + instantly start any boss (Roadmap #40) ----
+  const overlap=(a,b)=> a && b && !(a.y+a.h<=b.y || b.y+b.h<=a.y);
+  ok("the dev menu starts on page 0 (the original brawl controls, untouched)", devPage===0);
+  ok("page 0's page-toggle doesn't collide with the env toggle above or Waves below",
+     !overlap(devPageRect, envToggleRect) && !overlap(devPageRect, devWaveRect));
+
+  devPage=1; drawDevMenu();
+  ok("page 1 draws a boss picker + start button instead of the brawl rows", !!devBossRect && !!devBossStartRect);
+  ok("page 1's rows don't overlap each other or the toggle, and both clear DEV_BOTTOM",
+     !overlap(devPageRect, devBossRect) && !overlap(devBossRect, devBossStartRect) &&
+     devBossStartRect.y+devBossStartRect.h <= DEV_BOTTOM);
+  ok("both page-1 rows are tall enough to tap on a phone", devBossRect.h>=11 && devBossStartRect.h>=11);
+
+  ok("the roster has 3 bosses to cycle through", BOSSES.length===3);
+  devBossIdx=0;
+  devBossIdx=((devBossIdx-1)%BOSSES.length+BOSSES.length)%BOSSES.length;
+  ok("cycling backward from the first boss wraps to the last", devBossIdx===BOSSES.length-1);
+  devBossIdx=((devBossIdx+1)%BOSSES.length+BOSSES.length)%BOSSES.length;
+  ok("...and forward wraps back to the first", devBossIdx===0);
+
+  startCampaign(); customers=[]; devBossIdx=1; phase="play";
+  startBossNight(BOSSES[devBossIdx].id);
+  ok("picking a boss on page 1 and starting boots exactly that boss (inspector)",
+     phase==="bossnight" && bossFight.def.id==="inspector");
+  startCampaign(); customers=[]; devBossIdx=2; phase="play";
+  startBossNight(BOSSES[devBossIdx].id);
+  ok("...and the third slot boots the ringer", phase==="bossnight" && bossFight.def.id==="ringer");
+
+  devPage=0; devBossIdx=0; bossFight=null; phase="play";
   devWaveRect=null; devEnemyRect=null; devDrinkRect=null; devBrawlRect=null;   // leave them inert
 
   // ================= INGREDIENT SPRITES =================
