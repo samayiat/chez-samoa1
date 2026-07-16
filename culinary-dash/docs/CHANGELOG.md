@@ -7,6 +7,58 @@ Commit history, newest first. Each entry: `## YYYY-MM-DD — title` + bullets of
 
 ---
 
+## 2026-07-16 (f) — A third boss + a proper boss-intro cinematic (Roadmap #40, slices E+F)
+
+Built blind, per request ("keep inventing"), plus a mid-review addition (a cinematic reveal, added while
+this slice's plan was being reviewed): tight zoom on the boss, his name types onto the screen, then a cut
+to the fight. Both pieces landed together since the cinematic naturally wraps every boss the roster gets.
+
+### Slice E — Chef Bruno "The Ringer", a trickster (3rd boss)
+Vince tests positioning, the Inspector tests zone-awareness; Bruno tests **timing/discipline**. Four
+attacks (`rotation:["feint","jab","combo","counter"]`):
+- **feint** — the exact same telegraph as `jab` (same flash text, same visual ring), resolves to nothing.
+  The mixup is visual, not a readable tell.
+- **jab** — fast, short telegraph, low damage.
+- **combo** — two hits with a real, damage-free gap between them — punishes bailing early.
+- **counter** — a SUSTAINED stance (not an instant), costing a hit if she's close at any point during it,
+  not just the instant he enters it.
+
+Entirely additive: a new `updateRinger`, one new `else if` in `updateBossNight`'s dispatch, new draw
+branches keyed on his new state names. `vinceStrike()` (the shared, kind-agnostic strike handler every
+boss uses) is untouched. Same non-negotiable guarantee as every other boss: all 8 of his states resolve
+into `"recover"` — she can always eventually fight back.
+
+### Slice F — the boss-intro cinematic
+Every boss-night fight now opens with a ~1.8s reveal: the camera punches in tight (`BOSS_INTRO_ZOOM=3.0`) on
+the boss's fixed spawn point, his name types on screen letter by letter, then it cuts straight to the
+normal fight camera. Chef and boss are both frozen for the duration — nothing can happen mid-reveal.
+
+Built by extending the three existing, already-tested camera functions (`camZoom`, `tickCamLean`, the
+`updateBossNight` dispatch) rather than adding new math anywhere — this project's `DECISIONS.md` documents a
+real regression from camera math once living inline in `loop()` (untestable by construction; a mutation
+reverting the whole transform passed 618 tests). The zoom's locked safety-floor rule (`max(want, safety)`)
+is untouched; the intro only raises what "want" asks for. The exact zoom value was derived from arithmetic
+against `camPanClamp`'s reachable range, not chosen by eye:
+`z=3.0` reaches the boss's spawn x=262 with a comfortable margin (`z=2.76` would just barely fall short).
+
+**Caught by the harness before it shipped:** the first cut of the intro gate returned before the existing
+`chefHP<=0` check in `updateBossNight`, so a chef somehow already dead going into the reveal would never
+actually lose. Fixed by checking death first, defensively, ahead of the intro hold — a one-line reorder,
+caught by 3 existing tests failing immediately on the full regression run.
+
+**Deliberately excluded: Brandon**, the original daytime-scuffle boss — his `updateBoss()` carries ~30
+pinned tests that call it once right after `startBoss()` expecting his `"draw"` sequence already
+progressing; a mandatory hold ahead of that would break most of them. A separate, dedicated pass if it's
+ever wanted there.
+
+### Tests
++30 checks across both slices (**858 total**): Bruno's roster slot + escalation, all four of his attacks
+firing/connecting/whiffing correctly (including the deliberate feint-never-damages and combo-gap-is-real
+checks), all 8 of his states resolving into the strike window; the intro's zoom/pan math (safety-invariant
+sweep, the pan-clamp arithmetic verified in the actual function, the hard-cut-back behavior), the freeze
+during the reveal, the typed-name reveal timing, and the defensive death-during-intro regression guard that
+caught the ordering bug above.
+
 ## 2026-07-16 (e) — A second boss: The Health Inspector, a ranged zoner (Roadmap #40, slice D)
 
 Built blind ahead of a playtest, per request. Vince was a melee charger; the roster needed a boss that

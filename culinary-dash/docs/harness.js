@@ -694,7 +694,7 @@ const probe = `
     ok("EVERY one of the 6 attacks still resolves into the strike window — she can always fight back", allReachRecover); }
 
   // ---- a second boss: The Health Inspector, a ranged ZONER (Roadmap #40, slice D) ----
-  ok("the roster now has two bosses", BOSSES.length===2 && BOSSES.some(b=>b.id==="inspector"));
+  ok("the roster now has two bosses (still true, before the 3rd is added below)", BOSSES.length>=2 && BOSSES.some(b=>b.id==="inspector"));
   startCampaign(); run.bossesBeaten=1;
   ok("pickBoss escalates to the Inspector after one win", pickBoss()==="inspector");
   startCampaign(); run.bossesBeaten=0;
@@ -748,6 +748,113 @@ const probe = `
     bossNightStrike();
     ok("the shared strike dispatcher (bossNightStrike) works on the Inspector too, not just Vince",
        B.hp<=0 || B.outcome==="win"); }
+
+  // ---- a third boss: Chef Bruno "The Ringer", a TRICKSTER (Roadmap #40, slice E) ----
+  ok("the roster now has three bosses", BOSSES.length===3 && BOSSES.some(b=>b.id==="ringer"));
+  startCampaign(); run.bossesBeaten=2;
+  ok("pickBoss escalates to the Ringer after two wins", pickBoss()==="ringer");
+  startCampaign(); run.bossesBeaten=1;
+  ok("...and stays on the Inspector after one", pickBoss()==="inspector");
+
+  startCampaign(); customers=[]; startBossNight("ringer");
+  ok("the ringer boots as a trickster with stat-scaled HP (2a applies here too)",
+     bossFight.kind==="trickster" && bossFight.chefHP===chefMaxHP());
+
+  startCampaign(); customers=[]; startBossNight("ringer");
+  { const B=bossFight; B.state="feinttele"; B.t=0.0001; B.x=chef.x; B.y=chef.y;
+    const hp0=B.chefHP; updateRinger(1/60);
+    ok("feint (1st attack) deals NO damage even standing right on top of him — the core trust-test",
+       B.chefHP===hp0 && B.state==="recover"); }
+
+  startCampaign(); customers=[]; startBossNight("ringer");
+  { const B=bossFight; B.state="jabtele"; B.t=0.0001; B.x=chef.x; B.y=chef.y;
+    const hp0=B.chefHP; updateRinger(1/60);
+    ok("jab (2nd attack, visually IDENTICAL to feint) connects in range", B.chefHP<hp0); }
+  startCampaign(); customers=[]; startBossNight("ringer");
+  { const B=bossFight; B.state="jabtele"; B.t=0.0001; B.x=chef.x+500; B.y=chef.y+500;
+    const hp0=B.chefHP; updateRinger(1/60);
+    ok("...but whiffs outside jabR", B.chefHP===hp0); }
+
+  startCampaign(); customers=[]; startBossNight("ringer");
+  { const B=bossFight; B.state="combotele"; B.t=0.0001; B.x=chef.x; B.y=chef.y;
+    const hp0=B.chefHP; updateRinger(1/60);
+    ok("combo (3rd attack) hit 1 connects", B.chefHP<hp0 && B.state==="combohit1");
+    B.t=0; const hp1=B.chefHP; updateRinger(1/60);
+    ok("...then a REAL gap with zero damage (not just a delay)", B.chefHP===hp1 && B.state==="combogap");
+    B.t=0.0001; const hp2=B.chefHP; updateRinger(1/60);
+    ok("...then hit 2 connects independently, after the gap", B.chefHP<hp2 && B.state==="combohit2"); }
+
+  startCampaign(); customers=[]; startBossNight("ringer");
+  { const B=bossFight; B.state="counter"; B.t=1.0; B.counterHit=false; B.x=chef.x; B.y=chef.y;
+    const hp0=B.chefHP; updateRinger(1/60);
+    ok("counter (4th attack, SUSTAINED not instant) costs a hit if she's close at any point during it", B.chefHP<hp0); }
+  startCampaign(); customers=[]; startBossNight("ringer");
+  { const B=bossFight; B.state="counter"; B.t=1.0; B.counterHit=false; B.x=chef.x+500; B.y=chef.y+500;
+    const hp0=B.chefHP; updateRinger(1/60);
+    ok("...but costs nothing if she stays away the whole time", B.chefHP===hp0); }
+
+  { const terminal=["feinttele","jabtele","jabhit","combotele","combohit1","combogap","combohit2","counter"];
+    let allReach=true;
+    for(const st of terminal){
+      startCampaign(); customers=[]; startBossNight("ringer");
+      const B=bossFight; chef.x=205; chef.y=100; B.x=200; B.y=100; B.counterHit=true;
+      B.state=st; B.t=0;
+      let steps=0; while(B.state!=="recover" && steps<600){ updateRinger(1/60); steps++; }
+      if(B.state!=="recover") allReach=false;
+    }
+    ok("EVERY one of Bruno's attacks also resolves into the strike window", allReach); }
+
+  startCampaign(); customers=[]; startBossNight("ringer");
+  { const B=bossFight; B.hp=1; B.state="recover"; B.t=1; B.x=chef.x; B.y=chef.y;
+    bossNightStrike();
+    ok("the shared strike dispatcher works on the Ringer too, unchanged", B.hp<=0 || B.outcome==="win"); }
+
+  // ---- boss-intro cinematic: tight zoom + typed name, before every boss-night fight (Roadmap #40, slice F) ----
+  startCampaign(); customers=[]; startBossNight("vince");
+  ok("camZoom returns BOSS_INTRO_ZOOM at rest during the intro", camZoom(1,1)>=BOSS_INTRO_ZOOM);
+  bossFight.introT=0;
+  ok("...and reverts to COMBAT_ZOOM once the intro ends", Math.abs(camZoom(1,1)-COMBAT_ZOOM)<1e-9);
+  bossFight=null; phase="play";
+  ok("...and to the old baseline with no bossFight and no fight phase (regression check)",
+     Math.abs(camZoom(0,0)-1)<1e-9);
+
+  startCampaign(); customers=[]; startBossNight("vince");
+  { let allCovered=true;
+    for(let off=0; off<=40; off+=2){
+      const zAtOff = camZoom(off,off);
+      if(!((zAtOff-1)*160 >= off-1e-9) || !((zAtOff-1)*90 >= off-1e-9)) allCovered=false;
+    }
+    ok("the zoom-safety invariant (the locked floor rule) still holds across an offset sweep during the intro", allCovered); }
+  ok("camPanClamp(262,...) at BOSS_INTRO_ZOOM reaches the boss's spawn point unclamped",
+     camPanClamp(262, 320, BOSS_INTRO_ZOOM, 1) === 262);
+
+  startCampaign(); customers=[]; startBossNight("vince"); phase="bossnight";
+  camLeanX=160; camLeanY=90;
+  for(let i=0;i<120;i++) tickCamLean(1/60);
+  ok("camLean converges toward the boss's spawn point during the intro (not the chef's)",
+     Math.abs(camLeanX-262)<2 && Math.abs(camLeanY-78)<2);
+  bossFight.introT=0; tickCamLean(1/60);
+  ok("...and hard-cuts back to center the instant the intro ends", camLeanX===160 && camLeanY===90);
+
+  startCampaign(); customers=[]; startBossNight("vince");
+  { const x0=chef.x, y0=chef.y, introBefore=bossFight.introT;
+    updateBossNight(1/60);
+    ok("the chef is frozen during the intro (no movement)", chef.x===x0 && chef.y===y0);
+    ok("bossFight.state stays 'windup' the whole intro (no combat progression)", bossFight.state==="windup");
+    ok("introT counts down each tick", bossFight.introT<introBefore);
+    let steps=0; while(bossFight.introT>0 && steps<200){ updateBossNight(1/60); steps++; }
+    ok("the intro ends within a bounded number of ticks", bossFight.introT===0);
+    updateBossNight(1/60);
+    ok("combat begins advancing normally the instant the intro ends", bossFight.state!=="windup" || bossFight.t<bossFight.def.windup); }
+
+  startCampaign(); customers=[]; startBossNight("vince"); run.bank=99999;
+  bossFight.chefHP=0; updateBossNight(1/60);
+  ok("a loss defensively still fires even if chef HP hits 0 DURING the intro", bossFight.outcome==="lose");
+
+  ok("introTypedChars: 0% elapsed is an empty string", introTypedChars(1.8, 1.8, "Vince")==="");
+  ok("...a partial reveal partway through", introTypedChars(1.8-0.9, 1.8, "Vince").length>0 && introTypedChars(1.8-0.9, 1.8, "Vince").length<5);
+  ok("...the full name by 70% elapsed", introTypedChars(1.8-1.26, 1.8, "Vince")==="Vince");
+  ok("...and it stays full past 70% (the hold beat before the cut)", introTypedChars(0.1, 1.8, "Vince")==="Vince");
   run.stats={}; startCampaign(); customers=[]; boss=null; bossFight=null; phase="play";
 
   // routing: results -> office -> next day

@@ -849,9 +849,12 @@ const ZOOM_SAFETY=1.35;                                 // crop this much MORE t
    whatever the sky sent in. The room is 320x180 and the floor is baked at exactly that, so the zoom is
    the only thing keeping the edge covered; the max() must never become a min(). */
 const COMBAT_ZOOM=1.22;
+const BOSS_INTRO_TIME=1.8;     // seconds of tight-zoom reveal before every boss-night fight
+const BOSS_INTRO_ZOOM=3.0;     // verified: frames the boss's fixed spawn (262,78) w/ margin inside the pan clamp
 function camZoom(sx,sy){
   const safety = 1 + Math.max(2*Math.abs(sx)/W, 2*Math.abs(sy)/H) * ZOOM_SAFETY;
-  const want = (phase==="brawl"||phase==="boss"||phase==="bossnight") ? COMBAT_ZOOM : 1;
+  const want = (bossFight && bossFight.introT>0) ? BOSS_INTRO_ZOOM
+             : (phase==="brawl"||phase==="boss"||phase==="bossnight") ? COMBAT_ZOOM : 1;
   return Math.max(want, safety);
 }
 /* CAMERA LEAN — it leans toward her; it does NOT follow her, and at this zoom it can't.
@@ -878,7 +881,13 @@ function camPanClamp(v, span, z, off){
   return Math.max(lo, Math.min(hi, v));
 }
 function tickCamLean(dt){                      // eases the TARGET only — the clamp is applied at draw
-  if(phase!=="brawl"){ camLeanX=W/2; camLeanY=H/2; return; }
+  if(bossFight && bossFight.introT>0){            // cinematic reveal: track the boss, not her
+    const k=Math.min(1, LEAN_EASE*dt);
+    camLeanX += (bossFight.x-camLeanX)*k;
+    camLeanY += (bossFight.y-camLeanY)*k;
+    return;
+  }
+  if(phase!=="brawl"){ camLeanX=W/2; camLeanY=H/2; return; }   // a hard cut back once the intro ends, on purpose
   const k=Math.min(1, LEAN_EASE*dt);
   camLeanX += (camLeanTarget(chef.x,W)-camLeanX)*k;
   camLeanY += (camLeanTarget(chef.y,H)-camLeanY)*k;
@@ -1607,6 +1616,16 @@ const BOSSES=[
     zonesTele:0.9, zonesN:3, zoneR:14, zoneDmg:4, zoneSpread:22,        // 2. zones: several circles around her, find the gap
     spreadCount:3, spreadSpeed:200, spreadR:9, spreadDmg:2, spreadFan:0.5, // 3. spread: a fan of projectiles, not one straight line
     addHP:1, addSpeed:26, addDmg:1, addLife:6, addCount:2, addR:8 },    // 4. summon: roaming pressure, doesn't gate the strike window
+  { id:"ringer", name:"Chef Bruno \u201cThe Ringer\u201d", tagline:"you're not the only one who can throw hands.", kind:"trickster",
+    hp:24, windup:0.7, recover:1.4, reach:20, koChance:0.05, reward:8000, recLevel:12,
+    // A trickster \u2014 the counterpoint to Vince (positioning) and the Inspector (zone-awareness): this one
+    // tests TIMING. feint and jab share the exact same telegraph so she can't tell them apart on sight;
+    // combo has a deliberate gap before its 2nd hit; counter is a SUSTAINED stance, not an instant punish.
+    rotation:["feint","jab","combo","counter"],
+    feintTele:0.5,                                                      // 1. feint: looks identical to jab, resolves to nothing
+    jabTele:0.3, jabR:16, jabDmg:2,                                      // 2. jab: fast, short telegraph, low dmg
+    comboTele:0.4, comboR:18, comboGap:0.35, comboDmg1:2, comboDmg2:3,   // 3. combo: 2 hits with a gap between
+    counterTime:1.3, counterR:22, counterDmg:4 },                       // 4. counter: sustained proximity hazard
 ];
 function pickBoss(){ const idx=Math.min(BOSSES.length-1, run.bossesBeaten||0); return BOSSES[idx].id; }
 function bossNightExposed(){ return !!bossFight && bossFight.state==="recover"; }
@@ -1616,7 +1635,7 @@ function startBossNight(id){
   run.lastBossNightDay = run.week*7+run.dow;
   phase="bossnight";
   bossFight = { def, kind:def.kind, hp:def.hp, maxHP:def.hp, chefHP:chefMaxHP(), maxChefHP:chefMaxHP(),
-    x:262, y:78, state:"windup", t:def.windup, cycle:0, hurtFlash:0, outcome:null, endT:0 };
+    x:262, y:78, state:"windup", t:def.windup, cycle:0, hurtFlash:0, outcome:null, endT:0, introT:BOSS_INTRO_TIME };
   customers=[]; chef.carry=null; chef.x=120; chef.y=120; chef.dir="up";
   flash(W/2,44,def.name.toUpperCase(),"#c8452e"); flash(W/2,58,def.tagline,"#e88a7a");
   sfx("burnt"); addShake(3.4);
@@ -1880,6 +1899,84 @@ function updateInspector(dt){
     B.adds=B.adds.filter(a=>a.life>0);
   }
 }
+/* Chef Bruno "The Ringer" \u2014 a trickster. Tests TIMING, not positioning or zone-awareness: feint and jab
+   look IDENTICAL until they resolve (she can't tell them apart on sight), combo has a deliberate gap before
+   its real 2nd hit (bailing early costs nothing, staying costs a second hit), and counter is a SUSTAINED
+   stance \u2014 rushing him during it costs a hit, at ANY point, not just the instant he enters it. Same
+   guarantee as every other boss: every attack still resolves into "recover". */
+function updateRinger(dt){
+  const B=bossFight, D=B.def;
+  moveChefBoss(dt);
+  if(B.state==="windup"){
+    B.t-=dt;
+    if(B.t<=0){
+      B.cycle=(B.cycle||0)+1;
+      const move = D.rotation[(B.cycle-1)%D.rotation.length];
+      if(move==="jab"){
+        B.state="jabtele"; B.t=D.jabTele;
+        flash(B.x,B.y-24,"...!","#ffd86b"); sfx("burnt");
+      } else if(move==="combo"){
+        B.state="combotele"; B.t=D.comboTele;
+        flash(B.x,B.y-24,"HERE IT COMES...","#ffd86b"); sfx("burnt");
+      } else if(move==="counter"){
+        B.state="counter"; B.t=D.counterTime; B.counterHit=false;
+        flash(B.x,B.y-24,"COME AT ME!","#c8452e"); sfx("burnt");
+      } else {   // "feint" \u2014 the default, also what a rotation lookup miss falls back to
+        B.state="feinttele"; B.t=D.feintTele;
+        flash(B.x,B.y-24,"...!","#ffd86b"); sfx("burnt");   // SAME text/telegraph as jab \u2014 the mixup is the point
+      }
+    }
+  } else if(B.state==="feinttele"){
+    B.t-=dt;
+    if(B.t<=0){ B.state="recover"; B.t=D.recover; flash(B.x,B.y-20,"PSYCH!","#8be27a"); }   // never deals damage
+  } else if(B.state==="jabtele"){
+    B.t-=dt;
+    if(B.t<=0){
+      B.state="jabhit"; B.t=0.14;
+      if(Math.hypot(chef.x-B.x,chef.y-B.y)<D.jabR){
+        B.chefHP-=D.jabDmg*guardMult(); B.hurtFlash=0.3;
+        flash(chef.x,chef.y-16,"JABBED!","#c8452e");
+        impact(HIT.jab, (B.x<chef.x?1:-1), 0, chef.x, chef.y-12); sfx("hurt");
+      } else { flash(B.x,B.y-20,"WHIFF","#8be27a"); }
+    }
+  } else if(B.state==="jabhit"){
+    B.t-=dt; if(B.t<=0){ B.state="recover"; B.t=D.recover; }
+  } else if(B.state==="combotele"){
+    B.t-=dt;
+    if(B.t<=0){
+      B.state="combohit1"; B.t=0.14;
+      if(Math.hypot(chef.x-B.x,chef.y-B.y)<D.comboR){
+        B.chefHP-=D.comboDmg1*guardMult(); B.hurtFlash=0.3;
+        flash(chef.x,chef.y-16,"HIT!","#c8452e");
+        impact(HIT.jab, (B.x<chef.x?1:-1), 0, chef.x, chef.y-12); sfx("hurt");
+      }
+    }
+  } else if(B.state==="combohit1"){
+    B.t-=dt; if(B.t<=0){ B.state="combogap"; B.t=D.comboGap; }
+  } else if(B.state==="combogap"){          // the deliberate pause \u2014 reads as "he's done", isn't
+    B.t-=dt;
+    if(B.t<=0){
+      B.state="combohit2"; B.t=0.14;
+      if(Math.hypot(chef.x-B.x,chef.y-B.y)<D.comboR){
+        B.chefHP-=D.comboDmg2*guardMult(); B.hurtFlash=0.4;
+        flash(chef.x,chef.y-16,"GOTCHA!","#c8452e");
+        impact(HIT.hurt, (B.x<chef.x?1:-1), 0, chef.x, chef.y-12); sfx("hurt");
+      }
+    }
+  } else if(B.state==="combohit2"){
+    B.t-=dt; if(B.t<=0){ B.state="recover"; B.t=D.recover; }
+  } else if(B.state==="counter"){           // sustained \u2014 costs a hit if she's close at ANY point, not an instant
+    B.t-=dt;
+    if(!B.counterHit && Math.hypot(chef.x-B.x,chef.y-B.y)<D.counterR){
+      B.counterHit=true; B.chefHP-=D.counterDmg*guardMult(); B.hurtFlash=0.5;
+      flash(chef.x,chef.y-16,"COUNTERED!","#c8452e");
+      impact(HIT.heavy, (B.x<chef.x?1:-1), 0, chef.x, chef.y-12); sfx("hurt");
+    }
+    if(B.t<=0){ B.state="recover"; B.t=D.recover; flash(B.x,B.y-24,"OKAY, OKAY \u2014 GET ME!","#ffd86b"); }
+  } else if(B.state==="recover"){
+    B.t-=dt; if(B.t<=0){ B.state="windup"; B.t=D.windup; }
+  }
+}
 function bossNightStrike(){ if(bossFight) vinceStrike(); }   // kind-agnostic: it only reads B.def.reach/koChance + punchDmg()
 function updateBossNight(dt){
   const B=bossFight; if(!B) return;
@@ -1888,8 +1985,11 @@ function updateBossNight(dt){
   for(const f of iflashes) f.t-=dt; iflashes=iflashes.filter(f=>f.t>0);
   updateParticles(dt); if(shake>0) shake=Math.max(0, shake-dt*SHAKE_DECAY);
   if(B.outcome){ B.endT-=dt; if(B.endT<=0) endBossNight(); return; }
+  if(B.chefHP<=0){ bossNightLose(); return; }   // defensive: a loss must fire even if HP hits 0 during the intro
+  if(B.introT>0){ B.introT=Math.max(0,B.introT-dt); return; }   // cinematic hold: no movement, no attacks
   if(B.kind==="charger") updateVince(dt);
   else if(B.kind==="zoner") updateInspector(dt);
+  else if(B.kind==="trickster") updateRinger(dt);
   if(B.chefHP<=0 && !B.outcome) bossNightLose();
 }
 function drawBossNight(){
@@ -1918,9 +2018,19 @@ function drawBossNight(){
     if(B.state==="zonestele" && B.zones){
       for(const z of B.zones){ X.strokeStyle="rgba(255,140,60,.8)"; X.lineWidth=2;
         X.beginPath(); X.arc(z.x,z.y,B.def.zoneR,0,7); X.stroke(); X.lineWidth=1; } }
+    if(B.state==="jabtele" || B.state==="feinttele"){ const p=0.5+0.5*Math.sin(performance.now()/80);
+      X.strokeStyle="rgba(255,216,107,"+(0.5+0.4*p)+")"; X.lineWidth=1.5;
+      X.beginPath(); X.arc(B.x,B.y-14,9+p*2,0,7); X.stroke(); X.lineWidth=1; }
+    if(B.state==="combotele" || B.state==="combogap"){ const p=0.5+0.5*Math.sin(performance.now()/70);
+      X.strokeStyle="rgba(255,140,60,"+(0.5+0.4*p)+")"; X.lineWidth=1.5;
+      X.beginPath(); X.arc(B.x,B.y-14,9+p*2,0,7); X.stroke(); X.lineWidth=1; }
+    if(B.state==="counter"){ const p=0.5+0.5*Math.sin(performance.now()/150);
+      X.strokeStyle="rgba(200,60,220,"+(0.4+0.3*p)+")"; X.lineWidth=2;
+      X.beginPath(); X.arc(B.x,B.y-10,B.def.counterR*0.7,0,7); X.stroke(); X.lineWidth=1; }
     const flashHit = B.hurtFlash>0 && Math.floor(performance.now()/70)%2;
     X.fillStyle = flashHit ? "#ffffff" : (B.state==="recover" ? "#7a5a2e" : "#3a2f42");
     if(B.kind==="zoner" && !flashHit) X.fillStyle = B.state==="recover" ? "#6a7a5a" : "#39433a";
+    if(B.kind==="trickster" && !flashHit) X.fillStyle = B.state==="recover" ? "#7a3a5a" : (B.state==="counter" ? "#5a2a4a" : "#3a2a42");
     X.fillRect(B.x-8, B.y-30, 16, 30);
     X.fillStyle="#e9d8b8"; X.fillRect(B.x-5,B.y-38,10,9);
     X.fillStyle="#c8452e"; X.fillRect(B.x-3,B.y-35,2,2); X.fillRect(B.x+1,B.y-35,2,2);
@@ -1958,8 +2068,20 @@ function drawBossNightButtons(){
   X.fillStyle= ready?"rgba(255,216,107,.9)":"rgba(90,80,60,.5)"; X.beginPath();X.arc(P.x,P.y,15+(btnPulse*2),0,7);X.fill();
   X.fillStyle= ready?"#171020":"#e9d8b8"; X.font="6px monospace"; X.textAlign="center"; X.fillText("STRIKE",P.x,P.y+2); X.textAlign="left";
 }
+// Pure so it's headlessly testable: reveals the name over the first 70% of the intro, then holds it full.
+function introTypedChars(introT, totalT, text){
+  const elapsed = totalT - introT;
+  const frac = Math.max(0, Math.min(1, elapsed / (totalT*0.7)));
+  return text.slice(0, Math.round(text.length*frac));
+}
 function drawBossNightHUD(){
   const B=bossFight;
+  if(B.introT>0){                                 // cinematic reveal: no gameplay HUD, just the name typing in
+    const typed = introTypedChars(B.introT, BOSS_INTRO_TIME, B.def.name);
+    X.textAlign="center"; X.fillStyle="#ffd86b"; X.font="14px monospace";
+    X.fillText(typed, W/2, H-30); X.textAlign="left";
+    return;
+  }
   if(B.hurtFlash>0){ const a=Math.min(0.5,B.hurtFlash); X.fillStyle="rgba(200,40,36,"+a+")";
     X.fillRect(0,0,W,6); X.fillRect(0,H-6,W,6); X.fillRect(0,0,6,H); X.fillRect(W-6,0,6,H); }
   X.fillStyle="#0e0b14"; X.fillRect(0,0,W,14); X.fillStyle="#2f2740"; X.fillRect(0,14,W,1);

@@ -126,6 +126,39 @@ attacks, `rotation:["citation","zones","spread","summon"]`, none of them a lunge
 strike handler works on both bosses with zero new code. Same structural guarantee as Vince: every one of
 the Inspector's four attacks — citation/zones/spread/summon — resolves into `"recover"` too.
 
+### A third boss (2026-07-16): Chef Bruno "The Ringer", a trickster
+`BOSSES[2]` — `kind:"trickster"`. Vince tests positioning, the Inspector tests zone-awareness; Bruno tests
+**timing/discipline**. `rotation:["feint","jab","combo","counter"]`:
+1. **feint** — plays the *exact same telegraph* as `jab` (same flash text, same visual ring) and resolves
+   into nothing. The mixup is visual, not textual — she genuinely can't tell them apart before it resolves.
+2. **jab** — short telegraph, low damage, connects in `jabR` or whiffs cleanly outside it.
+3. **combo** — two hits with a real gap (`comboGap`) between them where nothing happens — trains against
+   bailing early on a combo that isn't over.
+4. **counter** — his signature: a *sustained* stance (`counterTime` seconds), not an instant punish.
+   Standing within `counterR` at any point during it costs a hit — "wait him out," not "watch one instant."
+
+`updateRinger` was added purely additively (a new function, a new `else if` in `updateBossNight`'s
+dispatch, new draw branches keyed on his new state names) — `vinceStrike()`, `bossNightStrike()`, Vince, and
+the Inspector are all untouched. Same guarantee once more: all 8 of his states resolve into `"recover"`.
+
+### Boss-intro cinematic (2026-07-16): tight zoom + typed name, before every fight
+Every boss-night fight now opens with a ~1.8s cinematic: the camera punches in tight on the boss
+(`BOSS_INTRO_ZOOM=3.0`, framing his fixed spawn point `(262,78)` with margin inside the pan clamp — verified
+by arithmetic, not eyeballed) while his name types onto the screen letter by letter, then cuts to the normal
+fight camera. Combat and movement are frozen for the duration (`bossFight.introT`, gated at the top of
+`updateBossNight`) — nothing can happen to the chef or the boss during the reveal.
+
+Built entirely by **extending the three existing, already-tested camera functions** (`camZoom`,
+`tickCamLean`, and the `updateBossNight` dispatch) rather than adding new inline math anywhere — this
+project's own `DECISIONS.md` has a hard-won rule that camera math living in `loop()` is untestable by
+construction (a past mutation reverting the whole transform once passed all 618 tests). The zoom's safety
+floor (`max(want, safety)`) is untouched; the intro just raises what "want" asks for.
+
+**Deliberately excluded: Brandon** (the original, separate, heavily-pinned daytime-scuffle boss). His
+`updateBoss()` has ~30 tests that call it once immediately after `startBoss()` expecting his `"draw"`
+sequence to already be progressing — a mandatory hold ahead of that would break most of them. Extending the
+cinematic to him would need its own dedicated pass built around those constraints.
+
 ### Fight structure (reuses combat)
 - New `phase==="boss"` encounters run on the impact spine like Brandon does today: chef HP bar, mash to
   strike in the exposed window, KO fall. `chefMaxHP()`, `punchDmg()`, `guardMult()`, `fightSpeedMult()`
