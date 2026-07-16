@@ -1,0 +1,39 @@
+# Culinary Dash — gitignore
+
+# ---------------------------------------------------------------------------
+# THE DEV BUILD. NEVER COMMIT THIS.
+# ---------------------------------------------------------------------------
+# culinary-dash-devtools.html is the built file with DEV flipped true. It is
+# byte-identical to her build except for one flag, which makes it exactly the
+# kind of file that gets shipped by accident. It's regenerable in one step
+# (cd build, flip the flag), so there is no reason for it to exist in history.
+culinary-dash-devtools.html
+
+# Harness scratch (cd test writes here)
+culinary-dash-work/
+game_script.js
+
+# Logs from the G2 setup
+g2.log
+pd-install.log
+
+node_modules/
+.DS_Store
+*.swp
+
+# ---------------------------------------------------------------------------
+# THE BUILT ARTIFACT. Ignored deliberately — see DECISIONS.md.
+# ---------------------------------------------------------------------------
+# It inlines all 22 art blobs and changes on EVERY commit, so committing it
+# would store ~800KB of unchanged art per commit. git dedupes art/*.b64 by
+# hash (unchanged = free); the built file defeats that. Committing it undoes
+# the readsafe split in history-space while preserving it in context-space.
+#
+# It ships as a GitHub Release asset, tagged per delivery. That's where a
+# built artifact belongs: versioned, downloadable, out of history.
+culinary-dash.html
+
+# ---------------------------------------------------------------------------
+# NOT IGNORED, DELIBERATELY:
+# ---------------------------------------------------------------------------
+#   art/*.b64  -> build INPUT. Required. See .gitattributes.

@@ -1,0 +1,30 @@
+# Culinary Dash — git attributes
+#
+# READ THIS BEFORE CHANGING ANYTHING HERE. Both rules below exist to protect
+# things that fail silently.
+
+# ---------------------------------------------------------------------------
+# 1. NO LINE-ENDING NORMALIZATION. ANYWHERE.
+# ---------------------------------------------------------------------------
+# build.py opens files with newline="" (no translation) and `--check` asserts
+# the rebuilt html is md5-IDENTICAL to the shipped one. If git normalizes CRLF
+# on checkin/checkout, that assertion breaks — and it breaks as "ROUND-TRIP
+# DIFFERS", which reads like a build bug, not a git config bug. Nobody would
+# find this quickly. Bytes in, bytes out.
+* -text
+
+# ---------------------------------------------------------------------------
+# 2. THE ART BLOBS ARE NOT TEXT.
+# ---------------------------------------------------------------------------
+# Each art/*.b64 is a single base64 line, up to ~133k chars. Git will happily
+# try to diff those and hand you a 33k-token wall — the exact failure the
+# readsafe/split commit was built to eliminate. -diff means git shows
+# "Binary files differ" instead. -merge means conflicts fail loudly rather
+# than producing a corrupted blob a text merge invented.
+#
+# This is the same principle as `cd grep`: art can grow forever without
+# growing what anyone has to read.
+art/*.b64 -diff -merge
+
+# The built artifact contains all 22 blobs inlined. Same reasoning, more so.
+culinary-dash.html -diff -merge linguist-generated
