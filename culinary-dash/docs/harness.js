@@ -1003,6 +1003,44 @@ const probe = `
   }
   bossFight=null; phase="play"; screenPunchT=0; screenPunchAmp=0; rings.length=0; particles.length=0;
 
+  // ---- telegraph + body juice: layered danger rings replace plain circles (Roadmap #40, slice L/5+6) ----
+  startCampaign(); customers=[]; phase="play"; startBossNight("vince"); bossFight.introT=0;
+  { const B=bossFight;
+    B.state="charge"; ok("bossDanger is null outside any telegraph state", bossDanger()===null);
+    B.state="slamtele"; B.t=B.def.slamTele*0.5;
+    { const dg=bossDanger(); ok("slamtele: k is mid-progress with a real color", dg && dg.k>0.3 && dg.k<0.7 && typeof dg.col==="string"); }
+    B.t=0; ok("slamtele: k approaches 1 as the telegraph completes", bossDanger().k>=0.99);
+    B.t=B.def.slamTele; ok("slamtele: k is ~0 right at the start", bossDanger().k<=0.01);
+    B.state="recover"; ok("bossDanger is null during recover (no telegraph active)", bossDanger()===null);
+  }
+  // pulseT: a quick body-glow pulse arms on every state transition and decays back to exactly 0
+  startCampaign(); customers=[]; phase="play"; startBossNight("vince"); bossFight.introT=0;
+  { const B=bossFight; chef.x=-1000; chef.y=-1000;
+    ok("pulseT starts at 0 before any transition", B.pulseT===0);
+    B.prevState="charge"; B.state="recover"; updateBossNight(1/600);
+    ok("pulseT arms the instant state changes", B.pulseT>0);
+    const p0=B.pulseT; updateBossNight(1/600);
+    ok("...and decays tick over tick", B.pulseT<p0);
+    for(let i=0;i<200;i++) updateBossNight(1/600);
+    ok("...all the way to exactly 0", B.pulseT===0);
+  }
+  // every telegraph state (including the 3 new Stage-3 ones, which had ZERO draw code before this slice)
+  // draws without throwing, for all 3 bosses
+  { const states=["windup","slamtele","paperaim","grabtele","stomptele","wreckplant","citetele","zonestele",
+                  "condemntele","jabtele","feinttele","combotele","combogap","counter","haymakertele","recover"];
+    let anyThrew=false;
+    for(const id of ["vince","inspector","ringer"]){
+      startCampaign(); customers=[]; phase="play"; startBossNight(id); bossFight.introT=0;
+      for(const s of states){
+        const B=bossFight; B.state=s; B.t=0.3;
+        B.slamX=B.x; B.slamY=B.y; B.citeX=chef.x; B.citeY=chef.y; B.condemnX=chef.x; B.condemnY=chef.y;
+        B.zones=[{x:chef.x,y:chef.y}]; B.paperDX=1; B.paperDY=0;
+        try{ drawBossNight(); drawBossNightHUD(); }catch(e){ anyThrew=true; }
+      }
+    }
+    ok("every telegraph state draws cleanly for all 3 bosses (48 state x boss combos)", !anyThrew); }
+  bossFight=null; phase="play"; screenPunchT=0; screenPunchAmp=0; rings.length=0; particles.length=0;
+
   // routing: results -> office -> next day
   startCampaign(); run.dow=0; tips=100; finishDay();
   ok("day ends on results", phase==="over");

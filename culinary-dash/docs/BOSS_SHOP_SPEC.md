@@ -178,6 +178,27 @@ the whole fight. Fixed by reusing the brawl's own animation/combo machinery (`co
 `state==="recover"`, same rule as always. This is purely the missing "it looks and feels like a fight"
 layer, applied kind-agnostically to all three bosses.
 
+### The boss-night overhaul (2026-07-16): pacing fix, HP-gated stages, way more juice
+Reported: fights end too fast, attacks are plain circles/squares, banners do the talking instead of the
+visuals. Three parts, each its own slice:
+1. **Pacing fix**: `vinceStrike()` had no rate limit beyond `state==="recover"`, so mashing could land 5+
+   full-damage hits in one exposure. Capped to one clean hit per exposure (`bossFight.struck`, reset by a
+   single generic check in `updateBossNight`) and retuned HP upward (Vince 60, Inspector 50, Ringer 55) now
+   that the cap makes HP mean what it looks like it means.
+2. **HP-gated attack stages**: `bossPhase(B)`/`bossRotation(B)` — Stage 1 (>66% HP) is the original
+   rotation, Stage 2 (33-66%) reorders toward the harder moves, Stage 3 (<=33%, "enraged") adds one new
+   signature finisher per boss (Vince's WRECKING BALL, the Inspector's CONDEMNED, Bruno's HAYMAKER — each
+   built on an existing attack's shape at bigger numbers) and shortens `windup` only, never `recover`.
+3. **Juice**: a new `HIT.devastating` weight + `bossBigHit()` bundling an ember/smoke particle burst, an
+   expanding shockwave ring, and a screen-punch effect (built by generalizing the existing drunk-vision warp
+   — composes via `Math.max`, never sums) — all reusing existing primitives (`impact()`, `burst()`,
+   `drawDrunkWarp()`) rather than inventing parallel systems. Every telegraph became 3 staggered rings +
+   a particle trickle (`dangerRing()`/`bossDanger()`) instead of one flat pulse, plus a screen-edge color
+   bleed keyed to the attacking boss's palette. Every per-attack `flash()` banner (~30 sites) is gone — the
+   boss-name cinematic, win/lose banners, and the damage-number pop are untouched.
+
+See `CHANGELOG.md` (slices I/J/K/L) for the full arithmetic and test breakdown.
+
 ### Telegraph + trigger (3a)
 - `nextDay()` / `finishDay()`: with the boss NOT already queued, roll `bossChance()` (random "after work").
   On a hit, set `run.bossTomorrow = pickBoss()`. The **results + office screens show the warning** ("⚔ A

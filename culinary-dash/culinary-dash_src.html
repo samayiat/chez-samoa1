@@ -1713,7 +1713,7 @@ function startBossNight(id){
   bossFight = { def, kind:def.kind, hp:def.hp, maxHP:def.hp, chefHP:chefMaxHP(), maxChefHP:chefMaxHP(),
     x:262, y:78, state:"windup", t:def.windup, cycle:0, hurtFlash:0, outcome:null, endT:0, introT:BOSS_INTRO_TIME,
     punchT:0, punchDur:0, move:null, comboStep:0, comboT:0, bufT:0,   // same swing/combo feel as the brawl (reused, not reinvented)
-    struck:false, prevState:"windup" };   // one clean hit per recover exposure — mashing can't stack damage in one window
+    struck:false, prevState:"windup", pulseT:0 };   // one clean hit per exposure + a body-glow pulse on every state change
   customers=[]; chef.carry=null; chef.x=120; chef.y=120; chef.dir="up";
   flash(W/2,44,def.name.toUpperCase(),"#c8452e"); flash(W/2,58,def.tagline,"#e88a7a");
   sfx("burnt"); addShake(3.4);
@@ -1756,43 +1756,37 @@ function updateVince(dt){
       const close = Math.hypot(chef.x-B.x,chef.y-B.y) < D.grabR;
       const move = close ? "grab" : bossRotation(B)[(B.cycle-1)%bossRotation(B).length];
       if(move==="pound"){
-        B.state="slamtele"; B.t=D.slamTele; B.slamX=B.x; B.slamY=B.y;
-        flash(B.x,B.y-24,"GROUND POUND!","#c8452e"); sfx("burnt");
+        B.state="slamtele"; B.t=D.slamTele; B.slamX=B.x; B.slamY=B.y; sfx("burnt");
       } else if(move==="paper"){
         const dx=chef.x-B.x, dy=chef.y-B.y, d=Math.hypot(dx,dy)||1;
         B.paperDX=dx/d; B.paperDY=dy/d; B.paperHit=false;
-        B.state="paperaim"; B.t=D.paperAim;
-        flash(B.x,B.y-24,"EVICTION NOTICE!","#ffd86b"); sfx("burnt");
+        B.state="paperaim"; B.t=D.paperAim; sfx("burnt");
       } else if(move==="stomp"){
-        B.state="stomptele"; B.t=D.stompTele;
-        flash(B.x,B.y-24,"HEY!","#c8452e"); sfx("burnt");
+        B.state="stomptele"; B.t=D.stompTele; sfx("burnt");
       } else if(move==="dcharge"){
         const dx=chef.x-B.x, dy=chef.y-B.y, d=Math.hypot(dx,dy)||1;
         B.chargeDX=dx/d; B.chargeDY=dy/d; B.hitThisCharge=false;
-        B.state="dcharge1"; B.t=D.dchargeTime;
-        flash(B.x,B.y-24,"DOUBLE CHARGE!","#c8452e"); sfx("burnt");
+        B.state="dcharge1"; B.t=D.dchargeTime; sfx("burnt");
       } else if(move==="grab"){
-        B.state="grabtele"; B.t=D.grabTele;
-        flash(B.x,B.y-24,"GOTCHA!","#c8452e"); sfx("burnt");
+        B.state="grabtele"; B.t=D.grabTele; sfx("burnt");
       } else if(move==="wreckingball"){
         B.state="wreckplant"; B.t=D.wreckTele; B.wreckX=B.x; B.wreckY=B.y; sfx("burnt");
       } else {   // "charge" — the default, also what a rotation lookup miss falls back to
         const dx=chef.x-B.x, dy=chef.y-B.y, d=Math.hypot(dx,dy)||1;
         B.chargeDX=dx/d; B.chargeDY=dy/d; B.hitThisCharge=false;
-        B.state="charge"; B.t=D.chargeTime;
-        flash(B.x,B.y-24,"HERE HE COMES!","#ffd86b"); sfx("burnt");
+        B.state="charge"; B.t=D.chargeTime; sfx("burnt");
       }
     }
   } else if(B.state==="charge"){
     B.t-=dt;
     B.x=Math.max(FLOOR.x0,Math.min(FLOOR.x1,B.x+B.chargeDX*D.chargeSpeed*dt));
     B.y=Math.max(FLOOR.y0,Math.min(FLOOR.y1,B.y+B.chargeDY*D.chargeSpeed*dt));
+    if(Math.random()<dt*20) burst(B.x,B.y-4,1,["#8a6a4e","#6a5038"],{sp:6,up:2,life:0.3,size:1,grav:8});   // a single dust streak
     if(!B.hitThisCharge && Math.hypot(chef.x-B.x,chef.y-B.y)<D.hitR){
       B.hitThisCharge=true; B.chefHP-=D.chargeDmg*guardMult(); B.hurtFlash=0.4;
-      flash(chef.x,chef.y-16,"SLAMMED!","#c8452e");
       impact(HIT.hurt, (B.x<chef.x?1:-1), 0, chef.x, chef.y-12); sfx("hurt");
     }
-    if(B.t<=0){ B.state="recover"; B.t=D.recover; flash(B.x,B.y-24,"WINDED \u2014 GET HIM!","#ffd86b"); }
+    if(B.t<=0){ B.state="recover"; B.t=D.recover; }
   } else if(B.state==="slamtele"){
     B.t-=dt;
     if(B.t<=0){
@@ -1800,9 +1794,8 @@ function updateVince(dt){
       const d=Math.hypot(chef.x-B.slamX, chef.y-B.slamY);
       if(d<D.slamR){
         B.chefHP-=D.slamDmg*guardMult(); B.hurtFlash=0.5;
-        flash(chef.x,chef.y-16,"CAUGHT IN THE SLAM!","#c8452e");
         impact(HIT.heavy, (B.slamX<chef.x?1:-1), 0, chef.x, chef.y-12); sfx("hurt");
-      } else { flash(B.slamX,B.slamY-10,"DODGED!","#8be27a"); }
+      }
     }
   } else if(B.state==="slam"){
     B.t-=dt; if(B.t<=0){ B.state="recover"; B.t=D.recover; }
@@ -1814,7 +1807,6 @@ function updateVince(dt){
     B.paperX+=B.paperDX*D.paperSpeed*dt; B.paperY+=B.paperDY*D.paperSpeed*dt;
     if(!B.paperHit && Math.hypot(chef.x-B.paperX,chef.y-B.paperY)<D.paperR){
       B.paperHit=true; B.chefHP-=D.paperDmg*guardMult(); B.hurtFlash=0.35;
-      flash(chef.x,chef.y-16,"PAPER CUT!","#c8452e");
       impact(HIT.hurt, (B.paperDX<0?-1:1), 0, chef.x, chef.y-12); sfx("hurt");
     }
     { const out = B.paperX<FLOOR.x0-10||B.paperX>FLOOR.x1+10||B.paperY<FLOOR.y0-10||B.paperY>FLOOR.y1+10;
@@ -1825,12 +1817,11 @@ function updateVince(dt){
       B.state="grabhit"; B.t=0.16;
       if(Math.hypot(chef.x-B.x,chef.y-B.y) < D.grabR+6){
         B.chefHP-=D.grabDmg*guardMult(); B.hurtFlash=0.5;
-        flash(chef.x,chef.y-16,"GRABBED!","#c8452e");
         impact(HIT.heavy, (B.x<chef.x?1:-1), 0, chef.x, chef.y-12); sfx("hurt");
         chef.x = (B.x<W/2) ? FLOOR.x1-12 : FLOOR.x0+12;
         chef.y = (B.y<H/2) ? FLOOR.y1-12 : FLOOR.y0+12;
         joy.vx=0; joy.vy=0;
-      } else { flash(B.x,B.y-16,"SLIPPED FREE!","#8be27a"); }
+      }
     }
   } else if(B.state==="grabhit"){
     B.t-=dt; if(B.t<=0){ B.state="recover"; B.t=D.recover; }
@@ -1841,9 +1832,8 @@ function updateVince(dt){
       const d=Math.hypot(chef.x-B.x, chef.y-B.y);
       if(d<D.stompR){
         B.chefHP-=D.stompDmg*guardMult(); B.hurtFlash=0.4;
-        flash(chef.x,chef.y-16,"SHOCKWAVE!","#c8452e");
         impact(HIT.hurt, (B.x<chef.x?1:-1), 0, chef.x, chef.y-12); sfx("hurt");
-      } else { flash(B.x,B.y-16,"DODGED!","#8be27a"); }
+      }
     }
   } else if(B.state==="stomphit"){
     B.t-=dt; if(B.t<=0){ B.state="recover"; B.t=D.recover; }
@@ -1851,9 +1841,9 @@ function updateVince(dt){
     B.t-=dt;
     B.x=Math.max(FLOOR.x0,Math.min(FLOOR.x1,B.x+B.chargeDX*D.dchargeSpeed*dt));
     B.y=Math.max(FLOOR.y0,Math.min(FLOOR.y1,B.y+B.chargeDY*D.dchargeSpeed*dt));
+    if(Math.random()<dt*30) burst(B.x,B.y-4,1,["#ff8c3c","#ff5a3c"],{sp:8,up:3,life:0.32,size:1,grav:6});  // hotter, denser trail = TWO hits coming
     if(!B.hitThisCharge && Math.hypot(chef.x-B.x,chef.y-B.y)<D.hitR){
       B.hitThisCharge=true; B.chefHP-=D.dchargeDmg*guardMult(); B.hurtFlash=0.4;
-      flash(chef.x,chef.y-16,"SLAMMED!","#c8452e");
       impact(HIT.hurt, (B.x<chef.x?1:-1), 0, chef.x, chef.y-12); sfx("hurt");
     }
     if(B.t<=0){
@@ -1865,12 +1855,12 @@ function updateVince(dt){
     B.t-=dt;
     B.x=Math.max(FLOOR.x0,Math.min(FLOOR.x1,B.x+B.chargeDX*D.dchargeSpeed*dt));
     B.y=Math.max(FLOOR.y0,Math.min(FLOOR.y1,B.y+B.chargeDY*D.dchargeSpeed*dt));
+    if(Math.random()<dt*30) burst(B.x,B.y-4,1,["#ff8c3c","#ff5a3c"],{sp:8,up:3,life:0.32,size:1,grav:6});
     if(!B.hitThisCharge && Math.hypot(chef.x-B.x,chef.y-B.y)<D.hitR){
       B.hitThisCharge=true; B.chefHP-=D.dchargeDmg*guardMult(); B.hurtFlash=0.4;
-      flash(chef.x,chef.y-16,"SLAMMED AGAIN!","#c8452e");
       impact(HIT.hurt, (B.x<chef.x?1:-1), 0, chef.x, chef.y-12); sfx("hurt");
     }
-    if(B.t<=0){ B.state="recover"; B.t=D.recover; flash(B.x,B.y-24,"WINDED \u2014 GET HIM!","#ffd86b"); }
+    if(B.t<=0){ B.state="recover"; B.t=D.recover; }
   } else if(B.state==="wreckplant"){        // 7. Stage 3: a huge remembered-spot AOE, telegraphed far longer
     B.t-=dt;
     if(B.t<=0){
@@ -1918,25 +1908,21 @@ function updateInspector(dt){
         B.zones=[];
         for(let i=0;i<D.zonesN;i++){ const ang=(i/D.zonesN)*Math.PI*2 + B.cycle*0.7;
           B.zones.push({x:chef.x+Math.cos(ang)*D.zoneSpread, y:chef.y+Math.sin(ang)*D.zoneSpread}); }
-        B.state="zonestele"; B.t=D.zonesTele;
-        flash(B.x,B.y-24,"HEALTH CODE VIOLATIONS!","#c8452e"); sfx("burnt");
+        B.state="zonestele"; B.t=D.zonesTele; sfx("burnt");
       } else if(move==="spread"){
         const dx=chef.x-B.x, dy=chef.y-B.y, baseAng=Math.atan2(dy,dx);
         B.papers=[];
         for(let i=0;i<D.spreadCount;i++){ const a=baseAng+(i-(D.spreadCount-1)/2)*D.spreadFan;
           B.papers.push({x:B.x,y:B.y,dx:Math.cos(a),dy:Math.sin(a),hit:false}); }
-        B.state="spreadfly"; B.t=1.2;
-        flash(B.x,B.y-24,"CITATION STORM!","#ffd86b"); sfx("burnt");
+        B.state="spreadfly"; B.t=1.2; sfx("burnt");
       } else if(move==="summon"){
-        B.state="summontele"; B.t=0.4;
-        flash(B.x,B.y-24,"BACKUP INSPECTORS!","#c8452e"); sfx("burnt");
+        B.state="summontele"; B.t=0.4; sfx("burnt");
       } else if(move==="condemned"){
         B.condemnX=chef.x; B.condemnY=chef.y;
         B.state="condemntele"; B.t=D.condemnTele; sfx("burnt");
       } else {   // "citation" — the default, also what a rotation lookup miss falls back to
         B.citeX=chef.x; B.citeY=chef.y;
-        B.state="citetele"; B.t=D.citationTele;
-        flash(B.x,B.y-24,"CITATION!","#ffd86b"); sfx("burnt");
+        B.state="citetele"; B.t=D.citationTele; sfx("burnt");
       }
     }
   } else if(B.state==="citetele"){          // 1. a circle frozen at wherever she WAS at the telegraph
@@ -1945,9 +1931,8 @@ function updateInspector(dt){
       B.state="citehit"; B.t=0.16;
       if(Math.hypot(chef.x-B.citeX,chef.y-B.citeY)<D.citationR){
         B.chefHP-=D.citationDmg*guardMult(); B.hurtFlash=0.4;
-        flash(chef.x,chef.y-16,"CITED!","#c8452e");
         impact(HIT.hurt, (B.citeX<chef.x?1:-1), 0, chef.x, chef.y-12); sfx("hurt");
-      } else { flash(B.citeX,B.citeY-10,"DODGED!","#8be27a"); }
+      }
     }
   } else if(B.state==="citehit"){
     B.t-=dt; if(B.t<=0){ B.state="recover"; B.t=D.recover; }
@@ -1958,9 +1943,8 @@ function updateInspector(dt){
       let hit=false; for(const z of B.zones) if(Math.hypot(chef.x-z.x,chef.y-z.y)<D.zoneR) hit=true;
       if(hit){
         B.chefHP-=D.zoneDmg*guardMult(); B.hurtFlash=0.5;
-        flash(chef.x,chef.y-16,"VIOLATION!","#c8452e");
         impact(HIT.heavy, (B.x<chef.x?1:-1), 0, chef.x, chef.y-12); sfx("hurt");
-      } else { flash(chef.x,chef.y-16,"CLEAN!","#8be27a"); }
+      }
     }
   } else if(B.state==="zoneshit"){
     B.t-=dt; if(B.t<=0){ B.state="recover"; B.t=D.recover; }
@@ -1970,7 +1954,6 @@ function updateInspector(dt){
       p.x+=p.dx*D.spreadSpeed*dt; p.y+=p.dy*D.spreadSpeed*dt;
       if(!p.hit && Math.hypot(chef.x-p.x,chef.y-p.y)<D.spreadR){
         p.hit=true; B.chefHP-=D.spreadDmg*guardMult(); B.hurtFlash=0.35;
-        flash(chef.x,chef.y-16,"GRAZED!","#c8452e");
         impact(HIT.hurt, (p.dx<0?-1:1), 0, chef.x, chef.y-12); sfx("hurt");
       }
     }
@@ -1983,7 +1966,6 @@ function updateInspector(dt){
       for(let i=0;i<D.addCount;i++){ const ang=Math.random()*Math.PI*2;
         B.adds.push({x:B.x+Math.cos(ang)*20, y:B.y+Math.sin(ang)*20, hp:D.addHP, life:D.addLife, hitDone:false}); }
       B.state="recover"; B.t=D.recover;
-      flash(B.x,B.y-24,"GET TO WORK!","#c8452e");
     }
   } else if(B.state==="condemntele"){       // 5. Stage 3: room-covering AOE, frozen at her spot at the telegraph
     B.t-=dt;
@@ -2003,8 +1985,7 @@ function updateInspector(dt){
     for(const a of B.adds){
       const dx=chef.x-a.x, dy=chef.y-a.y, d=Math.hypot(dx,dy)||1;
       a.x+=dx/d*D.addSpeed*dt; a.y+=dy/d*D.addSpeed*dt; a.life-=dt;
-      if(!a.hitDone && d<D.addR){ a.hitDone=true; B.chefHP-=D.addDmg*guardMult(); B.hurtFlash=0.3;
-        flash(chef.x,chef.y-16,"NAGGED!","#c8452e"); sfx("hurt"); }
+      if(!a.hitDone && d<D.addR){ a.hitDone=true; B.chefHP-=D.addDmg*guardMult(); B.hurtFlash=0.3; sfx("hurt"); }
     }
     B.adds=B.adds.filter(a=>a.life>0);
   }
@@ -2023,33 +2004,28 @@ function updateRinger(dt){
       B.cycle=(B.cycle||0)+1;
       const move = bossRotation(B)[(B.cycle-1)%bossRotation(B).length];
       if(move==="jab"){
-        B.state="jabtele"; B.t=D.jabTele;
-        flash(B.x,B.y-24,"...!","#ffd86b"); sfx("burnt");
+        B.state="jabtele"; B.t=D.jabTele; sfx("burnt");
       } else if(move==="combo"){
-        B.state="combotele"; B.t=D.comboTele;
-        flash(B.x,B.y-24,"HERE IT COMES...","#ffd86b"); sfx("burnt");
+        B.state="combotele"; B.t=D.comboTele; sfx("burnt");
       } else if(move==="counter"){
-        B.state="counter"; B.t=D.counterTime; B.counterHit=false;
-        flash(B.x,B.y-24,"COME AT ME!","#c8452e"); sfx("burnt");
+        B.state="counter"; B.t=D.counterTime; B.counterHit=false; sfx("burnt");
       } else if(move==="haymaker"){
         B.state="haymakertele"; B.t=D.haymakerTele; sfx("burnt");
       } else {   // "feint" \u2014 the default, also what a rotation lookup miss falls back to
-        B.state="feinttele"; B.t=D.feintTele;
-        flash(B.x,B.y-24,"...!","#ffd86b"); sfx("burnt");   // SAME text/telegraph as jab \u2014 the mixup is the point
+        B.state="feinttele"; B.t=D.feintTele; sfx("burnt");   // SAME telegraph as jab \u2014 the mixup is the point
       }
     }
   } else if(B.state==="feinttele"){
     B.t-=dt;
-    if(B.t<=0){ B.state="recover"; B.t=D.recover; flash(B.x,B.y-20,"PSYCH!","#8be27a"); }   // never deals damage
+    if(B.t<=0){ B.state="recover"; B.t=D.recover; }   // never deals damage
   } else if(B.state==="jabtele"){
     B.t-=dt;
     if(B.t<=0){
       B.state="jabhit"; B.t=0.14;
       if(Math.hypot(chef.x-B.x,chef.y-B.y)<D.jabR){
         B.chefHP-=D.jabDmg*guardMult(); B.hurtFlash=0.3;
-        flash(chef.x,chef.y-16,"JABBED!","#c8452e");
         impact(HIT.jab, (B.x<chef.x?1:-1), 0, chef.x, chef.y-12); sfx("hurt");
-      } else { flash(B.x,B.y-20,"WHIFF","#8be27a"); }
+      }
     }
   } else if(B.state==="jabhit"){
     B.t-=dt; if(B.t<=0){ B.state="recover"; B.t=D.recover; }
@@ -2059,7 +2035,6 @@ function updateRinger(dt){
       B.state="combohit1"; B.t=0.14;
       if(Math.hypot(chef.x-B.x,chef.y-B.y)<D.comboR){
         B.chefHP-=D.comboDmg1*guardMult(); B.hurtFlash=0.3;
-        flash(chef.x,chef.y-16,"HIT!","#c8452e");
         impact(HIT.jab, (B.x<chef.x?1:-1), 0, chef.x, chef.y-12); sfx("hurt");
       }
     }
@@ -2071,7 +2046,6 @@ function updateRinger(dt){
       B.state="combohit2"; B.t=0.14;
       if(Math.hypot(chef.x-B.x,chef.y-B.y)<D.comboR){
         B.chefHP-=D.comboDmg2*guardMult(); B.hurtFlash=0.4;
-        flash(chef.x,chef.y-16,"GOTCHA!","#c8452e");
         impact(HIT.hurt, (B.x<chef.x?1:-1), 0, chef.x, chef.y-12); sfx("hurt");
       }
     }
@@ -2081,10 +2055,9 @@ function updateRinger(dt){
     B.t-=dt;
     if(!B.counterHit && Math.hypot(chef.x-B.x,chef.y-B.y)<D.counterR){
       B.counterHit=true; B.chefHP-=D.counterDmg*guardMult(); B.hurtFlash=0.5;
-      flash(chef.x,chef.y-16,"COUNTERED!","#c8452e");
       impact(HIT.heavy, (B.x<chef.x?1:-1), 0, chef.x, chef.y-12); sfx("hurt");
     }
-    if(B.t<=0){ B.state="recover"; B.t=D.recover; flash(B.x,B.y-24,"OKAY, OKAY \u2014 GET ME!","#ffd86b"); }
+    if(B.t<=0){ B.state="recover"; B.t=D.recover; }
   } else if(B.state==="haymakertele"){      // 5. Stage 3: a long, deliberately readable windup, then a fling
     B.t-=dt;
     if(B.t<=0){
@@ -2136,11 +2109,49 @@ function updateBossNight(dt){
   if(B.bufT>0){ B.bufT-=dt; if(B.punchT<=punchGate()) bossNightSwing(); }   // a press mid-swing isn't lost
   if(B.comboT>0) B.comboT-=dt;                                             // walk away and the combo resets to the jab
   if(B.state==="recover" && B.prevState!=="recover") B.struck=false;         // a fresh exposure: one clean hit
+  if(B.state!==B.prevState) B.pulseT=0.15;                                   // a quick body flash-glow on every state change
+  if(B.pulseT>0) B.pulseT=Math.max(0,B.pulseT-dt);
   B.prevState = B.state;
   if(B.kind==="charger") updateVince(dt);
   else if(B.kind==="zoner") updateInspector(dt);
   else if(B.kind==="trickster") updateRinger(dt);
   if(B.chefHP<=0 && !B.outcome) bossNightLose();
+}
+// One place computes "how dangerous is the CURRENT boss state, and whose danger is it" — the ring juice
+// below and the screen-edge color bleed in drawBossNightHUD both read from here, so they always agree
+// instead of drifting out of sync. k: 0 (telegraph just started) -> 1 (about to resolve).
+function bossDanger(){
+  const B=bossFight; if(!B) return null;
+  const S=B.state, D=B.def;
+  if(S==="slamtele")    return {k:1-Math.max(0,B.t)/D.slamTele,     col:"#ff3c32"};
+  if(S==="stomptele")   return {k:1-Math.max(0,B.t)/D.stompTele,    col:"#ff8c3c"};
+  if(S==="grabtele")    return {k:1-Math.max(0,B.t)/D.grabTele,     col:"#c8102e"};
+  if(S==="wreckplant")  return {k:1-Math.max(0,B.t)/D.wreckTele,    col:"#ff3c32"};
+  if(S==="citetele")    return {k:1-Math.max(0,B.t)/D.citationTele, col:"#ffb43c"};
+  if(S==="zonestele")   return {k:1-Math.max(0,B.t)/D.zonesTele,    col:"#ff8c3c"};
+  if(S==="condemntele") return {k:1-Math.max(0,B.t)/D.condemnTele,  col:"#ffb43c"};
+  if(S==="jabtele"||S==="feinttele") return {k:1-Math.max(0,B.t)/D.jabTele, col:"#e0674e"};
+  if(S==="combotele")   return {k:1-Math.max(0,B.t)/D.comboTele,    col:"#c020a0"};
+  if(S==="combogap")    return {k:1-Math.max(0,B.t)/D.comboGap,     col:"#c020a0"};
+  if(S==="counter")     return {k:0.5+0.5*Math.sin(performance.now()/150), col:"#a020c0"};
+  if(S==="haymakertele")return {k:1-Math.max(0,B.t)/D.haymakerTele, col:"#c020a0"};
+  return null;
+}
+// A telegraph with real presence: 3 staggered rings (instead of one flat pulse) + a low-rate spark
+// trickle along the circumference as danger closes in. One function, every boss's every telegraph.
+function dangerRing(x,y,r,k,col,particleCols){
+  const kk=Math.max(0,Math.min(1,k));
+  for(let i=0;i<3;i++){
+    const rr=Math.max(1,r*(0.78+0.22*i));
+    X.globalAlpha=Math.max(0,0.8-i*0.22)*(0.4+0.6*kk);
+    X.strokeStyle=col; X.lineWidth=2.4-i*0.6;
+    X.beginPath(); X.arc(x,y,rr,0,7); X.stroke();
+  }
+  X.globalAlpha=1; X.lineWidth=1;
+  if(kk>0.3 && Math.random()<kk*0.5){
+    const ang=Math.random()*Math.PI*2;
+    burst(x+Math.cos(ang)*r, y+Math.sin(ang)*r, 1, particleCols||[col], {sp:16,up:5,life:0.35,size:1,spread:0.7,ang:ang+Math.PI/2});
+  }
 }
 function drawBossNight(){
   drawWorldBase();
@@ -2150,34 +2161,26 @@ function drawBossNight(){
     if(B.state==="windup"){ const p=0.5+0.5*Math.sin(performance.now()/100);
       X.strokeStyle="rgba(255,80,60,"+(0.5+0.4*p)+")"; X.lineWidth=1.5;
       X.beginPath(); X.arc(B.x,B.y-14,10+p*2,0,7); X.stroke(); X.lineWidth=1; }
-    if(B.state==="slamtele"){ const k=1-Math.max(0,B.t)/B.def.slamTele;
-      X.strokeStyle="rgba(255,60,50,.85)"; X.lineWidth=2;
-      X.beginPath(); X.arc(B.slamX,B.slamY,B.def.slamR*k,0,7); X.stroke(); X.lineWidth=1; }
+    if(B.state==="slamtele"){ const dg=bossDanger(); dangerRing(B.slamX,B.slamY,B.def.slamR*dg.k,dg.k,dg.col,["#ff6a2e","#ffd86b"]); }
     if(B.state==="paperaim"){
-      X.strokeStyle="rgba(255,216,107,.6)"; X.lineWidth=1;
-      X.beginPath(); X.moveTo(B.x,B.y-14); X.lineTo(B.x+B.paperDX*40,B.y-14+B.paperDY*40); X.stroke(); }
-    if(B.state==="grabtele"){ const p=0.5+0.5*Math.sin(performance.now()/90);
-      X.strokeStyle="rgba(255,60,50,"+(0.5+0.4*p)+")"; X.lineWidth=2;
-      X.beginPath(); X.arc(B.x,B.y-14,B.def.grabR*0.6,0,7); X.stroke(); X.lineWidth=1; }
-    if(B.state==="stomptele"){ const k=1-Math.max(0,B.t)/B.def.stompTele;
-      X.strokeStyle="rgba(255,140,60,.85)"; X.lineWidth=2;
-      X.beginPath(); X.arc(B.x,B.y,B.def.stompR*k,0,7); X.stroke(); X.lineWidth=1; }
-    if(B.state==="citetele"){ const k=1-Math.max(0,B.t)/B.def.citationTele;
-      X.strokeStyle="rgba(255,60,50,.85)"; X.lineWidth=2;
-      X.beginPath(); X.arc(B.citeX,B.citeY,B.def.citationR*(0.4+0.6*k),0,7); X.stroke(); X.lineWidth=1; }
-    if(B.state==="zonestele" && B.zones){
-      for(const z of B.zones){ X.strokeStyle="rgba(255,140,60,.8)"; X.lineWidth=2;
-        X.beginPath(); X.arc(z.x,z.y,B.def.zoneR,0,7); X.stroke(); X.lineWidth=1; } }
-    if(B.state==="jabtele" || B.state==="feinttele"){ const p=0.5+0.5*Math.sin(performance.now()/80);
-      X.strokeStyle="rgba(255,216,107,"+(0.5+0.4*p)+")"; X.lineWidth=1.5;
-      X.beginPath(); X.arc(B.x,B.y-14,9+p*2,0,7); X.stroke(); X.lineWidth=1; }
-    if(B.state==="combotele" || B.state==="combogap"){ const p=0.5+0.5*Math.sin(performance.now()/70);
-      X.strokeStyle="rgba(255,140,60,"+(0.5+0.4*p)+")"; X.lineWidth=1.5;
-      X.beginPath(); X.arc(B.x,B.y-14,9+p*2,0,7); X.stroke(); X.lineWidth=1; }
-    if(B.state==="counter"){ const p=0.5+0.5*Math.sin(performance.now()/150);
-      X.strokeStyle="rgba(200,60,220,"+(0.4+0.3*p)+")"; X.lineWidth=2;
-      X.beginPath(); X.arc(B.x,B.y-10,B.def.counterR*0.7,0,7); X.stroke(); X.lineWidth=1; }
+      X.strokeStyle="rgba(255,216,107,.8)"; X.lineWidth=1.5;
+      X.beginPath(); X.moveTo(B.x,B.y-14); X.lineTo(B.x+B.paperDX*40,B.y-14+B.paperDY*40); X.stroke(); X.lineWidth=1; }
+    if(B.state==="grabtele"){ const dg=bossDanger(); dangerRing(B.x,B.y-14,B.def.grabR*0.6*(1-dg.k*0.3),dg.k,dg.col,["#ff2e2e"]); }
+    if(B.state==="stomptele"){ const dg=bossDanger(); dangerRing(B.x,B.y,B.def.stompR*dg.k,dg.k,dg.col,["#ffb43c"]); }
+    if(B.state==="wreckplant"){ const dg=bossDanger(); dangerRing(B.wreckX,B.wreckY,B.def.wreckR*dg.k,dg.k,dg.col,["#ff2e2e","#ffb43c"]); }
+    if(B.state==="citetele"){ const dg=bossDanger(); dangerRing(B.citeX,B.citeY,B.def.citationR*(0.4+0.6*dg.k),dg.k,dg.col,["#ffd86b"]); }
+    if(B.state==="zonestele" && B.zones){ const dg=bossDanger();
+      for(const z of B.zones) dangerRing(z.x,z.y,B.def.zoneR,dg.k,dg.col,["#ffb43c"]); }
+    if(B.state==="condemntele"){ const dg=bossDanger(); dangerRing(B.condemnX,B.condemnY,B.def.condemnR*dg.k,dg.k,dg.col,["#ff8c3c","#ffd86b"]); }
+    if(B.state==="jabtele" || B.state==="feinttele"){ const dg=bossDanger(); dangerRing(B.x,B.y-14,9,dg.k,dg.col,["#ffd86b"]); }
+    if(B.state==="combotele"){ const dg=bossDanger(); dangerRing(B.x,B.y-14,10,dg.k,dg.col,["#e060ff"]); }
+    if(B.state==="combogap"){ const dg=bossDanger(); dangerRing(B.x,B.y-14,10,dg.k,dg.col,["#e060ff"]); }
+    if(B.state==="counter"){ const dg=bossDanger(); dangerRing(B.x,B.y-10,B.def.counterR*0.7,dg.k,dg.col,["#e060ff"]); }
+    if(B.state==="haymakertele"){ const dg=bossDanger(); dangerRing(B.x,B.y-14,B.def.jabR*1.4*dg.k,dg.k,dg.col,["#ff2ea0","#e060ff"]); }
     const flashHit = B.hurtFlash>0 && Math.floor(performance.now()/70)%2;
+    if(B.pulseT>0){ const p=B.pulseT/0.15;   // a quick body flash-glow on every state change
+      X.globalAlpha=0.4*p; X.fillStyle="#ffd86b";
+      X.fillRect(B.x-8-p*3, B.y-30-p*3, 16+p*6, 30+p*6); X.globalAlpha=1; }
     X.fillStyle = flashHit ? "#ffffff" : (B.state==="recover" ? "#7a5a2e" : "#3a2f42");
     if(B.kind==="zoner" && !flashHit) X.fillStyle = B.state==="recover" ? "#6a7a5a" : "#39433a";
     if(B.kind==="trickster" && !flashHit) X.fillStyle = B.state==="recover" ? "#7a3a5a" : (B.state==="counter" ? "#5a2a4a" : "#3a2a42");
@@ -2244,6 +2247,8 @@ function drawBossNightHUD(){
   }
   if(B.hurtFlash>0){ const a=Math.min(0.5,B.hurtFlash); X.fillStyle="rgba(200,40,36,"+a+")";
     X.fillRect(0,0,W,6); X.fillRect(0,H-6,W,6); X.fillRect(0,0,6,H); X.fillRect(W-6,0,6,H); }
+  { const dg=bossDanger(); if(dg){ X.globalAlpha=0.10+0.30*dg.k; X.fillStyle=dg.col;   // whose danger this is, wordlessly
+    X.fillRect(0,0,W,4); X.fillRect(0,H-4,W,4); X.fillRect(0,0,4,H); X.fillRect(W-4,0,4,H); X.globalAlpha=1; } }
   X.fillStyle="#0e0b14"; X.fillRect(0,0,W,14); X.fillStyle="#2f2740"; X.fillRect(0,14,W,1);
   X.textBaseline="middle"; X.textAlign="left";
   X.font="6px monospace"; X.fillStyle="#e9d8b8"; X.fillText("YOU",4,7);

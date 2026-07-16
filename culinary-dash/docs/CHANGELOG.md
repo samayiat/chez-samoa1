@@ -7,6 +7,46 @@ Commit history, newest first. Each entry: `## YYYY-MM-DD — title` + bullets of
 
 ---
 
+## 2026-07-16 (l) — Telegraphs stop being plain circles; text banners are gone
+
+Closes out the boss-night overhaul ("attacks are not flashy at all — just plain circles and squares... stop
+using the words to emphasize attacks"). Every boss telegraph was a single pulsing stroked circle; every
+attack leaned on a `flash()` text banner ("GROUND POUND!", "HERE IT COMES...") to tell the player what was
+coming, rather than the visuals themselves.
+
+- **`bossDanger()`**: one pure, testable function computing "how dangerous is the CURRENT boss state, and
+  whose danger is it" (a `{k, col}` pair — `k` is telegraph progress 0→1). Both the ring juice and a new
+  screen-edge color bleed read from the same source, so they can never drift out of sync.
+- **`dangerRing()`**: 3 staggered concentric rings (instead of one flat pulse) plus a low-rate spark trickle
+  along the circumference as `k` climbs toward 1 — reused by every telegraph on every boss, including the 3
+  new Stage-3 attacks from last slice, which had **zero draw code at all** until now.
+- **A body-glow pulse** on every state transition (`B.pulseT`, decaying over 0.15s) — a quick bright flash
+  behind the boss's body every time it changes what it's doing, on top of the existing hurt-flash.
+- **A screen-edge color bleed keyed to the attacking boss's own palette and danger level** (`bossDanger().k`),
+  alongside the existing (unchanged) red hurt-flash border — a glance at the screen edge now tells you whose
+  attack is coming and how close it is to landing, not just "you got hit."
+- **A trailing dust streak while Vince charges** — a single amber streak for `charge`, a hotter/denser
+  streak for `dcharge1`/`dcharge2` — so once he's in motion, a single lunge reads differently from the
+  two-hit combo (the one pairing that had no telegraph state at all to hang a ring on).
+- **Every per-attack `flash()` banner removed** (~30 call sites across all 3 bosses — "GROUND POUND!",
+  "EVICTION NOTICE!", "CITATION!", "...!" , "COUNTERED!", every hit/miss/dodge banner). **Not touched**: the
+  boss-name cinematic intro, the win/lose banners, and the "-1" damage-number pop (numeric feedback, not
+  attack-announcement language).
+
+### Known limitation, stated plainly
+Vince's `charge`/`dcharge`/`grab` still share the same generic pre-attack "windup" pulse for the instant
+*before* any motion or dedicated ring appears — telling them apart at that exact moment would require
+giving `charge`/`dcharge` their own pre-telegraph state (a pacing change, not a visual one), which is out of
+scope here. The dust-trail above helps once motion starts; the very first instant is still a fair "something
+is coming" tell rather than a specific one, same as before this slice (previously via text that resolved at
+the same moment anyway).
+
+### Tests
++9 checks (**937 total**): `bossDanger()` returns null outside telegraphs and a correctly-progressing `k`
+during one; `pulseT` arms on transition and decays to exactly 0; every telegraph state across all 3 bosses
+(48 state × boss combinations, including the 3 previously-undraw able Stage-3 attacks) draws without
+throwing.
+
 ## 2026-07-16 (k) — HP-gated attack stages: the health bar itself picks the moveset
 
 Part of the boss-night overhaul ("use the health bar to initiate different attack stages"). Every boss's
