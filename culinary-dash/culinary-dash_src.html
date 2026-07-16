@@ -386,10 +386,12 @@ function onDown(e){
       else { nightAction(); btnPulse=1; }
       return;
     }
-    if(phase==="office"){                            // back office: tap a row's button to buy/repair, or OPEN
-      const rows=officeRows();
-      for(let i=0;i<rows.length;i++){ const y=OFF_Y0+i*OFF_DY, bx=W-52,bw=44,by=y-8,bh=12;
+    if(phase==="office"){                            // back office: tap a row's button to buy/repair, MORE, or OPEN
+      const rows=officeRows(), startRow=officePage*OFF_VIS;
+      for(let j=0;j<OFF_VIS;j++){ const i=startRow+j; if(i>=rows.length) break;
+        const y=OFF_Y0+j*OFF_DY, bx=W-52,bw=44,by=y-8,bh=12;
         if(L.x>=bx&&L.x<=bx+bw&&L.y>=by&&L.y<=by+bh){ rows[i]._y=y; officeBuy(rows[i]); return; } }
+      if(officeMoreRect && L.x>=officeMoreRect.x&&L.x<=officeMoreRect.x+officeMoreRect.w&&L.y>=officeMoreRect.y&&L.y<=officeMoreRect.y+officeMoreRect.h){ officeMore(1); return; }
       if(officeOpenRect && L.x>=officeOpenRect.x&&L.x<=officeOpenRect.x+officeOpenRect.w&&L.y>=officeOpenRect.y&&L.y<=officeOpenRect.y+officeOpenRect.h){ nextDay(); }
       return;
     }
@@ -470,6 +472,8 @@ function secondaryAction(id){
 function keyAction(code){
   if(code==="KeyP"||code==="Escape"){ if(paused) paused=false; else if(canPause()) paused=true; return; }
   if(!keyboardControls || paused) return;
+  if(phase==="office" && (code==="ArrowRight"||code==="ArrowDown")){ officeMore(1); return; }
+  if(phase==="office" && (code==="ArrowLeft"||code==="ArrowUp")){ officeMore(-1); return; }
   if(code==="KeyJ"||code==="Enter"||code==="Space") primaryAction();
   else if(code==="KeyK") secondaryAction("kb");
 }
@@ -532,6 +536,8 @@ function pollPad(){
   for(const b of down){
     if(b===PAD_START){ if(paused) paused=false; else if(canPause()) paused=true; continue; }
     if(paused) continue;
+    if(phase==="office" && (b===PAD_DR||b===PAD_DD)){ officeMore(1); continue; }
+    if(phase==="office" && (b===PAD_DL||b===PAD_DU)){ officeMore(-1); continue; }
     if(b===PAD_A) primaryAction();
     else if(b===PAD_X) secondaryAction("pad");
   }
@@ -1206,7 +1212,7 @@ function update(dt){
   if(shake>0) shake=Math.max(0, shake-dt*SHAKE_DECAY);
   const cap=STOOLS.length+BENCH_SLOTS.length;
   spawnT-=dt; if(dayT>0 && spawnT<=0 && customers.filter(c=>c.state!=="leaving").length<cap){
-    spawnCustomer(); spawnT = 4.5 + Math.random()*3.5;
+    spawnCustomer(); spawnT = (4.5 + Math.random()*3.5) * spawnMult();
   }
   if(comboTimer>0){comboTimer-=dt; if(comboTimer<=0)combo=0;}
   if(cheer>0) cheer-=dt;
@@ -1514,6 +1520,7 @@ let nightSales=0;            // bottle revenue banked into the run's results
 /* ---- Economy loop (P-econ): a persistent campaign across an endless week cycle ---- */
 let run=null;               // {week, dow(0=Mon..6=Sun), bank, upgrades, rep}
 let officeOpenRect=null;    // hit-rect for the office "OPEN" button
+let officeMoreRect=null, officePage=0;   // office pagination (the long shop list)
 let robbers=[];             // active robbers during day service
 let robT=0, robbedDay=0;    // robbery roll timer + cash lost to robbers today
 let paused=false;           // pause toggle (gameplay phases only)
@@ -1533,12 +1540,36 @@ function brawlSizeMult(){ const b=beli(); return b<5?1.25 : b<7?1.0 : b<8.5?0.65
 /* ---- Phase 2: the back office — spend the bank on repairs + upgrades ---- */
 const REPAIR_STATION=300, REPAIR_BAR=500;
 const UPGRADES=[
-  {id:"tipjar", name:"Bigger Tip Jar", desc:"+15% tips",     cost:600},
-  {id:"stools", name:"Comfy Stools",   desc:"+patience",     cost:500},
+  {id:"tipjar",  name:"Bigger Tip Jar",   desc:"+15% tips",         cost:600},
+  {id:"stools",  name:"Comfy Stools",     desc:"+patience",         cost:500},
+  {id:"neon",    name:"Neon Sign",        desc:"busier house",      cost:1200},
+  {id:"camera",  name:"Security Camera",  desc:"fewer robberies",   cost:1400},
+  {id:"topshelf",name:"Top-Shelf Liquor", desc:"+20% bottle sales", cost:2000},
 ];
 function ownsUp(id){ return !!(run && run.upgrades && run.upgrades[id]); }
 function tipMult(){ return ownsUp("tipjar") ? 1.15 : 1; }      // Bigger Tip Jar
 function patienceMult(){ return ownsUp("stools") ? 0.78 : 1; } // Comfy Stools: hearts drain slower
+function spawnMult(){ return ownsUp("neon") ? 0.8 : 1; }        // Neon Sign: shorter gaps between arrivals
+function robChanceMult(){ return ownsUp("camera") ? 0.35 : 1; } // Security Camera: robbers think twice
+function bottlePriceMult(){ return ownsUp("topshelf") ? 1.2 : 1; } // Top-Shelf Liquor: pricier bottles
+/* ---- Combat STATS (Roadmap #40): leveled, persisted in run.stats, the lever that beats bosses.
+   Every helper returns the BASE value at level 0, so the game (and every existing test) behaves exactly
+   as before until something is bought. hp/pow/guard/feet each cap at STAT_CAP. See BOSS_SHOP_SPEC.md. ---- */
+const STAT_CAP=5;
+const STAT_DEFS=[
+  {id:"hp",    name:"Iron Gut",        desc:"+5 max HP",        base:700},
+  {id:"pow",   name:"Heavy Hands",     desc:"+12% punch power", base:800},
+  {id:"guard", name:"Bouncer's Build", desc:"-8% dmg taken",    base:800},
+  {id:"feet",  name:"Quick Feet",      desc:"+6% fight speed",  base:600},
+];
+function statLvl(id){ return (run && run.stats && run.stats[id])|0; }
+function statCost(id, lvl){ const d=STAT_DEFS.find(s=>s.id===id); return d ? d.base*(lvl+1) : 0; }
+function statSum(){ return STAT_DEFS.reduce((a,d)=>a+statLvl(d.id), 0); }   // combat readiness (boss gating)
+function chefMaxHP(){ return CHEF_HP + 5*statLvl("hp"); }        // Iron Gut
+function powMult(){ return 1 + 0.12*statLvl("pow"); }            // Heavy Hands (every player hit)
+function punchDmg(){ return PUNCH_DMG * powMult(); }
+function guardMult(){ return Math.max(0.5, 1 - 0.08*statLvl("guard")); }  // Bouncer's Build: dmg-taken x
+function fightSpeedMult(){ return 1 + 0.06*statLvl("feet"); }   // Quick Feet
 let brawl=null;              // {t, chefHP, inv, punchT, enemies:[], outcome}
 const BRAWL_TIME=90, CHEF_HP=20, ENEMY_HP=5;   // chef has a real health bar now
 const WAVE_SIZE=10, WAVE_COUNT=3;    // waves of 10 instead of one big 15
@@ -1692,7 +1723,7 @@ function nightBottlePrice(){                     // what tonight's crowd will ac
   if(b>=6)            mult=1 + 0.025*(b-6);       // hot spot: a premium, up to ~1.10x at 10
   else if(b>=BELI_LOW)mult=0.55 + 0.225*(b-BELI_LOW); // 4 -> 0.55, ~6 -> 1.0
   else                mult=0.15 + 0.075*(b-1);    // < 4: it craters — 1 -> 0.15, ~4 -> ~0.37
-  return Math.max(120, Math.round(BOTTLE_PRICE*mult/10)*10);
+  return Math.max(120, Math.round(BOTTLE_PRICE*mult*bottlePriceMult()/10)*10);
 }
 function heatRate(){                             // how fast "trouble" builds per second, from the rating
   return Math.max(0, (5.5-beli())/4.5) * 0.055;  // ~0 at Beli>=5.5, fills in ~20-25s down at Beli 1
@@ -1758,7 +1789,7 @@ function devSeedBrawl(){
 function startBrawl(){
   phase="brawl";
   chugRelease();          // a hold must never outlive its brawl, or the next fight auto-chugs at the bar
-  brawl={ t:BRAWL_TIME, chefHP:CHEF_HP, inv:0, punchT:0, punchDur:0.22, outcome:null, endT:0, enemies:[], wave:0, drinkT:0,
+  brawl={ t:BRAWL_TIME, chefHP:chefMaxHP(), inv:0, punchT:0, punchDur:0.22, outcome:null, endT:0, enemies:[], wave:0, drinkT:0,
     buffT:(startDrinks()>=DRINK_PERMANENT_AT?1e9:(startDrinks()>0?6+3*startDrinks():0)),
     drinks:startDrinks(), wastedT:(startDrinks()>=WASTED_AT?WASTED_TIME:0), driftPh:Math.random()*6, driftT:0, drinkTarget:0,
     hurtFlash:0, drinking:false, specialT:0, specFx:0, stumbleT:0, stumbleVx:0, stumbleVy:0,  // Phase D: chef stagger
@@ -1821,7 +1852,7 @@ function chefPunch(){
                                              // no swing sound: sfxHit (contact) and "whiff" (miss)
                                              // now cover both outcomes. This used to play sfx("grab")
                                              // — the PICK UP AN ITEM blip — on every punch thrown.
-  const dmg = PUNCH_DMG * (buffed?drinkDmgMult():1) * (MOVE_DMG[move]||1);   // the finisher lands heavier
+  const dmg = punchDmg() * (buffed?drinkDmgMult():1) * (MOVE_DMG[move]||1);   // Heavy Hands + the finisher lands heavier
   const wasted = isWasted();
   const dir = gdir;
   const [ax,ay] = PUNCH_AXIS[dir];              // unit facing. The box rotates onto it.
@@ -2183,7 +2214,7 @@ function chefSpecial(){                       // DRUNK HAYMAKER — triple damag
     const rel=(e.x-chef.x)*s, dy=e.y-chef.y;
     // wide 3-tile reach in front + diagonals (tile ~8px): forward up to ~26px, ±14px vertical
     if(rel>-6 && rel<28 && Math.abs(dy)<16){
-      e.hp-=SPECIAL_DMG; e.flash=0.2; hit++;
+      e.hp-=SPECIAL_DMG*powMult(); e.flash=0.2; hit++;
       if(e.riot){ e.kbx=s*RIOT_KNOCK*1.6; e.kby=(Math.sign(dy||1))*RIOT_KNOCK*0.5; e.reelT=Math.max(e.reelT||0,RIOT_REEL*1.3); }
       else { e.kbx=s*KNOCKBACK*12*2.4; e.kby=Math.sign(dy||1)*KNOCKBACK*12*0.6; e.reelT=Math.max(e.reelT||0,BRAWL_REEL*2); }  // ~12px: the legacy special shove
       if(e.state==="smash" && e.target && e.target.kind==="bar" && !e.buffed){ e.raidT=0; e.state="chase"; flash(e.x,e.y-18,"SPILLED!","#ffd86b"); }
@@ -2247,7 +2278,7 @@ function updateBrawl(dt){
     if(B.endT<=0){ if(B.fromNight){ resumeNight(B.outcome); } else { if(isNightDay()) startNight(); else finishDay(); } } return; }
   // chef movement (faster while buffed)
   const buffed = B.buffT>0;
-  const sp = 84 * drinkSpeedMult(); let vx=joy.vx, vy=joy.vy;   // buzzed faster / wasted slower
+  const sp = 84 * fightSpeedMult() * drinkSpeedMult(); let vx=joy.vx, vy=joy.vy;   // Quick Feet + buzzed/wasted
   const dr=drinkDrift();
   if(dr>0 && (vx||vy)){                                          // the more you've drunk, the more you veer
     const m=Math.hypot(vx,vy);
@@ -2311,8 +2342,8 @@ function updateBrawl(dt){
     if(Math.floor(B.drinkT*6)%2===0) burst(chef.x+(Math.random()*6-3),chef.y-16,1,["#e0674e"],{sp:10,up:6,life:0.3});
     if(B.drinkT>=(B.drinkTarget||CHEF_DRINK)){ B.drinking=false; B.drinkT=0;
       B.drinks=(B.drinks||0)+1;                                        // one more down the hatch
-      const heal=Math.max(0, Math.round(CHEF_HP*0.5*Math.pow(0.5, B.drinks-1)));  // exp decay: 50/25/12/6/3%...
-      B.chefHP=Math.min(CHEF_HP, B.chefHP+heal);
+      const heal=Math.max(0, Math.round(chefMaxHP()*0.5*Math.pow(0.5, B.drinks-1)));  // exp decay: 50/25/12/6/3%...
+      B.chefHP=Math.min(chefMaxHP(), B.chefHP+heal);
       B.buffT = B.drinks>=DRINK_PERMANENT_AT ? 1e9 : (6 + 3*B.drinks); // 3+ -> permanent buzz
       if(B.drinks>=WASTED_AT) B.wastedT=WASTED_TIME;                   // 5+ -> (re)enter the 15s wasted window
       B.specialT=0;
@@ -2466,7 +2497,7 @@ function updateBrawl(dt){
       e.t-=dt; e.x+=e.lx*160*dt; e.y+=e.ly*160*dt;      // dash forward to strike
       const postD=Math.hypot(chef.x-e.x,chef.y-e.y);
       if((preD<13||postD<13) && B.inv<=0){
-        const hitDmg=Math.max(1,Math.round(ATK_DAMAGE*(e.buffed?BUFF_EDMG:1)*(B.mobBuff?MOB_DMG:1)*(e.riot?RIOT_EDMG:1)));
+        const hitDmg=Math.max(1,Math.round(ATK_DAMAGE*guardMult()*(e.buffed?BUFF_EDMG:1)*(B.mobBuff?MOB_DMG:1)*(e.riot?RIOT_EDMG:1)));
         B.chefHP-=hitDmg; B.inv=0.9; B.hurtFlash=0.5;
         brawl.chain=0; brawl.chainT=0;                // taking one breaks your rhythm
         const kx=(e.lx||Math.sign(chef.x-e.x)||1), ky=(e.ly||0);
@@ -2652,7 +2683,7 @@ function drawBrawlHUD(){
     X.fillRect(0,0,W,6); X.fillRect(0,H-6,W,6); X.fillRect(0,0,6,H); X.fillRect(W-6,0,6,H);
   }
   X.textBaseline="middle";
-  const hbw=44, hbx=6, hbh=4, hby=5, frac=Math.max(0,brawl.chefHP)/CHEF_HP;
+  const hbw=44, hbx=6, hbh=4, hby=5, frac=Math.max(0,brawl.chefHP)/chefMaxHP();
   X.globalAlpha=0.9;
   X.fillStyle="rgba(0,0,0,.55)"; X.fillRect(hbx-1,hby-1,hbw+2,hbh+2);
   X.fillStyle= frac>0.5?"#5ec96b":frac>0.25?"#ffd86b":"#e8433a";
@@ -4400,19 +4431,28 @@ function drawOffice(){
     X.fillStyle="#6b6480"; X.font="5px monospace"; X.textAlign="center"; X.fillText("doing the books", px, dy+7); X.textAlign="left";
   }
   const rows=officeRows();
+  const pages=Math.max(1, Math.ceil(rows.length/OFF_VIS));
+  if(officePage>=pages) officePage=pages-1; if(officePage<0) officePage=0;
+  const startRow=officePage*OFF_VIS;
   if(!rows.length){ X.fillStyle="#8be27a"; X.font="7px monospace"; X.textAlign="center"; X.fillText("Everything's shipshape \u2014 nothing to buy today.", W/2, OFF_Y0+4); X.textAlign="left"; }
-  rows.forEach((r,i)=>{
-    const y=OFF_Y0+i*OFF_DY; r._y=y;
-    const owned=r.kind==="upgrade"&&r.owned, afford=run.bank>=r.cost;
+  for(let j=0;j<OFF_VIS;j++){
+    const i=startRow+j; if(i>=rows.length) break;
+    const r=rows[i], y=OFF_Y0+j*OFF_DY; r._y=y;
+    const owned=r.kind==="upgrade"&&r.owned, maxed=r.kind==="stat"&&r.maxed, afford=run.bank>=r.cost;
     X.fillStyle="#171020"; X.fillRect(8,y-9,W-16,OFF_DY-3);
-    X.fillStyle= owned?"#6b6480":"#e9d8b8"; X.font="7px monospace"; X.textAlign="left"; X.fillText(r.label, 12, y);
+    X.fillStyle= (owned||maxed)?"#6b6480":"#e9d8b8"; X.font="7px monospace"; X.textAlign="left"; X.fillText(r.label, 12, y);
     const bx=W-52,bw=44,by=y-8,bh=12;
-    X.fillStyle= owned?"#2a2436":(afford?"#3f6a36":"#3a2f42"); X.fillRect(bx,by,bw,bh);
+    X.fillStyle= (owned||maxed)?"#2a2436":(afford?"#3f6a36":"#3a2f42"); X.fillRect(bx,by,bw,bh);
     X.textAlign="center"; X.font="7px monospace";
-    X.fillStyle= owned?"#8be27a":(afford?"#d7ffd0":"#6b6480");
-    X.fillText(owned?"OWNED":((r.kind==="repair"?"FIX ":"")+"$"+r.cost), bx+bw/2, y);
+    X.fillStyle= (owned||maxed)?"#8be27a":(afford?"#d7ffd0":"#6b6480");
+    X.fillText(owned?"OWNED":(maxed?"MAX":((r.kind==="repair"?"FIX ":"")+"$"+r.cost)), bx+bw/2, y);
     X.textAlign="left";
-  });
+  }
+  officeMoreRect=null;
+  if(pages>1){ const my=OFF_Y0+OFF_VIS*OFF_DY-4; officeMoreRect={x:W/2-54,y:my-9,w:108,h:12};
+    X.fillStyle="#2a2436"; X.fillRect(officeMoreRect.x,officeMoreRect.y,108,12);
+    X.fillStyle="#e9d8b8"; X.font="7px monospace"; X.textAlign="center";
+    X.fillText("MORE \u25b8   page "+(officePage+1)+"/"+pages, W/2, my); X.textAlign="left"; }
   const oy=H-18; officeOpenRect={x:W/2-48,y:oy-10,w:96,h:15};
   const due=rentDueOnOpen();
   if(due){ const ok2=run.bank>=due; X.textAlign="center"; X.font="7px monospace";
@@ -4488,7 +4528,7 @@ function startDay(){        // set up ONE day of service (keeps the persistent r
   robbers=[]; robT=ROB_CHECK; robbedDay=0;   // Phase 3: fresh robbery state each day
 }
 function startCampaign(){   // brand-new run: reset the persistent economy, then open Day 1 (Monday)
-  run={ week:1, dow:0, bank:START_BANK, upgrades:{}, rep:0, lastRent:0, evictedRent:0, beliHist:[], dayRating:BELI_SEED };
+  run={ week:1, dow:0, bank:START_BANK, upgrades:{}, stats:{}, bossesBeaten:0, bossTomorrow:null, rep:0, lastRent:0, evictedRent:0, beliHist:[], dayRating:BELI_SEED };
   STATIONS.forEach(st=>{ st.broken=false; }); BAR.broken=false;   // fresh venue, everything working
   startDay();
 }
@@ -4512,15 +4552,19 @@ function finishDay(){       // day (+ optional night) is over: bank the take, lo
   phase="over";
 }
 /* ---- Phase 2: back-office spend screen ---- */
-const OFF_Y0=40, OFF_DY=17;                 // first row y + row spacing
-function officeRows(){                        // the list shown in the office (repairs first, then upgrades)
+const OFF_Y0=40, OFF_DY=14, OFF_VIS=6;      // first row y + spacing + rows per page (rest paginate)
+function officeRows(){                        // repairs first, then combat stats, then one-shot upgrades
   const rows=[];
   for(const s of STATIONS) if(s.broken) rows.push({kind:"repair", ref:s, label:"Repair "+(DISHES[s.dish]?DISHES[s.dish].label:s.id)+" station", cost:REPAIR_STATION});
   if(BAR.broken) rows.push({kind:"repair", ref:BAR, label:"Repair the bar", cost:REPAIR_BAR});
+  for(const d of STAT_DEFS){ const lv=statLvl(d.id), maxed=lv>=STAT_CAP;
+    rows.push({kind:"stat", ref:d, lvl:lv, maxed, cost:statCost(d.id,lv),
+               label:d.name+"  Lv"+lv+"/"+STAT_CAP+" \u2014 "+d.desc}); }
   for(const u of UPGRADES) rows.push({kind:"upgrade", ref:u, label:u.name+" \u2014 "+u.desc, cost:u.cost, owned:ownsUp(u.id)});
   return rows;
 }
-function enterOffice(){ phase="office"; }
+function enterOffice(){ phase="office"; officePage=0; }
+function officeMore(dir){ const n=officeRows().length, pages=Math.max(1,Math.ceil(n/OFF_VIS)); officePage=((officePage+dir)%pages+pages)%pages; sfx("seat"); }
 /* ---- Phase 3: robbery (hoard risk) — blacked-out patrons snatch the bank and bolt ---- */
 function spawnRobbery(n){                      // force a robbery (used by maybeRob + the dev hotspot)
   n = n || (1+Math.min(2, Math.floor(Math.max(0,run.bank-HOARD_MIN)/8000)));
@@ -4537,7 +4581,7 @@ function maybeRob(dt){                        // AFTER-HOURS ONLY: robbers slip 
   robT-=dt; if(robT>0) return; robT=ROB_CHECK + Math.random()*4;
   if(robbers.length || run.bank<HOARD_MIN) return;   // one at a time; none once the cash is gone
   const over=run.bank-HOARD_MIN;
-  if(Math.random() < Math.min(0.9, 0.2 + over/20000)) spawnRobbery(1);   // fatter bank -> more likely
+  if(Math.random() < Math.min(0.9, 0.2 + over/20000)*robChanceMult()) spawnRobbery(1);   // fatter bank -> more likely
 }
 function updateRobbers(dt){
   if(!robbers.length) return;
@@ -4573,12 +4617,14 @@ function drawRobber(r){
     X.fillStyle="#e9d8b8"; X.beginPath(); X.arc(bx,y-8,2.6,0,7); X.fill();
     X.fillStyle="#8a6a1e"; X.fillRect(bx-1,y-11,2,2); }
 }
-function officeBuy(row){                       // purchase/repair if it's affordable and not already owned
+function officeBuy(row){                       // purchase/repair/level-up if affordable
   if(!run) return;
   if(row.kind==="upgrade" && row.owned) return;
+  if(row.kind==="stat" && row.maxed){ sfx("waveoff"); return; }
   if(run.bank < row.cost){ sfx("waveoff"); return; }   // can't afford
   run.bank -= row.cost; sfx("coin");
   if(row.kind==="repair"){ row.ref.broken=false; flash(W/2,row._y-4,"fixed!","#8be27a"); }
+  else if(row.kind==="stat"){ if(!run.stats) run.stats={}; run.stats[row.ref.id]=(run.stats[row.ref.id]||0)+1; flash(W/2,row._y-4,"LV UP! "+row.ref.name,"#8be27a"); }
   else { run.upgrades[row.ref.id]=true; flash(W/2,row._y-4,"bought!","#8be27a"); }
 }
 function startGame(){ startCampaign(); }   // back-compat alias (dev seed path)

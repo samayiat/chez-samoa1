@@ -7,6 +7,39 @@ Commit history, newest first. Each entry: `## YYYY-MM-DD — title` + bullets of
 
 ---
 
+## 2026-07-16 (b) — Stats + a real shop: the grind gets a point (Roadmap #40, slice A)
+
+"There's not enough goal." First slice of the boss/shop/stakes patch (full design in **BOSS_SHOP_SPEC.md**,
+locked with her 1a/2a/3a). This slice is the **spend side** — what the bosses will gate.
+
+### Combat stats — the lever (2a)
+`run.stats = {hp,pow,guard,feet}`, leveled 0..5, persisted like `run.upgrades`. Every helper returns the
+BASE value at level 0, so nothing changes until she buys — the whole 772 suite stayed green on the wiring
+alone.
+
+    Iron Gut         +5 max HP / lvl     -> chefMaxHP()      (brawl chefHP + heal cap + HP bar)
+    Heavy Hands      +12% punch / lvl    -> punchDmg()/powMult()  (every player hit incl. the special)
+    Bouncer's Build  -8% dmg taken / lvl -> guardMult()      (enemy hits, floored 0.5x)
+    Quick Feet       +6% fight speed/lvl -> fightSpeedMult() (brawl move speed)
+
+All wired on the existing sites; `statSum()` is the "readiness" number the bosses will check.
+
+### A pretty long shop, and it scrolls now
+`UPGRADES` grew (Neon Sign, Security Camera, Top-Shelf Liquor — each a single legible lever: spawn rate,
+robbery odds, bottle price) and the four stats slot in between repairs and one-shots. The office hard-capped
+at ~6 rows, so a long list fell off the bottom — added **pagination**: a `MORE ▸ page x/y` button (tap),
+d-pad left/right on the Retroid, arrow keys on desktop. `OFF_VIS=6`.
+
+### Tests
++18 checks (**790 total**): base = no free power, buying levels + deducts, the four stats scale their
+channels monotonically, cost climbs with level, the cap holds, `statSum` totals, upgrade-row count is
+invariant to the stat rows, pagination wraps, and the three new one-shots each move their system.
+
+### Next (slice B)
+The bosses themselves: `BOSSES[]` with telegraphed recurrent attack patterns, the day-ahead warning (3a),
+a big coin reward on a win, and the **full wipe** on a loss (1a). Balance pass (slice C) needs her hands
+on the device.
+
 ## 2026-07-16 (a) — Less camera, more motor: rebalance the "solid hit"
 
 The brawl was shaking the whole screen to sell contact — a workaround from before the motor carried its

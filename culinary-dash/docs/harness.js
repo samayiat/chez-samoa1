@@ -553,6 +553,36 @@ const probe = `
   ok("Bigger Tip Jar raises tips", tips>tipNoJar);
   ok("Comfy Stools slows patience drain", (function(){ run.upgrades={}; const a=patienceMult(); run.upgrades={stools:true}; const b=patienceMult(); run.upgrades={}; return b<a; })());
 
+  // ---- combat stats + the long shop (Roadmap #40) ----
+  startCampaign(); run.bank=1e6; run.stats={};
+  ok("stats start at base — no free power", chefMaxHP()===CHEF_HP && punchDmg()===PUNCH_DMG && guardMult()===1 && fightSpeedMult()===1);
+  { const sr=officeRows();
+    ok("shop lists every combat stat and is a long list", STAT_DEFS.every(d=>sr.some(r=>r.kind==="stat"&&r.ref.id===d.id)) && sr.length>=9);
+    ok("adding stats never changes the upgrade-row count", sr.filter(r=>r.kind==="upgrade").length===UPGRADES.length); }
+  { const ig=officeRows().find(r=>r.kind==="stat"&&r.ref.id==="hp"), bHp=run.bank; officeBuy(ig);
+    ok("buying a stat levels it and deducts its cost", statLvl("hp")===1 && run.bank===bHp-ig.cost);
+    ok("Iron Gut raises max HP (+5/lvl)", chefMaxHP()===CHEF_HP+5); }
+  run.stats={hp:0,pow:5,guard:5,feet:5};
+  ok("Heavy Hands scales punch power (+12%/lvl)", Math.abs(punchDmg()-PUNCH_DMG*1.6)<1e-9);
+  ok("Bouncer's Build cuts damage taken, floored >=0.5", guardMult()<1 && guardMult()>=0.5);
+  ok("Quick Feet raises fight speed", fightSpeedMult()>1);
+  ok("stat cost climbs with level", statCost("hp",0)<statCost("hp",3));
+  run.stats.hp=STAT_CAP;
+  { const mr=officeRows().find(r=>r.kind==="stat"&&r.ref.id==="hp"), bc=run.bank;
+    ok("a maxed stat is flagged", mr.maxed===true);
+    officeBuy(mr); ok("can't buy a stat past the cap", statLvl("hp")===STAT_CAP && run.bank===bc); }
+  ok("statSum is the boss-readiness total", statSum()===STAT_CAP+5+5+5);
+  enterOffice(); ok("office opens on page 0", officePage===0);
+  { const pgN=Math.max(1,Math.ceil(officeRows().length/OFF_VIS));
+    officeMore(1); ok("MORE pages forward when there's overflow", pgN>1 ? officePage===1 : officePage===0);
+    officeMore(-1); ok("...and wraps back to the start", officePage===0); }
+  { run.upgrades={}; const rc0=robChanceMult(), sp0=spawnMult(), bp0=bottlePriceMult();
+    run.upgrades={camera:true,neon:true,topshelf:true};
+    ok("Security Camera lowers robbery odds", robChanceMult()<rc0);
+    ok("Neon Sign shortens spawn gaps", spawnMult()<sp0);
+    ok("Top-Shelf Liquor raises bottle price", bottlePriceMult()>bp0);
+    run.upgrades={}; }
+
   // routing: results -> office -> next day
   startCampaign(); run.dow=0; tips=100; finishDay();
   ok("day ends on results", phase==="over");
