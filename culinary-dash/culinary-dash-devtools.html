@@ -1586,8 +1586,17 @@ let bossFight=null;              // {def, kind, hp, maxHP, chefHP, maxChefHP, x,
 const BOSS_NIGHT_CHANCE=0.25;    // ~1-in-4 nights, once the cooldown below clears — flagged for the balance pass
 const BOSSES=[
   { id:"vince", name:"Vince \u201cThe Landlord\u201d", tagline:"pay up, or else.", kind:"charger",
-    hp:26, windup:0.9, chargeTime:0.55, chargeSpeed:200, recover:1.6, hitR:14, chargeDmg:4,
-    slamEvery:3, slamTele:1.1, slamR:40, slamDmg:6, reach:20, koChance:0.06, reward:5000, recLevel:6 },
+    hp:26, windup:0.9, recover:1.6, reach:20, koChance:0.06, reward:5000, recLevel:6,
+    // Six recurrent attacks (tripled from the original two): 5 on a deterministic rotation, plus GRAB —
+    // a proximity punish that preempts whichever rotation slot was due if she's hugging him. EVERY one of
+    // the six still resolves into "recover" — the strike window never goes away, only what precedes it varies.
+    rotation:["charge","pound","paper","stomp","dcharge"],
+    chargeTime:0.55, chargeSpeed:200, hitR:14, chargeDmg:4,             // 1. charge: telegraphed lunge
+    slamTele:1.1, slamR:40, slamDmg:6,                                  // 2. pound: AOE at a remembered spot
+    paperAim:0.7, paperSpeed:260, paperR:10, paperDmg:3,                // 3. paper: ranged eviction-notice throw
+    grabR:16, grabTele:0.35, grabDmg:5,                                 // 4. grab: punishes standing too close
+    stompTele:0.5, stompR:26, stompDmg:3,                               // 5. stomp: faster AOE centred on HIM now
+    dchargeTime:0.4, dchargeSpeed:230, dchargeDmg:3 },                  // 6. dcharge: a two-hit charge combo
 ];
 function pickBoss(){ const idx=Math.min(BOSSES.length-1, run.bossesBeaten||0); return BOSSES[idx].id; }
 function bossNightExposed(){ return !!bossFight && bossFight.state==="recover"; }
@@ -1636,10 +1645,28 @@ function updateVince(dt){
     B.t-=dt;
     if(B.t<=0){
       B.cycle=(B.cycle||0)+1;
-      if(B.cycle % D.slamEvery===0){
+      const close = Math.hypot(chef.x-B.x,chef.y-B.y) < D.grabR;
+      const move = close ? "grab" : D.rotation[(B.cycle-1)%D.rotation.length];
+      if(move==="pound"){
         B.state="slamtele"; B.t=D.slamTele; B.slamX=B.x; B.slamY=B.y;
         flash(B.x,B.y-24,"GROUND POUND!","#c8452e"); sfx("burnt");
-      } else {
+      } else if(move==="paper"){
+        const dx=chef.x-B.x, dy=chef.y-B.y, d=Math.hypot(dx,dy)||1;
+        B.paperDX=dx/d; B.paperDY=dy/d; B.paperHit=false;
+        B.state="paperaim"; B.t=D.paperAim;
+        flash(B.x,B.y-24,"EVICTION NOTICE!","#ffd86b"); sfx("burnt");
+      } else if(move==="stomp"){
+        B.state="stomptele"; B.t=D.stompTele;
+        flash(B.x,B.y-24,"HEY!","#c8452e"); sfx("burnt");
+      } else if(move==="dcharge"){
+        const dx=chef.x-B.x, dy=chef.y-B.y, d=Math.hypot(dx,dy)||1;
+        B.chargeDX=dx/d; B.chargeDY=dy/d; B.hitThisCharge=false;
+        B.state="dcharge1"; B.t=D.dchargeTime;
+        flash(B.x,B.y-24,"DOUBLE CHARGE!","#c8452e"); sfx("burnt");
+      } else if(move==="grab"){
+        B.state="grabtele"; B.t=D.grabTele;
+        flash(B.x,B.y-24,"GOTCHA!","#c8452e"); sfx("burnt");
+      } else {   // "charge" — the default, also what a rotation lookup miss falls back to
         const dx=chef.x-B.x, dy=chef.y-B.y, d=Math.hypot(dx,dy)||1;
         B.chargeDX=dx/d; B.chargeDY=dy/d; B.hitThisCharge=false;
         B.state="charge"; B.t=D.chargeTime;
@@ -1669,6 +1696,71 @@ function updateVince(dt){
     }
   } else if(B.state==="slam"){
     B.t-=dt; if(B.t<=0){ B.state="recover"; B.t=D.recover; }
+  } else if(B.state==="paperaim"){          // 3. ranged: telegraph, then the notice flies dead-straight
+    B.t-=dt;
+    if(B.t<=0){ B.state="paperfly"; B.t=1.2; B.paperX=B.x; B.paperY=B.y; }
+  } else if(B.state==="paperfly"){
+    B.t-=dt;
+    B.paperX+=B.paperDX*D.paperSpeed*dt; B.paperY+=B.paperDY*D.paperSpeed*dt;
+    if(!B.paperHit && Math.hypot(chef.x-B.paperX,chef.y-B.paperY)<D.paperR){
+      B.paperHit=true; B.chefHP-=D.paperDmg*guardMult(); B.hurtFlash=0.35;
+      flash(chef.x,chef.y-16,"PAPER CUT!","#c8452e");
+      impact(HIT.hurt, (B.paperDX<0?-1:1), 0, chef.x, chef.y-12); sfx("hurt");
+    }
+    { const out = B.paperX<FLOOR.x0-10||B.paperX>FLOOR.x1+10||B.paperY<FLOOR.y0-10||B.paperY>FLOOR.y1+10;
+      if(B.t<=0 || out){ B.state="recover"; B.t=D.recover; } }
+  } else if(B.state==="grabtele"){          // 4. proximity punish: telegraph, then grab-and-fling if still close
+    B.t-=dt;
+    if(B.t<=0){
+      B.state="grabhit"; B.t=0.16;
+      if(Math.hypot(chef.x-B.x,chef.y-B.y) < D.grabR+6){
+        B.chefHP-=D.grabDmg*guardMult(); B.hurtFlash=0.5;
+        flash(chef.x,chef.y-16,"GRABBED!","#c8452e");
+        impact(HIT.heavy, (B.x<chef.x?1:-1), 0, chef.x, chef.y-12); sfx("hurt");
+        chef.x = (B.x<W/2) ? FLOOR.x1-12 : FLOOR.x0+12;
+        chef.y = (B.y<H/2) ? FLOOR.y1-12 : FLOOR.y0+12;
+        joy.vx=0; joy.vy=0;
+      } else { flash(B.x,B.y-16,"SLIPPED FREE!","#8be27a"); }
+    }
+  } else if(B.state==="grabhit"){
+    B.t-=dt; if(B.t<=0){ B.state="recover"; B.t=D.recover; }
+  } else if(B.state==="stomptele"){         // 5. faster AOE centred on HIS current spot, not a remembered one
+    B.t-=dt;
+    if(B.t<=0){
+      B.state="stomphit"; B.t=0.18;
+      const d=Math.hypot(chef.x-B.x, chef.y-B.y);
+      if(d<D.stompR){
+        B.chefHP-=D.stompDmg*guardMult(); B.hurtFlash=0.4;
+        flash(chef.x,chef.y-16,"SHOCKWAVE!","#c8452e");
+        impact(HIT.hurt, (B.x<chef.x?1:-1), 0, chef.x, chef.y-12); sfx("hurt");
+      } else { flash(B.x,B.y-16,"DODGED!","#8be27a"); }
+    }
+  } else if(B.state==="stomphit"){
+    B.t-=dt; if(B.t<=0){ B.state="recover"; B.t=D.recover; }
+  } else if(B.state==="dcharge1"){          // 6. double charge: two lunges back-to-back, re-aimed between them
+    B.t-=dt;
+    B.x=Math.max(FLOOR.x0,Math.min(FLOOR.x1,B.x+B.chargeDX*D.dchargeSpeed*dt));
+    B.y=Math.max(FLOOR.y0,Math.min(FLOOR.y1,B.y+B.chargeDY*D.dchargeSpeed*dt));
+    if(!B.hitThisCharge && Math.hypot(chef.x-B.x,chef.y-B.y)<D.hitR){
+      B.hitThisCharge=true; B.chefHP-=D.dchargeDmg*guardMult(); B.hurtFlash=0.4;
+      flash(chef.x,chef.y-16,"SLAMMED!","#c8452e");
+      impact(HIT.hurt, (B.x<chef.x?1:-1), 0, chef.x, chef.y-12); sfx("hurt");
+    }
+    if(B.t<=0){
+      const dx=chef.x-B.x, dy=chef.y-B.y, d=Math.hypot(dx,dy)||1;
+      B.chargeDX=dx/d; B.chargeDY=dy/d; B.hitThisCharge=false;
+      B.state="dcharge2"; B.t=D.dchargeTime;
+    }
+  } else if(B.state==="dcharge2"){
+    B.t-=dt;
+    B.x=Math.max(FLOOR.x0,Math.min(FLOOR.x1,B.x+B.chargeDX*D.dchargeSpeed*dt));
+    B.y=Math.max(FLOOR.y0,Math.min(FLOOR.y1,B.y+B.chargeDY*D.dchargeSpeed*dt));
+    if(!B.hitThisCharge && Math.hypot(chef.x-B.x,chef.y-B.y)<D.hitR){
+      B.hitThisCharge=true; B.chefHP-=D.dchargeDmg*guardMult(); B.hurtFlash=0.4;
+      flash(chef.x,chef.y-16,"SLAMMED AGAIN!","#c8452e");
+      impact(HIT.hurt, (B.x<chef.x?1:-1), 0, chef.x, chef.y-12); sfx("hurt");
+    }
+    if(B.t<=0){ B.state="recover"; B.t=D.recover; flash(B.x,B.y-24,"WINDED \u2014 GET HIM!","#ffd86b"); }
   } else if(B.state==="recover"){
     B.t-=dt; if(B.t<=0){ B.state="windup"; B.t=D.windup; }
   }
@@ -1707,6 +1799,15 @@ function drawBossNight(){
     if(B.state==="slamtele"){ const k=1-Math.max(0,B.t)/B.def.slamTele;
       X.strokeStyle="rgba(255,60,50,.85)"; X.lineWidth=2;
       X.beginPath(); X.arc(B.slamX,B.slamY,B.def.slamR*k,0,7); X.stroke(); X.lineWidth=1; }
+    if(B.state==="paperaim"){
+      X.strokeStyle="rgba(255,216,107,.6)"; X.lineWidth=1;
+      X.beginPath(); X.moveTo(B.x,B.y-14); X.lineTo(B.x+B.paperDX*40,B.y-14+B.paperDY*40); X.stroke(); }
+    if(B.state==="grabtele"){ const p=0.5+0.5*Math.sin(performance.now()/90);
+      X.strokeStyle="rgba(255,60,50,"+(0.5+0.4*p)+")"; X.lineWidth=2;
+      X.beginPath(); X.arc(B.x,B.y-14,B.def.grabR*0.6,0,7); X.stroke(); X.lineWidth=1; }
+    if(B.state==="stomptele"){ const k=1-Math.max(0,B.t)/B.def.stompTele;
+      X.strokeStyle="rgba(255,140,60,.85)"; X.lineWidth=2;
+      X.beginPath(); X.arc(B.x,B.y,B.def.stompR*k,0,7); X.stroke(); X.lineWidth=1; }
     const flashHit = B.hurtFlash>0 && Math.floor(performance.now()/70)%2;
     X.fillStyle = flashHit ? "#ffffff" : (B.state==="recover" ? "#7a5a2e" : "#3a2f42");
     X.fillRect(B.x-8, B.y-30, 16, 30);
@@ -1715,6 +1816,9 @@ function drawBossNight(){
     if(B.state==="recover"){ X.fillStyle="#ffd86b"; X.font="6px monospace"; X.textAlign="center";
       X.fillText("!", B.x, B.y-42); X.textAlign="left"; }
   }});
+  if(B.state==="paperfly"){ items.push({y:B.paperY, f:()=>{
+    X.fillStyle="#e9d8b8"; X.fillRect(B.paperX-3,B.paperY-2,6,4); X.fillStyle="#8a6a1e"; X.fillRect(B.paperX-3,B.paperY-2,6,1);
+  }}); }
   const wf = chef.moving ? (Math.floor(performance.now()/130)%2?"walk1":"walk2") : "idle";
   items.push({y:chef.y, f:()=>{
     X.fillStyle="rgba(0,0,0,.35)"; X.fillRect(chef.x-7,chef.y-1,14,2);

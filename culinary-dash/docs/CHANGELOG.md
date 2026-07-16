@@ -7,6 +7,42 @@ Commit history, newest first. Each entry: `## YYYY-MM-DD — title` + bullets of
 
 ---
 
+## 2026-07-16 (d) — Triple Vince's moveset: 2 attacks -> 6 (Roadmap #40, slice C)
+
+Per request: more variety in the boss fight, on the condition the strike window never disappears — the
+player must always be able to fight back. Vince goes from **charge + ground pound** to **six** distinct
+recurrent attacks.
+
+### The new four
+- **paper** (eviction notice) — a ranged, dead-straight projectile throw. The only non-melee attack in his
+  kit, so pure backpedaling stops being a universal answer.
+- **grab** — REACTIVE, not scheduled: if she's standing inside `grabR` of him when his windup resolves, it
+  preempts whatever the rotation had queued and grabs-and-flings her across the room instead. Punishes
+  hugging him to dodge the ranged/AOE attacks.
+- **stomp** (shockwave) — a faster, smaller AOE centred on his *current* position (unlike ground pound,
+  which remembers where he stood at the windup) — so standing still near him is never safe for long, even
+  between his bigger attacks.
+- **dcharge** (double charge) — two lunges back-to-back, each re-aimed at her position, landing as a real
+  2-hit combo rather than one bigger single hit.
+
+### How the selection works
+`BOSSES[0].rotation = ["charge","pound","paper","stomp","dcharge"]` cycles deterministically off
+`bossFight.cycle` (kept deterministic on purpose — this project's own lesson, DECISIONS.md, is that a
+mutation deleting a randomized branch can slip past a green suite; a rotation index is directly assertable).
+`grab` sits outside the rotation as a proximity override. **Every one of the six resolves into `"recover"`**
+— the exposed strike window is structurally guaranteed, not just usually true. A new harness test walks
+all 11 intermediate states (charge, slamtele, slam, paperaim, paperfly, grabtele, grabhit, stomptele,
+stomphit, dcharge1, dcharge2) and proves each one reaches `"recover"` within 600 simulated frames.
+
+Procedural rendering only for all four new attacks (a telegraph ring, an aim line, a flying paper rect) —
+same no-new-art approach as the rest of this system.
+
+### Tests
++10 checks (**816 total**): the roster is provably 6 distinct attacks, each of the four new ones actually
+launches/connects/damages when it should, the double-charge's second leg genuinely re-aims and can connect
+independently, and — the one that matters most — every attack, without exception, still leads back to a
+window where she can land a hit.
+
 ## 2026-07-16 (c) — Boss night: the goal, and the real stake (Roadmap #40, slice B)
 
 Second slice of the boss/shop/stakes patch. Locked design: **1a** full wipe on a loss, **2a** a real fight

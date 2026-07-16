@@ -640,6 +640,58 @@ const probe = `
     const B1=bossFight; B1.hp=100; B1.state="recover"; B1.t=5; B1.x=chef.x; B1.y=chef.y;
     const h1=B1.hp; vinceStrike(); const chip1=h1-B1.hp;
     ok("2a: Heavy Hands raises boss-night strike damage", chip1>chip0); }
+
+  // ---- Vince's moveset TRIPLED: 2 -> 6 distinct recurrent attacks (charge/pound already covered above) ----
+  { const VD=BOSSES.find(b=>b.id==="vince");
+    ok("the rotation holds 5 scheduled attacks; +GRAB (proximity) = 6 total distinct attacks",
+       VD.rotation.length===5 && new Set(VD.rotation.concat(["grab"])).size===6); }
+
+  startCampaign(); customers=[]; startBossNight("vince");
+  { const B=bossFight; B.x=100; B.y=100; chef.x=200; chef.y=100;
+    B.state="paperaim"; B.t=0.0001; B.paperDX=1; B.paperDY=0; B.paperHit=false;
+    updateVince(1/60);
+    ok("paper throw (3rd attack) launches toward the chef", bossFight.state==="paperfly" && bossFight.paperDX===1);
+    const hp0=bossFight.chefHP; bossFight.paperX=chef.x-2; bossFight.paperY=chef.y; bossFight.t=1;
+    updateVince(1/60);
+    ok("...and damages on a connecting hit", bossFight.chefHP<hp0); }
+
+  startCampaign(); customers=[]; startBossNight("vince");
+  { const B=bossFight; B.x=150; B.y=90; chef.x=152; chef.y=90;    // inside grabR
+    B.cycle=0; B.state="windup"; B.t=0.0001;
+    updateVince(1/60);
+    ok("grab (4th attack) preempts the rotation when she's hugging him", B.state==="grabtele");
+    B.t=0.0001; const hp0=B.chefHP, cx0=chef.x;
+    updateVince(1/60);
+    ok("...connects, damages, and flings her elsewhere", B.chefHP<hp0 && chef.x!==cx0); }
+
+  startCampaign(); customers=[]; startBossNight("vince");
+  { const B=bossFight; B.x=140; B.y=80; chef.x=145; chef.y=80;    // inside stompR
+    B.state="stomptele"; B.t=0.0001; const hp0=B.chefHP;
+    updateVince(1/60);
+    ok("stomp (5th attack, centred on HIM now, not a remembered spot) damages on a landed hit", B.chefHP<hp0); }
+
+  startCampaign(); customers=[]; startBossNight("vince");
+  { const B=bossFight; B.x=100; B.y=100; chef.x=106; chef.y=100;
+    B.state="dcharge1"; B.t=0.5; B.chargeDX=1; B.chargeDY=0; B.hitThisCharge=false;
+    const hp0=B.chefHP; updateVince(1/60);
+    ok("double charge (6th attack) leg 1 can connect", B.chefHP<hp0);
+    B.t=0; updateVince(1/60);
+    ok("...hands off into a re-aimed leg 2", B.state==="dcharge2");
+    const hp1=B.chefHP; B.hitThisCharge=false; chef.x=B.x+4; chef.y=B.y;
+    updateVince(1/60);
+    ok("...which can also connect (a real 2-hit combo)", B.chefHP<hp1); }
+
+  { const terminal=["charge","slamtele","slam","paperaim","paperfly","grabtele","grabhit","stomptele","stomphit","dcharge1","dcharge2"];
+    let allReachRecover=true;
+    for(const st of terminal){
+      startCampaign(); customers=[]; startBossNight("vince");
+      const B=bossFight; B.x=200; B.y=100; chef.x=205; chef.y=100;
+      B.state=st; B.t=0; B.slamX=B.x; B.slamY=B.y; B.paperX=B.x; B.paperY=B.y; B.paperDX=1; B.paperDY=0;
+      B.chargeDX=1; B.chargeDY=0; B.hitThisCharge=true;
+      let steps=0; while(B.state!=="recover" && steps<600){ updateVince(1/60); steps++; }
+      if(B.state!=="recover") allReachRecover=false;
+    }
+    ok("EVERY one of the 6 attacks still resolves into the strike window — she can always fight back", allReachRecover); }
   run.stats={}; startCampaign(); customers=[]; boss=null; bossFight=null; phase="play";
 
   // routing: results -> office -> next day

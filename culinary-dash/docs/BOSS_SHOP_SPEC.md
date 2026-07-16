@@ -91,6 +91,23 @@ polygon-monster / shadow bodies + Brandon's rig):
 Bosses **escalate**: which one shows scales with `run.week` / how many you've beaten (`run.bossesBeaten`).
 Reward scales with `recLevel`. Beating one = a big coin drop (`reward`, e.g. 3–8k), the point of the grind.
 
+### Vince's moveset (tripled 2026-07-16: 2 -> 6 distinct recurrent attacks)
+`BOSSES[0].rotation = ["charge","pound","paper","stomp","dcharge"]` — 5 attacks cycle deterministically by
+`bossFight.cycle`, plus a 6th, **grab**, which is reactive: it preempts whichever rotation slot was due if
+she's standing inside `grabR` of him at the moment his windup resolves (punishes hugging him to dodge the
+ranged/AOE attacks). Every one of the six still resolves into `"recover"` — the strike window never goes
+away, only what precedes it varies (a harness test walks all 11 intermediate states and asserts each one
+reaches `"recover"` within 600 frames, so "she can still do damage to him" is a proven invariant, not an
+assumption):
+1. **charge** — telegraphed lunge along her position at windup's end; connects = damage.
+2. **pound** (ground pound) — AOE at a *remembered* spot (where he stood at windup's end); dodge by moving.
+3. **paper** (eviction notice) — a ranged projectile thrown dead-straight; the only non-melee attack.
+4. **grab** (reactive) — hugging him mid-fight gets you grabbed and flung across the room instead of
+   whatever was scheduled next.
+5. **stomp** (shockwave) — a faster, smaller AOE centred on his *current* spot, not a remembered one —
+   forces you to keep backing off rather than just avoiding one fixed point.
+6. **dcharge** (double charge) — two lunges back-to-back, re-aimed at her position between hits.
+
 ### Fight structure (reuses combat)
 - New `phase==="boss"` encounters run on the impact spine like Brandon does today: chef HP bar, mash to
   strike in the exposed window, KO fall. `chefMaxHP()`, `punchDmg()`, `guardMult()`, `fightSpeedMult()`
