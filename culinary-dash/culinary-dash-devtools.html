@@ -1651,7 +1651,8 @@ function startBossNight(id){
   run.lastBossNightDay = run.week*7+run.dow;
   phase="bossnight";
   bossFight = { def, kind:def.kind, hp:def.hp, maxHP:def.hp, chefHP:chefMaxHP(), maxChefHP:chefMaxHP(),
-    x:262, y:78, state:"windup", t:def.windup, cycle:0, hurtFlash:0, outcome:null, endT:0, introT:BOSS_INTRO_TIME };
+    x:262, y:78, state:"windup", t:def.windup, cycle:0, hurtFlash:0, outcome:null, endT:0, introT:BOSS_INTRO_TIME,
+    punchT:0, punchDur:0, move:null, comboStep:0, comboT:0, bufT:0 };   // same swing/combo feel as the brawl (reused, not reinvented)
   customers=[]; chef.carry=null; chef.x=120; chef.y=120; chef.dir="up";
   flash(W/2,44,def.name.toUpperCase(),"#c8452e"); flash(W/2,58,def.tagline,"#e88a7a");
   sfx("burnt"); addShake(3.4);
@@ -1993,7 +1994,25 @@ function updateRinger(dt){
     B.t-=dt; if(B.t<=0){ B.state="windup"; B.t=D.windup; }
   }
 }
-function bossNightStrike(){ if(bossFight) vinceStrike(); }   // kind-agnostic: it only reads B.def.reach/koChance + punchDmg()
+function bossNightSwing(){
+  // Mirrors chefPunch()'s move-selection/animation half only — no enemy-hp loop, since landing damage
+  // on the BOSS is vinceStrike()'s job (unchanged, still gated on state==="recover"). This just makes
+  // every tap throw a real, combo-aware punch, exactly like the brawl, instead of an invisible ray.
+  const B=bossFight; if(!B) return;
+  if(B.punchT > punchGate()){ B.bufT = PUNCH_BUFFER; return; }   // too early: remember it (mash buffer)
+  B.bufT = 0;
+  B.comboStep = (B.comboT>0 ? (B.comboStep||0)+1 : 0);
+  B.comboT = FIGHT_COMBO_WINDOW;
+  let move = comboMove(B.comboStep);
+  const gdir = PUNCH_AXIS[chef.dir] ? chef.dir : (B.x<chef.x ? "left" : "right");
+  chef.dir = gdir;
+  const fdirNow = DMAP[gdir];
+  if(!hasFightArt(chefSet, move, fdirNow)) move="jab";
+  B.move = move;
+  const base = moveDur(chefSet, move, fightDir(chefSet, move, fdirNow) || "front");
+  B.punchT = base; B.punchDur = base;
+}
+function bossNightStrike(){ if(!bossFight) return; bossNightSwing(); vinceStrike(); }   // vinceStrike is kind-agnostic: reads B.def.reach/koChance + punchDmg()
 function updateBossNight(dt){
   const B=bossFight; if(!B) return;
   if(B.hurtFlash>0) B.hurtFlash-=dt;
@@ -2003,6 +2022,9 @@ function updateBossNight(dt){
   if(B.outcome){ B.endT-=dt; if(B.endT<=0) endBossNight(); return; }
   if(B.chefHP<=0){ bossNightLose(); return; }   // defensive: a loss must fire even if HP hits 0 during the intro
   if(B.introT>0){ B.introT=Math.max(0,B.introT-dt); return; }   // cinematic hold: no movement, no attacks
+  if(B.punchT>0) B.punchT-=dt;
+  if(B.bufT>0){ B.bufT-=dt; if(B.punchT<=punchGate()) bossNightSwing(); }   // a press mid-swing isn't lost
+  if(B.comboT>0) B.comboT-=dt;                                             // walk away and the combo resets to the jab
   if(B.kind==="charger") updateVince(dt);
   else if(B.kind==="zoner") updateInspector(dt);
   else if(B.kind==="trickster") updateRinger(dt);
@@ -2062,11 +2084,21 @@ function drawBossNight(){
   if(B.adds) for(const a of B.adds) items.push({y:a.y, f:()=>{
     X.fillStyle="#2a3a2a"; X.fillRect(a.x-3,a.y-8,6,8); X.fillStyle="#e9d8b8"; X.fillRect(a.x-2,a.y-11,4,3);
   }});
-  const wf = chef.moving ? (Math.floor(performance.now()/130)%2?"walk1":"walk2") : "idle";
   items.push({y:chef.y, f:()=>{
     X.fillStyle="rgba(0,0,0,.35)"; X.fillRect(chef.x-7,chef.y-1,14,2);
     if(B.hurtFlash>0 && Math.floor(performance.now()/80)%2) X.globalAlpha=0.5;
-    drawChar(chefSet, DMAP[chef.dir]||"front", chef.x, chef.y, CHEF_SCALE, wf);
+    const dir = chefFightDir();
+    if(B.punchT>0){
+      const mv = B.move||"jab";
+      const fd = fightDir(chefSet,mv,dir) || dir;
+      const cfr = pickFightFrame(chefSet, mv, fd, punchElapsed(B.punchT, B.punchDur));
+      const mir = !!cfr && shouldMirror(chefSet,mv,dir);
+      if(!drawFighter(cfr||PUNCH_IMG[chefSet][dir], chef.x, chef.y, CHEF_SCALE*(CHEF_H[chefSet]||1), mir))
+        drawChar(chefSet, dir, chef.x, chef.y, CHEF_SCALE, "idle");
+    } else {
+      const wf = chef.moving ? (Math.floor(performance.now()/130)%2?"walk1":"walk2") : "idle";
+      drawChar(chefSet, DMAP[chef.dir]||"front", chef.x, chef.y, CHEF_SCALE, wf);
+    }
     X.globalAlpha=1;
   }});
   plantItems(items); catItem(items);
@@ -2370,7 +2402,7 @@ function triggerGoLive(){          // once per brawl: a recorder goes live -> th
     e.rage=true; e.hp = (e.buffed||e.riot) ? ENEMY_HP+2 : ENEMY_HP;
     burst(e.x,e.y-12,6,["#c8452e","#e0674e","#f7f3ea"],{sp:34,up:10,life:0.5}); }
 }
-function punchGate(){ return brawl.buffT>0 ? 0.05 : 0.08; }   // how late in a swing a new one can start
+function punchGate(){ return (brawl&&brawl.buffT>0) ? 0.05 : 0.08; }   // how late in a swing a new one can start (null-safe: boss night has no brawl.buffT)
 function chefPunch(){
   if(brawl.stumbleT>0) return;                   // Phase D: no swinging mid-stumble
   const buffed = brawl.buffT>0;

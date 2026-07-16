@@ -857,6 +857,51 @@ const probe = `
   ok("...and it stays full past 70% (the hold beat before the cut)", introTypedChars(0.1, 1.8, "Vince")==="Vince");
   run.stats={}; startCampaign(); customers=[]; boss=null; bossFight=null; phase="play";
 
+  // ---- boss-night punches actually animate + combo, same feel as the brawl (Roadmap #40, slice H) ----
+  // Before this slice, tapping STRIKE in a boss fight did pure damage math with no visible swing and no
+  // combo chain at all — bossFight had none of the brawl's punchT/move/comboStep fields. This is purely
+  // additive juice: landing/KO math is still vinceStrike(), still gated on state==="recover", unchanged.
+  for(const id of ["vince","inspector","ringer"]){
+    startCampaign(); customers=[]; phase="play"; startBossNight(id); bossFight.introT=0;
+    chef.x=bossFight.x; chef.y=bossFight.y;
+    ok(id+": no swing in flight before any tap", bossFight.punchT===0 && !bossFight.move);
+    bossNightStrike();
+    ok(id+": tapping STRIKE throws a real, animated move", !!bossFight.move && bossFight.punchT>0);
+    const move0=bossFight.move, dur0=bossFight.punchDur;
+    bossNightStrike();
+    ok(id+": a second tap mid-swing doesn't restart the animation", bossFight.move===move0 && bossFight.punchDur===dur0);
+    ok(id+": ...but it IS buffered (mash isn't dropped), same as the brawl", bossFight.bufT>0);
+    bossFight=null; phase="play";
+  }
+  startCampaign(); customers=[]; phase="play"; startBossNight("vince"); bossFight.introT=0;
+  chef.x=bossFight.x; chef.y=bossFight.y;
+  bossNightStrike();
+  chef.x=-1000; chef.y=-1000; bossFight.bufT=0;   // clear of Vince's reach: isolate the plain decay
+  for(let i=0;i<200 && bossFight.punchT>0;i++) updateBossNight(1/60);
+  ok("an un-buffered swing finishes on its own via updateBossNight's own tick", bossFight.punchT<=0);
+  bossFight.punchT=0; bossFight.bufT=0;
+  bossNightStrike(); bossNightStrike();
+  ok("the second (buffered) press auto-fires once the gate opens, no dropped input", (()=>{
+    for(let i=0;i<200 && bossFight.bufT>0;i++) updateBossNight(1/60);
+    return bossFight.bufT<=0 && bossFight.punchT>0; })());
+  chef.x=bossFight.x; chef.y=bossFight.y;
+  bossFight.comboT=0.3; bossFight.punchT=0; bossFight.bufT=0;
+  bossNightStrike(); const step1=bossFight.comboStep;
+  bossFight.punchT=0; bossNightStrike();
+  ok("a tap inside the combo window advances comboStep (jab -> jab -> cross -> roundhouse)", bossFight.comboStep===step1+1);
+  bossFight.comboT=0; bossFight.punchT=0; bossFight.bufT=0; bossNightStrike();
+  ok("letting the combo window lapse resets the chain back to the opener", bossFight.comboStep===0);
+  bossFight.state="windup"; bossFight.punchT=0; bossFight.bufT=0; bossFight.comboT=0;
+  { const hp0=bossFight.hp; bossNightStrike();
+    ok("swinging outside recover still animates but deals no damage (unchanged rule)", bossFight.hp===hp0 && bossFight.move); }
+  bossFight.state="recover"; bossFight.punchT=0; bossFight.bufT=0;
+  { const hp0=bossFight.hp; bossNightStrike();
+    ok("swinging DURING recover, in reach, still damages the boss exactly as before", bossFight.hp<hp0 || bossFight.hp===0); }
+  ok("punchGate() is null-safe outside a brawl (used to throw reading brawl.buffT)", (()=>{
+    const savedBrawl=brawl; brawl=null; let threw=false;
+    try{ punchGate(); }catch(e){ threw=true; } brawl=savedBrawl; return !threw; })());
+  bossFight=null; phase="play";
+
   // routing: results -> office -> next day
   startCampaign(); run.dow=0; tips=100; finishDay();
   ok("day ends on results", phase==="over");

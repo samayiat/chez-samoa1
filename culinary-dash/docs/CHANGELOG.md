@@ -7,6 +7,36 @@ Commit history, newest first. Each entry: `## YYYY-MM-DD — title` + bullets of
 
 ---
 
+## 2026-07-16 (h) — Boss-night punches actually animate + combo now
+
+Reported: "punch animations and combos not working in boss fights." True since boss night was first built —
+`bossNightStrike()` always did pure damage math straight against `bossFight` with no visible swing at all;
+`drawBossNight` only ever drew the chef idle/walking, never punching. The brawl's whole animation/combo
+system (`chefPunch`, `brawl.punchT/move/comboStep`) was never wired into boss night — a missing half of "a
+real fight," not a regression.
+
+Fixed by reusing the brawl's exact animation/combo machinery (`comboMove`, `moveDur`, `fightDir`,
+`hasFightArt`, `pickFightFrame`, `drawFighter`, `shouldMirror`, `punchGate`, `FIGHT_COMBO_WINDOW`,
+`PUNCH_BUFFER`) against new fields on `bossFight` (`punchT`, `punchDur`, `move`, `comboStep`, `comboT`,
+`bufT`) instead of `brawl`'s. New `bossNightSwing()` mirrors `chefPunch()`'s move-selection/animation half
+only — **landing damage on the boss is still `vinceStrike()`, still gated on `state==="recover"`,
+completely unchanged.** Every tap now throws a real, drawable punch and chains through the same
+jab/jab/cross/roundhouse combo as the brawl; whether it actually damages the boss depends only on the
+existing exposed-window rule, same as before. Applies to all three bosses (kind-agnostic, like
+`bossNightStrike` already was).
+
+Also fixed a latent bug this surfaced: `punchGate()` read `brawl.buffT` unconditionally, which crashed the
+instant boss night called it with no brawl in progress (`brawl` is `null` outside an actual brawl). Made it
+null-safe (`(brawl&&brawl.buffT>0)`) — a pure defensive fix, no behavior change inside an actual brawl.
+
+### Tests
++19 checks (**888 total**): each boss throws an animated move on the first tap; a second tap mid-swing
+doesn't restart the animation but IS buffered (not dropped); an un-buffered swing decays to done on its own;
+a buffered press auto-fires once the gate reopens; tapping inside the combo window advances the chain,
+letting it lapse resets to the opener; swinging outside `"recover"` still animates but deals no damage;
+swinging during `"recover"`, in reach, still damages the boss exactly as before; `punchGate()` no longer
+throws with `brawl===null`.
+
 ## 2026-07-16 (g) — Dev menu: pick + instantly start any boss
 
 Requested for testing the live boss roster without waiting on the random telegraph. Adds a **2nd page**

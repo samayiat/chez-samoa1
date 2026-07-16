@@ -168,6 +168,16 @@ cinematic to him would need its own dedicated pass built around those constraint
   (1a). The Panic Button one-shot (shop #11), if owned, converts the *first* would-be wipe of a run into a
   costly flee (lose the night + a rep hit) instead — a mercy valve so a single bad read isn't instant death.
 
+### Punch animation + combo (2026-07-16): the strike button throws a real punch now
+Before this, tapping STRIKE in a boss fight was invisible math — no swing, no combo, chef stood in idle/walk
+the whole fight. Fixed by reusing the brawl's own animation/combo machinery (`comboMove`, `moveDur`,
+`fightDir`, `hasFightArt`, `pickFightFrame`, `drawFighter`, `shouldMirror`, `punchGate`,
+`FIGHT_COMBO_WINDOW`, `PUNCH_BUFFER`) against new fields on `bossFight` (`punchT`, `punchDur`, `move`,
+`comboStep`, `comboT`, `bufT`) via a new `bossNightSwing()` — the animation/combo half only.
+**`vinceStrike()` is untouched:** landing damage on the boss is still exactly gated on
+`state==="recover"`, same rule as always. This is purely the missing "it looks and feels like a fight"
+layer, applied kind-agnostically to all three bosses.
+
 ### Telegraph + trigger (3a)
 - `nextDay()` / `finishDay()`: with the boss NOT already queued, roll `bossChance()` (random "after work").
   On a hit, set `run.bossTomorrow = pickBoss()`. The **results + office screens show the warning** ("⚔ A
