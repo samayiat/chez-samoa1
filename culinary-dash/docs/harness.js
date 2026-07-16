@@ -583,6 +583,65 @@ const probe = `
     ok("Top-Shelf Liquor raises bottle price", bottlePriceMult()>bp0);
     run.upgrades={}; }
 
+  // ---- boss night: telegraph, the fight, reward, and the FULL WIPE (Roadmap #40, slice B) ----
+  // Brandon (the random daytime scuffle) is a SEPARATE, untouched system — prove it stayed that way.
+  startCampaign(); customers=[]; startBoss();
+  ok("Brandon still defaults exactly as before slice B", boss.hp===20 && boss.maxHP===20 && boss.chefHP===BOSS_CHEF_HP);
+  boss.state="reload"; chef.x=boss.x; chef.y=boss.y; boss.hp=10; bossStrike();
+  ok("...and his strike is still exactly -1 at base stats", boss.hp===9);
+  boss=null; phase="play";
+
+  ok("the roster has at least one boss and pickBoss returns a real id", BOSSES.length>0 && BOSSES.some(b=>b.id===pickBoss()));
+  startCampaign(); customers=[]; dayT=0; run.bossTomorrow="vince"; phase="play";
+  update(1/60);
+  ok("a queued boss fires at close, ahead of the brawl roll", phase==="bossnight" && !!bossFight && bossFight.def.id==="vince");
+  ok("the telegraph flag is consumed so it can't refire", run.bossTomorrow===null);
+  ok("boss-night chef HP starts at the STAT-scaled max (2a: stats are the lever)",
+     bossFight.chefHP===chefMaxHP() && bossFight.maxChefHP===chefMaxHP());
+
+  bossFight.hp=1; bossFight.state="recover"; bossFight.t=1; bossFight.x=chef.x; bossFight.y=chef.y;
+  bossNightStrike();
+  ok("striking during the exposed window can end the fight", bossFight.outcome==="win" && bossFight.endT>0);
+  { const bankBefore=run.bank; bossFight.endT=0; updateBossNight(1/60);
+    ok("a win pays the reward and clears the fight", run.bank===bankBefore+BOSSES[0].reward && bossFight===null);
+    ok("a win banks bossesBeaten and returns to service", run.bossesBeaten===1 && (phase==="play"||phase==="over"||phase==="night")); }
+
+  startCampaign(); customers=[]; dayT=0; run.bossTomorrow="vince"; phase="play"; update(1/60);
+  run.bank=999999;
+  bossFight.chefHP=0; updateBossNight(1/60);   // no passive bleed on this boss (unlike Brandon) — drive it to exactly 0
+  ok("chef HP hitting 0 triggers the loss", bossFight.outcome==="lose");
+  bossFight.endT=0; updateBossNight(1/60);
+  ok("losing goes to gameover with the boss's name recorded (told apart from an eviction)",
+     phase==="gameover" && !!run.bossWipe && bossFight===null);
+  primaryAction();      // tap gameover -> the EXISTING generic startCampaign() reset
+  ok("1a: losing a boss is a FULL WIPE — bank, week, stats and upgrades all reset",
+     phase==="play" && run.bank===START_BANK && run.week===1 &&
+     Object.keys(run.stats).length===0 && Object.keys(run.upgrades).length===0 && run.bossesBeaten===0);
+
+  startCampaign(); customers=[]; startBossNight("vince");
+  { const B=bossFight; B.state="charge"; B.t=0.5; B.chargeDX=1; B.chargeDY=0; B.hitThisCharge=false;
+    B.x=chef.x-5; B.y=chef.y; const hp0=B.chefHP; updateVince(1/60);
+    ok("Vince's charge damages the chef on contact", B.chefHP<hp0);
+    B.state="slamtele"; B.t=0.01; B.slamX=chef.x; B.slamY=chef.y; const hp1=B.chefHP; updateVince(1/60);
+    ok("...and the ground-pound (his 2nd recurrent attack) damages too if she doesn't dodge", B.chefHP<hp1); }
+
+  startCampaign(); customers=[]; startBossNight("vince"); run.stats={guard:0};
+  { const B0=bossFight; B0.state="charge"; B0.t=0.5; B0.chargeDX=1; B0.chargeDY=0; B0.hitThisCharge=false; B0.x=chef.x-5; B0.y=chef.y;
+    const b0=B0.chefHP; updateVince(1/60); const dmg0=b0-B0.chefHP;
+    startCampaign(); customers=[]; startBossNight("vince"); run.stats={guard:5};
+    const B1=bossFight; B1.chefHP=chefMaxHP(); B1.state="charge"; B1.t=0.5; B1.chargeDX=1; B1.chargeDY=0; B1.hitThisCharge=false; B1.x=chef.x-5; B1.y=chef.y;
+    const b1=B1.chefHP; updateVince(1/60); const dmg1=b1-B1.chefHP;
+    ok("2a: Bouncer's Build reduces boss-night damage taken", dmg1<dmg0); }
+
+  startCampaign(); customers=[]; startBossNight("vince"); run.stats={};
+  { const B0=bossFight; B0.hp=100; B0.state="recover"; B0.t=5; B0.x=chef.x; B0.y=chef.y;
+    const h0=B0.hp; vinceStrike(); const chip0=h0-B0.hp;
+    startCampaign(); customers=[]; startBossNight("vince"); run.stats={pow:5};
+    const B1=bossFight; B1.hp=100; B1.state="recover"; B1.t=5; B1.x=chef.x; B1.y=chef.y;
+    const h1=B1.hp; vinceStrike(); const chip1=h1-B1.hp;
+    ok("2a: Heavy Hands raises boss-night strike damage", chip1>chip0); }
+  run.stats={}; startCampaign(); customers=[]; boss=null; bossFight=null; phase="play";
+
   // routing: results -> office -> next day
   startCampaign(); run.dow=0; tips=100; finishDay();
   ok("day ends on results", phase==="over");

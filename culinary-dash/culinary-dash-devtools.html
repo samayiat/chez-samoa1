@@ -380,6 +380,11 @@ function onDown(e){
       else { bossStrike(); btnPulse=1; }
       return;
     }
+    if(phase==="bossnight"){                       // BOSS NIGHT: move to dodge, strike when exposed
+      if(L.x < W*0.5){ joy={id,ox:L.x,oy:L.y,vx:0,vy:0,active:true}; }
+      else { bossNightStrike(); btnPulse=1; }
+      return;
+    }
     if(phase==="night"){                          // after-hours: move + GRAB/SERVE
       if(L.x>W-14 && L.y<14){ devHeist(); return; } // DEV: top-right corner -> +$10k + a robbery to chase
       if(L.x < W*0.5){ joy={id,ox:L.x,oy:L.y,vx:0,vy:0,active:true}; }
@@ -465,6 +470,7 @@ function primaryAction(){
   if(phase==="brawl"){ chefPunch(); btnPulse=1; return; }
   if(phase==="night"){ nightAction(); btnPulse=1; return; }
   if(phase==="boss"){ bossStrike(); btnPulse=1; return; }
+  if(phase==="bossnight"){ bossNightStrike(); btnPulse=1; return; }
 }
 function secondaryAction(id){
   if(phase==="brawl"){ if(canSpecial()) chefSpecial(); else if(atBar()&&!BAR.broken){ chugHeld=true; chugId=id||"kb"; chefDrink(); } btnPulse=1; }
@@ -845,7 +851,7 @@ const ZOOM_SAFETY=1.35;                                 // crop this much MORE t
 const COMBAT_ZOOM=1.22;
 function camZoom(sx,sy){
   const safety = 1 + Math.max(2*Math.abs(sx)/W, 2*Math.abs(sy)/H) * ZOOM_SAFETY;
-  const want = (phase==="brawl"||phase==="boss") ? COMBAT_ZOOM : 1;
+  const want = (phase==="brawl"||phase==="boss"||phase==="bossnight") ? COMBAT_ZOOM : 1;
   return Math.max(want, safety);
 }
 /* CAMERA LEAN — it leans toward her; it does NOT follow her, and at this zoom it can't.
@@ -1181,6 +1187,7 @@ function update(dt){
   if(phase==="brawl"){ updateBrawl(dt); return; }
   if(phase==="night"){ updateNight(dt); return; }
   if(phase==="boss"){ updateBoss(dt); return; }
+  if(phase==="bossnight"){ updateBossNight(dt); return; }
   if(phase!=="play") return;
   if(dialogue){ for(const f of flashes){f.t-=dt;} flashes=flashes.filter(f=>f.t>0); return; } // world paused while reading
 
@@ -1220,6 +1227,7 @@ function update(dt){
   for(const f of iflashes) f.t-=dt; iflashes=iflashes.filter(f=>f.t>0);   // impact pops: no drift, they mark a SPOT
   if(dayT>0){ dayT-=dt; if(dayT<0) dayT=0; }
   else if(customers.length===0){                       // store empty: day truly over
+    if(run.bossTomorrow){ const bid=run.bossTomorrow; run.bossTomorrow=null; startBossNight(bid); return; }  // #40 (3a): the telegraphed boss takes priority tonight
     if(Math.random()<brawlChance()){ startBrawl(); return; }   // P4: the after-close brawl (Beli-gated); bad orders still decide WHO returns
     if(isNightDay()){ startNight(); } else { finishDay(); }  // after-hours only runs Thu–Sun
     return;
@@ -1570,6 +1578,181 @@ function powMult(){ return 1 + 0.12*statLvl("pow"); }            // Heavy Hands 
 function punchDmg(){ return PUNCH_DMG * powMult(); }
 function guardMult(){ return Math.max(0.5, 1 - 0.08*statLvl("guard")); }  // Bouncer's Build: dmg-taken x
 function fightSpeedMult(){ return 1 + 0.06*statLvl("feet"); }   // Quick Feet
+/* ---- BOSS NIGHT (Roadmap #40): a SEPARATE system from Brandon (the random daytime scuffle below).
+   Brandon is untouched — every one of his pinned tests still holds byte-for-byte. This is the new,
+   high-stakes system: a telegraphed challenger (3a), a real fight your STATS decide (2a), a big coin
+   reward on a win, and a FULL WIPE of the run on a loss (1a). See BOSS_SHOP_SPEC.md. ---- */
+let bossFight=null;              // {def, kind, hp, maxHP, chefHP, maxChefHP, x, y, state, t, outcome, endT}
+const BOSS_NIGHT_CHANCE=0.25;    // ~1-in-4 nights, once the cooldown below clears — flagged for the balance pass
+const BOSSES=[
+  { id:"vince", name:"Vince \u201cThe Landlord\u201d", tagline:"pay up, or else.", kind:"charger",
+    hp:26, windup:0.9, chargeTime:0.55, chargeSpeed:200, recover:1.6, hitR:14, chargeDmg:4,
+    slamEvery:3, slamTele:1.1, slamR:40, slamDmg:6, reach:20, koChance:0.06, reward:5000, recLevel:6 },
+];
+function pickBoss(){ const idx=Math.min(BOSSES.length-1, run.bossesBeaten||0); return BOSSES[idx].id; }
+function bossNightExposed(){ return !!bossFight && bossFight.state==="recover"; }
+function startBossNight(id){
+  if(!run) return;
+  const def = BOSSES.find(b=>b.id===id) || BOSSES[0];
+  run.lastBossNightDay = run.week*7+run.dow;
+  phase="bossnight";
+  bossFight = { def, kind:def.kind, hp:def.hp, maxHP:def.hp, chefHP:chefMaxHP(), maxChefHP:chefMaxHP(),
+    x:262, y:78, state:"windup", t:def.windup, cycle:0, hurtFlash:0, outcome:null, endT:0 };
+  customers=[]; chef.carry=null; chef.x=120; chef.y=120; chef.dir="up";
+  flash(W/2,44,def.name.toUpperCase(),"#c8452e"); flash(W/2,58,def.tagline,"#e88a7a");
+  sfx("burnt"); addShake(3.4);
+}
+function bossNightWin(){
+  if(bossFight.outcome) return;
+  bossFight.outcome="win"; bossFight.endT=1.8;
+  flash(W/2,54,"YOU BEAT "+bossFight.def.name.toUpperCase()+"!","#8be27a"); sfx("perfect"); cheer=1.2;
+}
+function bossNightLose(){
+  if(bossFight.outcome) return;
+  bossFight.outcome="lose"; bossFight.endT=2.2; bossFight.chefHP=0;
+  flash(W/2,54, bossFight.def.name.toUpperCase()+" WRECKS THE PLACE","#c8452e"); sfx("burnt"); addShake(4);
+}
+function endBossNight(){
+  const B=bossFight;
+  if(B.outcome==="win"){
+    run.bossesBeaten=(run.bossesBeaten||0)+1;
+    run.bank += B.def.reward;
+    flash(W/2,70,"+$"+B.def.reward,"#ffd86b");
+    bossFight=null;
+    if(isNightDay()) startNight(); else finishDay();
+  } else {
+    run.bossWipe = B.def.name;     // read by drawGameOver() to tell this apart from an eviction
+    bossFight=null;
+    phase="gameover";
+  }
+}
+/* Vince "The Landlord" — a charger. windup (telegraph) -> charge (a lunge that damages on contact) ->
+   recover (the strike window, same beat as Brandon's reload) -> windup. Every SLAM_EVERY-th cycle is a
+   ground-pound instead: a growing danger ring she must step out of. Two distinct recurrent attacks. */
+function updateVince(dt){
+  const B=bossFight, D=B.def;
+  moveChefBoss(dt);
+  if(B.state==="windup"){
+    B.t-=dt;
+    if(B.t<=0){
+      B.cycle=(B.cycle||0)+1;
+      if(B.cycle % D.slamEvery===0){
+        B.state="slamtele"; B.t=D.slamTele; B.slamX=B.x; B.slamY=B.y;
+        flash(B.x,B.y-24,"GROUND POUND!","#c8452e"); sfx("burnt");
+      } else {
+        const dx=chef.x-B.x, dy=chef.y-B.y, d=Math.hypot(dx,dy)||1;
+        B.chargeDX=dx/d; B.chargeDY=dy/d; B.hitThisCharge=false;
+        B.state="charge"; B.t=D.chargeTime;
+        flash(B.x,B.y-24,"HERE HE COMES!","#ffd86b"); sfx("burnt");
+      }
+    }
+  } else if(B.state==="charge"){
+    B.t-=dt;
+    B.x=Math.max(FLOOR.x0,Math.min(FLOOR.x1,B.x+B.chargeDX*D.chargeSpeed*dt));
+    B.y=Math.max(FLOOR.y0,Math.min(FLOOR.y1,B.y+B.chargeDY*D.chargeSpeed*dt));
+    if(!B.hitThisCharge && Math.hypot(chef.x-B.x,chef.y-B.y)<D.hitR){
+      B.hitThisCharge=true; B.chefHP-=D.chargeDmg*guardMult(); B.hurtFlash=0.4;
+      flash(chef.x,chef.y-16,"SLAMMED!","#c8452e");
+      impact(HIT.hurt, (B.x<chef.x?1:-1), 0, chef.x, chef.y-12); sfx("hurt");
+    }
+    if(B.t<=0){ B.state="recover"; B.t=D.recover; flash(B.x,B.y-24,"WINDED \u2014 GET HIM!","#ffd86b"); }
+  } else if(B.state==="slamtele"){
+    B.t-=dt;
+    if(B.t<=0){
+      B.state="slam"; B.t=0.18;
+      const d=Math.hypot(chef.x-B.slamX, chef.y-B.slamY);
+      if(d<D.slamR){
+        B.chefHP-=D.slamDmg*guardMult(); B.hurtFlash=0.5;
+        flash(chef.x,chef.y-16,"CAUGHT IN THE SLAM!","#c8452e");
+        impact(HIT.heavy, (B.slamX<chef.x?1:-1), 0, chef.x, chef.y-12); sfx("hurt");
+      } else { flash(B.slamX,B.slamY-10,"DODGED!","#8be27a"); }
+    }
+  } else if(B.state==="slam"){
+    B.t-=dt; if(B.t<=0){ B.state="recover"; B.t=D.recover; }
+  } else if(B.state==="recover"){
+    B.t-=dt; if(B.t<=0){ B.state="windup"; B.t=D.windup; }
+  }
+}
+function vinceStrike(){
+  const B=bossFight; if(!B || B.state!=="recover" || B.outcome) return;
+  if(Math.hypot(chef.x-B.x, chef.y-B.y) < B.def.reach){
+    const bs = B.x<chef.x ? -1 : 1;
+    if(Math.random()<B.def.koChance){ B.hp=0; flash(B.x,B.y-26,"KNOCKED OUT!","#ffd86b");
+      sfxHit(impact(HIT.jab+HIT_KO, bs, 0, B.x, B.y-12), 0); sfx("ko"); bossNightWin(); return; }
+    B.hp=Math.max(0,B.hp-punchDmg()); B.hurtFlash=0.2; flash(B.x,B.y-22,"-1","#ffd86b");
+    sfxHit(impact(HIT.jab, bs, 0, B.x, B.y-12), 0);
+    burst(B.x,B.y-10,6,["#ffd86b","#f7f3ea"],{sp:34,up:10,life:0.4});
+    if(B.hp<=0) bossNightWin();
+  }
+}
+function bossNightStrike(){ if(bossFight && bossFight.kind==="charger") vinceStrike(); }
+function updateBossNight(dt){
+  const B=bossFight; if(!B) return;
+  if(B.hurtFlash>0) B.hurtFlash-=dt;
+  for(const f of flashes){ f.t-=dt; f.y-=14*dt; } flashes=flashes.filter(f=>f.t>0);
+  for(const f of iflashes) f.t-=dt; iflashes=iflashes.filter(f=>f.t>0);
+  updateParticles(dt); if(shake>0) shake=Math.max(0, shake-dt*SHAKE_DECAY);
+  if(B.outcome){ B.endT-=dt; if(B.endT<=0) endBossNight(); return; }
+  if(B.kind==="charger") updateVince(dt);
+  if(B.chefHP<=0 && !B.outcome) bossNightLose();
+}
+function drawBossNight(){
+  drawWorldBase();
+  const B=bossFight, items=[];
+  items.push({y:B.y, f:()=>{
+    X.fillStyle="rgba(0,0,0,.35)"; X.fillRect(B.x-7,B.y-1,14,3);
+    if(B.state==="windup"){ const p=0.5+0.5*Math.sin(performance.now()/100);
+      X.strokeStyle="rgba(255,80,60,"+(0.5+0.4*p)+")"; X.lineWidth=1.5;
+      X.beginPath(); X.arc(B.x,B.y-14,10+p*2,0,7); X.stroke(); X.lineWidth=1; }
+    if(B.state==="slamtele"){ const k=1-Math.max(0,B.t)/B.def.slamTele;
+      X.strokeStyle="rgba(255,60,50,.85)"; X.lineWidth=2;
+      X.beginPath(); X.arc(B.slamX,B.slamY,B.def.slamR*k,0,7); X.stroke(); X.lineWidth=1; }
+    const flashHit = B.hurtFlash>0 && Math.floor(performance.now()/70)%2;
+    X.fillStyle = flashHit ? "#ffffff" : (B.state==="recover" ? "#7a5a2e" : "#3a2f42");
+    X.fillRect(B.x-8, B.y-30, 16, 30);
+    X.fillStyle="#e9d8b8"; X.fillRect(B.x-5,B.y-38,10,9);
+    X.fillStyle="#c8452e"; X.fillRect(B.x-3,B.y-35,2,2); X.fillRect(B.x+1,B.y-35,2,2);
+    if(B.state==="recover"){ X.fillStyle="#ffd86b"; X.font="6px monospace"; X.textAlign="center";
+      X.fillText("!", B.x, B.y-42); X.textAlign="left"; }
+  }});
+  const wf = chef.moving ? (Math.floor(performance.now()/130)%2?"walk1":"walk2") : "idle";
+  items.push({y:chef.y, f:()=>{
+    X.fillStyle="rgba(0,0,0,.35)"; X.fillRect(chef.x-7,chef.y-1,14,2);
+    if(B.hurtFlash>0 && Math.floor(performance.now()/80)%2) X.globalAlpha=0.5;
+    drawChar(chefSet, DMAP[chef.dir]||"front", chef.x, chef.y, CHEF_SCALE, wf);
+    X.globalAlpha=1;
+  }});
+  plantItems(items); catItem(items);
+  items.sort((a,b)=>a.y-b.y).forEach(it=>it.f());
+  drawParticles(); drawImpactFlashes();
+  for(const f of flashes){ X.globalAlpha=Math.max(0,f.t); X.fillStyle=f.col; X.font="8px monospace";
+    X.textAlign="center"; X.fillText(f.txt,f.x,f.y); X.textAlign="left"; X.globalAlpha=1; }
+}
+function drawBossNightButtons(){
+  if(joy.active){ X.strokeStyle="rgba(233,216,184,.35)"; X.lineWidth=1; X.beginPath();X.arc(joy.ox,joy.oy,14,0,7);X.stroke();
+    X.fillStyle="rgba(233,216,184,.6)"; X.beginPath();X.arc(joy.ox+joy.vx*12,joy.oy+joy.vy*12,5,0,7);X.fill();
+  } else { X.strokeStyle="rgba(233,216,184,.25)";X.lineWidth=1;X.beginPath();X.arc(30,H-26,13,0,7);X.stroke();
+    X.fillStyle="rgba(233,216,184,.3)";X.font="5px monospace";X.textAlign="center";X.fillText("MOVE",30,H-25);X.textAlign="left"; }
+  const P=BTN_PUNCH, ready=bossNightExposed();
+  X.fillStyle= ready?"rgba(255,216,107,.9)":"rgba(90,80,60,.5)"; X.beginPath();X.arc(P.x,P.y,15+(btnPulse*2),0,7);X.fill();
+  X.fillStyle= ready?"#171020":"#e9d8b8"; X.font="6px monospace"; X.textAlign="center"; X.fillText("STRIKE",P.x,P.y+2); X.textAlign="left";
+}
+function drawBossNightHUD(){
+  const B=bossFight;
+  if(B.hurtFlash>0){ const a=Math.min(0.5,B.hurtFlash); X.fillStyle="rgba(200,40,36,"+a+")";
+    X.fillRect(0,0,W,6); X.fillRect(0,H-6,W,6); X.fillRect(0,0,6,H); X.fillRect(W-6,0,6,H); }
+  X.fillStyle="#0e0b14"; X.fillRect(0,0,W,14); X.fillStyle="#2f2740"; X.fillRect(0,14,W,1);
+  X.textBaseline="middle"; X.textAlign="left";
+  X.font="6px monospace"; X.fillStyle="#e9d8b8"; X.fillText("YOU",4,7);
+  const hpw=40, hf=Math.max(0,B.chefHP)/B.maxChefHP;
+  X.fillStyle="#1b1626"; X.fillRect(20,4,hpw,5); X.fillStyle= hf<0.34?"#c8452e":"#8be27a"; X.fillRect(20,4,Math.round(hpw*hf),5);
+  X.textAlign="right"; X.fillStyle="#e88a7a"; X.fillText(B.def.name.toUpperCase(),W-4,4); X.textAlign="left";
+  const bx=W-72, pipw=64/B.maxHP;
+  for(let i=0;i<B.maxHP;i++){ X.fillStyle= i<B.hp?"#c8452e":"#3a2f42"; X.fillRect(bx+i*pipw, 9, Math.ceil(pipw-0.5),3); }
+  X.fillStyle= bossNightExposed()?"#ffd86b":"#6b6480"; X.font="6px monospace"; X.textAlign="center";
+  X.fillText(bossNightExposed()?"EXPOSED \u2014 tap right to strike!":"survive the attack", W/2, H-6); X.textAlign="left";
+  drawBossNightButtons();
+}
 let brawl=null;              // {t, chefHP, inv, punchT, enemies:[], outcome}
 const BRAWL_TIME=90, CHEF_HP=20, ENEMY_HP=5;   // chef has a real health bar now
 const WAVE_SIZE=10, WAVE_COUNT=3;    // waves of 10 instead of one big 15
@@ -4460,15 +4643,26 @@ function drawOffice(){
     X.fillText("RENT DUE MONDAY: $"+due+(ok2?"":"  \u2014 SHORT!"), W/2, oy-16); X.textAlign="left"; }
   else { X.textAlign="center"; X.font="6px monospace"; X.fillStyle="#6b6480";
     X.fillText("next rent (Mon): $"+rentFor(run.week+1), W/2, oy-16); X.textAlign="left"; }
+  if(run.bossTomorrow){ const bd=BOSSES.find(b=>b.id===run.bossTomorrow);
+    X.textAlign="center"; X.font="7px monospace"; X.fillStyle="#e8433a";
+    X.fillText("\u2694 CHALLENGER TOMORROW: "+(bd?bd.name.toUpperCase():"???")+" \u2014 get ready", W/2, oy-24);
+    X.textAlign="left"; }
   X.fillStyle=(Math.floor(performance.now()/450)%2)?"#8be27a":"#3f6a36"; X.fillRect(officeOpenRect.x,officeOpenRect.y,officeOpenRect.w,officeOpenRect.h);
   X.fillStyle="#0e0b14"; X.font="8px monospace"; X.textAlign="center"; X.fillText("OPEN "+ndName+" \u25b8", W/2, oy+1); X.textAlign="left";
 }
 function drawGameOver(){
   X.fillStyle="rgba(22,6,10,.94)"; X.fillRect(0,0,W,H); X.textBaseline="alphabetic";
-  X.fillStyle="#c8452e"; X.font="14px monospace"; X.textAlign="center"; X.fillText("EVICTED", W/2, 58);
+  const boss_ = run && run.bossWipe;
+  X.fillStyle="#c8452e"; X.font="14px monospace"; X.textAlign="center";
+  X.fillText(boss_ ? "WIPED OUT" : "EVICTED", W/2, 58);
   X.fillStyle="#e9d8b8"; X.font="8px monospace";
-  X.fillText("Couldn't make rent \u2014 $"+(run?run.evictedRent:0), W/2, 84);
-  X.fillText("The landlord's had enough.", W/2, 98);
+  if(boss_){
+    X.fillText(run.bossWipe.toUpperCase()+" tore the place apart.", W/2, 84);
+    X.fillText("The whole restaurant is gone.", W/2, 98);
+  } else {
+    X.fillText("Couldn't make rent \u2014 $"+(run?run.evictedRent:0), W/2, 84);
+    X.fillText("The landlord's had enough.", W/2, 98);
+  }
   X.fillStyle="#ffd86b"; X.font="8px monospace";
   X.fillText("You ran the place for "+(run?run.week-1:0)+" week"+((run&&run.week-1===1)?"":"s"), W/2, 118);
   X.fillStyle=(Math.floor(performance.now()/450)%2)?"#8be27a":"#3f6a36";
@@ -4519,7 +4713,7 @@ function startDay(){        // set up ONE day of service (keeps the persistent r
   resetPlants();            // the riot wrecked her plants; service replaces them (stations do NOT reset)
   resetCats();              // they bolted when the fight started; both back on stools by morning
   customers=[]; STOOLS.forEach(s=>s.taken=false); BENCH_SLOTS.forEach(b=>b.taken=false); PASS_SLOTS.forEach(s=>s.item=null); combo=0;tips=0;served=0;lost=0;shooed=0;
-  badLedger=[]; beliAdj=0; brawl=null; night=null; nightSales=0;   // damage now CARRIES OVER (fixed only in the office)
+  badLedger=[]; beliAdj=0; brawl=null; night=null; nightSales=0; bossFight=null;   // damage now CARRIES OVER (fixed only in the office)
   passThief=null; passTheftT=0;
   dayT=DAY_LEN; phase="play"; spawnT=1.2; chef.x=158;chef.y=112;chef.carry=null;
   startOfficeIntro(); flash(58,94,"partner\u2019s on the books","#b9a6d0");
@@ -4548,6 +4742,10 @@ function finishDay(){       // day (+ optional night) is over: bank the take, lo
     run.dayRating = dayScore();                 // this day's score, for the results readout
     run.beliHist.push(run.dayRating);
     if(run.beliHist.length>BELI_WINDOW) run.beliHist.shift();
+    // Roadmap #40 (3a): telegraph the NEXT boss a day ahead. At most one queued at a time; a cooldown
+    // (>=2 calendar days since the last one resolved) keeps boss nights from stacking back to back.
+    const sinceLast = (run.week*7+run.dow) - (run.lastBossNightDay==null ? -99 : run.lastBossNightDay);
+    if(!run.bossTomorrow && sinceLast>=2 && Math.random()<BOSS_NIGHT_CHANCE) run.bossTomorrow = pickBoss();
   }
   phase="over";
 }
@@ -4630,7 +4828,7 @@ function officeBuy(row){                       // purchase/repair/level-up if af
 function startGame(){ startCampaign(); }   // back-compat alias (dev seed path)
 /* ---- pause: gameplay-only toggle, handled in the loop's UI layer ---- */
 const PAUSE_BTN={x:Math.round(W/2), hw:10};
-function canPause(){ return phase==="play"||phase==="night"||phase==="brawl"||phase==="boss"; }
+function canPause(){ return phase==="play"||phase==="night"||phase==="brawl"||phase==="boss"||phase==="bossnight"; }
 function inPause(L){ return Math.abs(L.x-PAUSE_BTN.x)<=PAUSE_BTN.hw && L.y<=13; }
 /* ---- DRUNK: the room breathes ----
    A post-process, because X is a const and the world can't be redirected into a buffer: copy the
@@ -4951,6 +5149,7 @@ function loop(now){
   if(phase==="brawl"){ drawWorldBase(); drawBrawl(); }
   else if(phase==="night"){ drawWorldBase(); drawNight(); }
   else if(phase==="boss"){ drawBoss(); }
+  else if(phase==="bossnight"){ drawBossNight(); }
   else if(phase==="office"){ /* office draws its own full screen below */ }
   else if(phase==="gameover"){ /* eviction screen below */ }
   else draw();
@@ -4962,6 +5161,7 @@ function loop(now){
   if(phase==="brawl") drawBrawlHUD();
   else if(phase==="night") drawNightHUD();
   else if(phase==="boss") drawBossHUD();
+  else if(phase==="bossnight") drawBossNightHUD();
   else if(phase==="office"){ /* no game HUD in the office */ }
   else if(phase==="gameover"){ /* no game HUD */ }
   else drawUI();

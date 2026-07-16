@@ -7,6 +7,60 @@ Commit history, newest first. Each entry: `## YYYY-MM-DD — title` + bullets of
 
 ---
 
+## 2026-07-16 (c) — Boss night: the goal, and the real stake (Roadmap #40, slice B)
+
+Second slice of the boss/shop/stakes patch. Locked design: **1a** full wipe on a loss, **2a** a real fight
+where bought stats are the lever, **3a** telegraphed a day ahead. Full spec in `BOSS_SHOP_SPEC.md`.
+
+### A separate system from Brandon, on purpose
+Brandon (the random daytime pistol scuffle) already existed and is heavily tested — his loss just ends the
+day (rating hit, no wipe), which is right for a mid-service random event but wrong for the new high-stakes
+boss. Rather than bend his 30+ pinned tests to a second meaning, **boss night is entirely new and additive**:
+new `phase="bossnight"`, a new `bossFight` state object, new functions throughout. Brandon's own code is
+byte-for-byte unchanged — a test now pins his flat `-1` strike and his exact starting HP to prove it.
+
+### The loop
+    results (day D) --> OFFICE shows "⚔ CHALLENGER TOMORROW" if one's queued
+         |                                     (a whole shopping day to buy stats)
+         v
+    day D+1 plays out --> at CLOSE, the queued boss fires (ahead of the normal brawl roll)
+         |
+         +-- WIN  --> big coin reward, bossesBeaten++, back to service/night
+         +-- LOSE --> phase="gameover" --> tap --> FULL WIPE (bank/week/stats/upgrades, everything)
+
+`finishDay()` rolls for the next telegraph (`BOSS_NIGHT_CHANCE=0.25`, cooldown >=2 days since the last one
+resolved so they never stack). The **existing generic** `gameover -> startCampaign()` tap (already used for
+eviction) is what delivers the wipe — no new reset code, just a new reason to hit it. `drawGameOver()` now
+tells a boss loss ("WIPED OUT") apart from an eviction, reading `run.bossWipe`.
+
+### Vince "The Landlord" — the first roster boss
+A charger with two distinct recurrent attacks (a `BOSSES[]` table, easy to extend — the next one drops in
+with zero new plumbing):
+- **Charge** — telegraphed windup, then a lunge along her position at the moment of the windup; connects =
+  damage. The strike window (his exposed "recover" beat) is the same rhythm as Brandon's reload.
+- **Ground pound** (every 3rd cycle) — a growing danger ring at his feet; still standing in it when it
+  lands costs more than the charge. Two attacks, so the pattern doesn't read as one move on a timer.
+
+Procedural rendering only (a body, a telegraph ring, a danger circle) — no new art, matching the game's own
+practice for the phone/LIVE-badge/red-X/robber layer.
+
+### Stats are the lever (2a), wired for real
+`chefMaxHP()` sets boss-night chef HP (Iron Gut matters here too), `guardMult()` cuts every hit Vince lands,
+`punchDmg()` (Heavy Hands) scales every strike back. All three are now proven with a **before/after damage
+comparison**, not just "the multiplier exists" — a test fights the same opening frame at two stat levels and
+asserts the damage actually moved.
+
+### Tests
++16 checks (**806 total**): Brandon's untouched, the roster resolves, the telegraph fires at close and
+clears itself, boss-night HP starts at the stat-scaled max, a win pays the reward and returns to service, a
+loss reaches gameover with the boss's name recorded, tapping it is a **provable full wipe** (bank, week,
+stats, upgrades, bossesBeaten all reset), both of Vince's attacks damage on contact, and guard/power visibly
+move the numbers in a real exchange.
+
+### Next (slice C)
+Balance pass — every number here (`BOSS_NIGHT_CHANCE`, Vince's HP/damage, the stat costs, the reward) is a
+flagged first guess. Needs her hands on the Retroid to tune the actual feel and pacing.
+
 ## 2026-07-16 (b) — Stats + a real shop: the grind gets a point (Roadmap #40, slice A)
 
 "There's not enough goal." First slice of the boss/shop/stakes patch (full design in **BOSS_SHOP_SPEC.md**,
