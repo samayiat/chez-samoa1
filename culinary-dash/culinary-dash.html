@@ -4866,7 +4866,7 @@ function drawOffice(){
     X.fillText("next rent (Mon): $"+rentFor(run.week+1), W/2, oy-16); X.textAlign="left"; }
   if(run.bossTomorrow){ const bd=BOSSES.find(b=>b.id===run.bossTomorrow);
     X.textAlign="center"; X.font="7px monospace"; X.fillStyle="#e8433a";
-    X.fillText("\u2694 CHALLENGER TOMORROW: "+(bd?bd.name.toUpperCase():"???")+" \u2014 get ready", W/2, oy-24);
+    X.fillText("\u2694 TOMORROW: "+(bd?bd.name.toUpperCase():"???")+" \u2014 "+(bd?bd.tagline:"get ready"), W/2, oy-24);
     X.textAlign="left"; }
   X.fillStyle=(Math.floor(performance.now()/450)%2)?"#8be27a":"#3f6a36"; X.fillRect(officeOpenRect.x,officeOpenRect.y,officeOpenRect.w,officeOpenRect.h);
   X.fillStyle="#0e0b14"; X.font="8px monospace"; X.textAlign="center"; X.fillText("OPEN "+ndName+" \u25b8", W/2, oy+1); X.textAlign="left";
