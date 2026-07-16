@@ -807,6 +807,14 @@ function updateParticles(dt){
 }
 function drawParticles(){ for(const p of particles){ X.globalAlpha=Math.max(0,Math.min(1,p.life/p.max)); X.fillStyle=p.col;
   const s=p.size; X.fillRect(Math.round(p.x-s/2),Math.round(p.y-s/2),s,s); } X.globalAlpha=1; }
+// Boss-night devastating hits get their own palette: rising embers + slower smoke, both just burst() with
+// NEGATIVE gravity (the existing integrator's p.vy+=p.grav*dt already makes that accelerate upward — no
+// new particle machinery, so this inherits PARTICLE_MAX's cap for free).
+const EMBER_COLS_DEFAULT=["#ff6a2e","#ffb43c","#ff2e2e"], SMOKE_COLS=["#2a2626","#3a3a3a"];
+function emberBurst(x,y,cols){
+  burst(x,y,16,cols||EMBER_COLS_DEFAULT,{sp:36,up:26,life:0.85,size:1,grav:-18,spread:6.3});
+  burst(x,y,7,SMOKE_COLS,{sp:16,up:40,life:1.2,size:2,grav:-6,spread:6.3});
+}
 function addShake(a){ shake=Math.min(SHAKE_MAX, shake+a); }
 /* ================= impact: one weight, every channel =================
    Every fight feedback (shake, hitstop, camera kick, sound, sparks) is derived from ONE ranked
@@ -821,6 +829,8 @@ const HIT = {
   heavy:   0.85,   // the special connects — 3x the damage, so it must outrank a jab on every channel
   hurt:    0.75,   // they connect on you
   stumble: 1.20,   // a big red lands one — the worst thing that happens to you
+  devastating: 1.45,   // boss Stage-3 signature attacks ONLY. Above stumble, below HIT_MAX(1.6) — stays
+                       // inside the already-verified camera-safety headroom instead of a separate uncapped path.
 };
 const HIT_KO=0.50;        // putting them down, ON TOP of whatever landed it (so a special KO > a jab KO)
 const HIT_BODY=0.16;      // each EXTRA body the same swing clips — sub-linear on purpose:
@@ -929,6 +939,23 @@ function camMatrix(shk, kx, ky, leanX, leanY, sx, sy){
 /* NB: `flashes` / flash() already exist and are the floating TEXT pops ("K.O.!", "+$5"). Unrelated. */
 const IFLASH_LIFE=0.085, IFLASH_MAX=12;
 let iflashes=[];
+// A big hit's expanding shockwave ring — same bounded-array shape as iflashes, own small cap since
+// only boss-night ever pushes to it (Brandon/the brawl never call pushRing, so it's inert elsewhere).
+const RING_MAX=8;
+let rings=[];
+function pushRing(x,y,r0,r1,life,col){
+  rings.push({x,y,r0,r1,t:life,max:life,col});
+  if(rings.length>RING_MAX) rings.splice(0, rings.length-RING_MAX);
+}
+function updateRings(dt){ for(const r of rings) r.t-=dt; rings=rings.filter(r=>r.t>0); }
+function drawRings(){
+  for(const r of rings){
+    const k=1-Math.max(0,r.t)/r.max, rad=r.r0+(r.r1-r.r0)*k;
+    X.globalAlpha=Math.max(0,1-k); X.strokeStyle=r.col; X.lineWidth=2.5*(1-k*0.6);
+    X.beginPath(); X.arc(r.x,r.y,rad,0,7); X.stroke();
+  }
+  X.globalAlpha=1; X.lineWidth=1;
+}
 function drawImpactFlashes(){
   for(const f of iflashes){
     const k=Math.max(0,f.t/IFLASH_LIFE), r=(2.5+f.w*5.5)*(0.55+k*0.45);
@@ -1017,6 +1044,17 @@ function impact(w,dx,dy,x,y){
     burst(x, y, Math.round(SPARK_PER_W*w*0.4), ["#ffffff","#ffd86b"],
           {sp:130+150*w, up:4, life:0.14+0.14*w, ang, spread:0.5, size:1, grav:10});   // fast leading shards
   }
+  return w;
+}
+// A big hit at the TOP of the impact spine: everything a normal blow does, at HIT.devastating weight, plus
+// an ember burst + an expanding shockwave ring + a screen-punch trigger (see drawDrunkWarp's generalization).
+// Boss-night ONLY — Brandon and the brawl never call this; that's enforced by call sites, not by location.
+function bossBigHit(x,y,dx,dy,ringCol,emberCols){
+  const w = impact(HIT.devastating, dx, dy, x, y);
+  sfxHit(w, 0); sfx("smash");
+  emberBurst(x, y, emberCols);
+  pushRing(x, y, 4, 46, 0.5, ringCol || "#ff6a2e");
+  triggerScreenPunch(w);
   return w;
 }
 // The held frame. Pure-ish + separate from the loop so it's testable (the loop itself never runs headless).
@@ -1669,6 +1707,7 @@ function bossNightLose(){
   flash(W/2,54, bossFight.def.name.toUpperCase()+" WRECKS THE PLACE","#c8452e"); sfx("burnt"); addShake(4);
 }
 function endBossNight(){
+  screenPunchT=0; screenPunchAmp=0;   // never bleed a devastating-hit warp into whatever comes next
   const B=bossFight;
   if(B.outcome==="win"){
     run.bossesBeaten=(run.bossesBeaten||0)+1;
@@ -2023,7 +2062,8 @@ function updateBossNight(dt){
   if(B.hurtFlash>0) B.hurtFlash-=dt;
   for(const f of flashes){ f.t-=dt; f.y-=14*dt; } flashes=flashes.filter(f=>f.t>0);
   for(const f of iflashes) f.t-=dt; iflashes=iflashes.filter(f=>f.t>0);
-  updateParticles(dt); if(shake>0) shake=Math.max(0, shake-dt*SHAKE_DECAY);
+  updateParticles(dt); updateRings(dt); if(shake>0) shake=Math.max(0, shake-dt*SHAKE_DECAY);
+  if(screenPunchT>0) screenPunchT=Math.max(0, screenPunchT-dt);
   if(B.outcome){ B.endT-=dt; if(B.endT<=0) endBossNight(); return; }
   if(B.chefHP<=0){ bossNightLose(); return; }   // defensive: a loss must fire even if HP hits 0 during the intro
   if(B.introT>0){ B.introT=Math.max(0,B.introT-dt); return; }   // cinematic hold: no movement, no attacks
@@ -2110,7 +2150,7 @@ function drawBossNight(){
   }});
   plantItems(items); catItem(items);
   items.sort((a,b)=>a.y-b.y).forEach(it=>it.f());
-  drawParticles(); drawImpactFlashes();
+  drawRings(); drawParticles(); drawImpactFlashes();
   for(const f of flashes){ X.globalAlpha=Math.max(0,f.t); X.fillStyle=f.col; X.font="8px monospace";
     X.textAlign="center"; X.fillText(f.txt,f.x,f.y); X.textAlign="left"; X.globalAlpha=1; }
 }
@@ -5239,10 +5279,24 @@ function inPause(L){ return Math.abs(L.x-PAUSE_BTN.x)<=PAUSE_BTN.hw && L.y<=13; 
    able to read her own health while the room is swimming. */
 const WARP_STRIP=4, WARP_AMP=7.0, WARP_SPEED=1.7, WARP_FREQ=0.55;
 let WARP_CV=null, WARP_X=null;
-function warpAmpPx(){ return WARP_AMP*wastedAmt(); }
+// A devastating boss hit gets a SHORT, INTENSE version of the same warp — distinct from the slow drunk
+// wobble (short life, eased-out-cubic decay so it reads as a punch, not nausea). Composition is MAX, never
+// SUM, so the two sources can never stack into something runaway.
+const SCREEN_PUNCH_LIFE=0.28, SCREEN_PUNCH_PER_W=9.0;
+let screenPunchT=0, screenPunchAmp=0;
+function triggerScreenPunch(w){
+  screenPunchAmp = Math.max(screenPunchAmp, w*SCREEN_PUNCH_PER_W);   // re-trigger overrides, never stacks
+  screenPunchT = SCREEN_PUNCH_LIFE;
+}
+function screenPunchAmpPx(){
+  if(screenPunchT<=0) return 0;
+  const k = screenPunchT/SCREEN_PUNCH_LIFE;
+  return screenPunchAmp * k*k;    // snaps in, decays fast
+}
+function warpAmpPx(){ return Math.max(WARP_AMP*wastedAmt(), screenPunchAmpPx()); }
 function warpOffset(strip,t){ return Math.sin(t*WARP_SPEED + strip*WARP_FREQ)*warpAmpPx(); }
 function drawDrunkWarp(){
-  const a=wastedAmt(); if(a<=0) return;
+  if(warpAmpPx()<=0) return;
   try{
     const w=CV.width, h=CV.height; if(!w||!h) return;
     if(!WARP_CV || WARP_CV.width!==w || WARP_CV.height!==h){
@@ -5568,7 +5622,7 @@ function loop(now){
   else draw();
   // drunk vision: warps the WORLD only, and only while wasted. Must land after the world and before
   // the HUD — she has to be able to read her own health while the room is swimming.
-  if(phase==="brawl") drawDrunkWarp();
+  if(phase==="brawl"||phase==="bossnight") drawDrunkWarp();
   // UI + overlays (steady)
   X.setTransform(SS,0,0,SS,0,0);
   if(phase==="brawl") drawBrawlHUD();

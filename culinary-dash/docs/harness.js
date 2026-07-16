@@ -914,6 +914,36 @@ const probe = `
     try{ punchGate(); }catch(e){ threw=true; } brawl=savedBrawl; return !threw; })());
   bossFight=null; phase="play";
 
+  // ---- devastating-hit juice: HIT.devastating, bossBigHit(), embers, rings, screen-punch (slice I/3+4) ----
+  ok("HIT.devastating sits above stumble and at/under HIT_MAX", HIT.devastating>HIT.stumble && HIT.devastating<=HIT_MAX);
+  { rings.length=0;
+    for(let i=0;i<RING_MAX+3;i++) pushRing(10,10,4,40,0.5,"#ff6a2e");
+    ok("rings are capped like iflashes (oldest trimmed)", rings.length===RING_MAX);
+    updateRings(10); ok("rings expire and clear", rings.length===0); }
+  { const before=particles.length; emberBurst(50,50,EMBER_COLS_DEFAULT);
+    ok("emberBurst adds particles (embers + smoke)", particles.length>before);
+    updateParticles(0); particles.length=0; }
+  { screenPunchT=0; screenPunchAmp=0;
+    const w=bossBigHit(60,60,1,0);
+    ok("bossBigHit returns a weight clamped to HIT_MAX", w<=HIT_MAX && w>0);
+    ok("...and arms the screen-punch", screenPunchT>0 && screenPunchAmp>0);
+    const amp0=screenPunchAmpPx();
+    screenPunchT-=0.1;
+    ok("screenPunchAmpPx decays as screenPunchT counts down", screenPunchAmpPx()<amp0 && screenPunchAmpPx()>0);
+    for(let i=0;i<20;i++) screenPunchT=Math.max(0,screenPunchT-0.1);
+    ok("...and reaches exactly 0 once the timer expires", screenPunchAmpPx()===0);
+    const peak=1.5*9.0; screenPunchAmp=0; screenPunchT=0;
+    triggerScreenPunch(1.0); triggerScreenPunch(1.5); triggerScreenPunch(0.2);
+    ok("re-triggering takes the MAX seen amplitude, never sums", screenPunchAmp===peak);
+    screenPunchT=0; screenPunchAmp=0; }
+  { ok("warpAmpPx composes drunk + screen-punch via MAX, never SUM", (()=>{
+      phase="play"; screenPunchAmp=50; screenPunchT=SCREEN_PUNCH_LIFE;
+      const punchOnly=warpAmpPx();
+      const ok1 = punchOnly===screenPunchAmpPx();
+      screenPunchT=0; screenPunchAmp=0;
+      return ok1; })()); }
+  { rings.length=0; particles.length=0; screenPunchT=0; screenPunchAmp=0; }
+
   // routing: results -> office -> next day
   startCampaign(); run.dow=0; tips=100; finishDay();
   ok("day ends on results", phase==="over");

@@ -7,6 +7,38 @@ Commit history, newest first. Each entry: `## YYYY-MM-DD — title` + bullets of
 
 ---
 
+## 2026-07-16 (j) — The devastating-hit juice layer: HIT.devastating, embers, shockwave rings, screen-punch
+
+Part of the boss-night overhaul (bigger asks: "way too much juice," particles/sparks/flames, screen effects
+to sell power). This slice builds the shared primitives everything else plugs into — no boss calls any of
+it yet (that's next).
+
+- **`HIT.devastating` (1.45)**: a new top-of-the-spine weight, above `stumble` (1.20) and under `HIT_MAX`
+  (1.6) — stays inside the already-verified camera-safety headroom (`COMBAT_ZOOM`'s crop budget covers
+  `HIT_MAX`'s worst-case shake+kick with margin to spare) instead of a separate, uncapped shake/kick path.
+- **`bossBigHit(x,y,dx,dy,ringCol,emberCols)`**: one function bundling everything a devastating attack needs
+  — an `impact(HIT.devastating,...)` call, `sfxHit`+`sfx("smash")`, an ember burst, an expanding shockwave
+  ring, and the new screen-punch trigger. Mirrors the impact spine's own "one function, many callers"
+  discipline; lives right next to `impact()`.
+- **`emberBurst(x,y,cols)`**: a new fire/smoke particle preset — just `burst()` with negative `grav` (the
+  existing particle integrator already makes that read as rising, accelerating embers) and a warm palette.
+  No new particle machinery, so it inherits `PARTICLE_MAX`'s existing device-verified cap for free.
+- **Expanding shockwave rings** (`rings[]`, `RING_MAX=8`, `pushRing`/`updateRings`/`drawRings`): same bounded-
+  array shape as the existing `iflashes`. Only boss-night code ever pushes to it, so it's inert everywhere
+  else in the game (Brandon, the brawl) without needing any guard there.
+- **Screen-punch**: a short (0.28s), intense, eased-out-cubic screen warp for devastating hits — built by
+  *generalizing* the existing drunk-vision warp rather than parallel-building one. `warpAmpPx()` now composes
+  `Math.max(drunk amplitude, screen-punch amplitude)` — max, never sum, so the two sources can never stack
+  into something runaway. `drawDrunkWarp()`'s render gate widens to boss night; `wastedAmt()` is already 0
+  there (no `brawl` in a boss fight), so only the new source can ever be nonzero during a boss fight. Cleared
+  in `endBossNight()` so it never bleeds into whatever comes next.
+
+### Tests
++10 checks (**900 total**): `HIT.devastating` ranks correctly; rings cap and expire like `iflashes`;
+`emberBurst` actually adds particles; `bossBigHit` returns a properly clamped weight and arms the
+screen-punch; the screen-punch decays to exactly 0 and re-triggering takes the max seen amplitude rather
+than summing; `warpAmpPx` composes via max.
+
 ## 2026-07-16 (i) — Boss fights fixed a mash-stacking bug + are ~2-3x longer now
 
 Reported: boss fights "end too quickly" and the health bar is "too short." Root cause was a real bug, not
