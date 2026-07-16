@@ -1,0 +1,264 @@
+#!/usr/bin/env python3
+"""ingest — pack FINISHED PixelLab assets into the game's art blob format.
+
+Generation is MCP-only (Addendum 01) — this tool does NOT generate. It downloads
+already-finished assets from the CDN by id and packs them into art/<name>.b64,
+inlined at build time into `const CHARS={...}` / object tables. Get ids from the
+MCP tools (create_character / get_character / select_object_frames).
+
+Direction map (PixelLab -> game DMAP, src line 1096):
+  south->front   east->right   north->back   west->left
+Game frame keys: customers idle/w1/w2, chef idle/A/B (see drawChar, src ~1098).
+
+  ingest char <id> <name> [--dirs 4|8] [--max N] [--snap] [--out PATH]   # rotations -> {front,back,left,right}:"datauri"
+  ingest obj  <id> <name> [--max N] [--snap] [--out PATH]         # 1-frame object (ingredient/dish/prop) -> "datauri"
+  ingest urls <name> <key=url> [...] [--max N] [--snap] [--out PATH]   # explicit key->url (animations/custom)
+  ingest combo <name> <manifest.json> [--max N] [--snap] [--out PATH]  # multi-move fighter animation -> {move:{dir:[frames]}}
+    manifest.json: {"jab":{"south":["url0","url1",...],"east":[...],"north":[...]}, "cross":{...}, ...}
+    dir keys are pixellab dirs (south/east/north), mapped through DIRMAP same as `char`.
+
+Only 4 cardinal dirs are packed for characters (the game is 4-dir; west is a real
+key here, not mirrored). Writes art/<name>.b64 by default (or --out / stdout with -).
+"""
+import os, sys, ssl, base64, urllib.request, urllib.error
+
+PROJECT = os.environ.get("PIXELLAB_PROJECT", "d54cfff1-4f62-4b10-bf5f-c04ee40e807c")
+CDN = "https://backblaze.pixellab.ai/file/pixellab-characters"
+DIRMAP = {"south": "front", "east": "right", "north": "back", "west": "left"}
+CARDINAL = ["south", "east", "north", "west"]
+
+
+def ssl_ctx():
+    ctx = ssl.create_default_context()
+    if not ctx.get_ca_certs():
+        for p in (os.environ.get("SSL_CERT_FILE"), "/etc/ssl/cert.pem",
+                  "/usr/local/etc/openssl/cert.pem"):
+            if p and os.path.exists(p):
+                ctx.load_verify_locations(p); break
+    return ctx
+
+
+def fetch(url):
+    # CDN 403s the default urllib UA; a browser UA is fine.
+    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+    try:
+        with urllib.request.urlopen(req, timeout=120, context=ssl_ctx()) as r:
+            return r.read()
+    except urllib.error.HTTPError as e:
+        sys.exit("HTTP %s fetching %s" % (e.code, url))
+
+
+def datauri(png):
+    if png[:8] != b"\x89PNG\r\n\x1a\n":
+        sys.exit("not a PNG (got %r) — wrong id/url?" % png[:8])
+    return "data:image/png;base64," + base64.b64encode(png).decode()
+
+
+def write(name, body, argv):
+    out = argv[argv.index("--out") + 1] if "--out" in argv else f"art/{name}.b64"
+    if out == "-":
+        sys.stdout.write(body)
+    else:
+        os.makedirs(os.path.dirname(out) or ".", exist_ok=True)
+        open(out, "w").write(body)
+        print("wrote %s (%d chars)" % (out, len(body)))
+
+
+def cmd_char(argv):
+    if len(argv) < 2:
+        sys.exit("usage: ingest char <id> <name> [--dirs 4] [--out PATH]")
+    cid, name = argv[0], argv[1]
+    parts = []
+    for d in CARDINAL:
+        uri = _pack(fetch(f"{CDN}/{PROJECT}/{cid}/rotations/{d}.png"), argv)
+        parts.append('%s:%s' % (DIRMAP[d], _q(uri)))
+    write(name, "%s:{%s},\n" % (name, ",".join(parts)), argv)
+
+
+def cmd_obj(argv):
+    if len(argv) < 2:
+        sys.exit("usage: ingest obj <id> <name> [--out PATH]")
+    oid, name = argv[0], argv[1]
+    # completed 1-dir objects expose a single rotation keyed "unknown"
+    uri = _pack(fetch(f"{CDN}/objects/{PROJECT}/{oid}/rotations/unknown.png"), argv)
+    write(name, "%s:%s,\n" % (name, _q(uri)), argv)
+
+
+def cmd_urls(argv):
+    if len(argv) < 2:
+        sys.exit("usage: ingest urls <name> <key=url> ...")
+    name = argv[0]
+    pairs = [a for a in argv[1:] if "=" in a and not a.startswith("--")]
+    parts = []
+    for p in pairs:
+        k, url = p.split("=", 1)
+        parts.append('%s:%s' % (k, _q(_pack(fetch(url), argv))))
+    write(name, "%s:{%s},\n" % (name, ",".join(parts)), argv)
+
+
+def cmd_combo(argv):
+    import json
+    if len(argv) < 2:
+        sys.exit("usage: ingest combo <name> <manifest.json> [--out PATH]")
+    name, manifest_path = argv[0], argv[1]
+    manifest = json.load(open(manifest_path))
+    moves = []
+    for move, dirs in manifest.items():
+        dparts = []
+        for d, urls in dirs.items():
+            key = DIRMAP.get(d, d)
+            frames = [_q(_pack(fetch(u), argv)) for u in urls]
+            dparts.append('%s:[%s]' % (key, ",".join(frames)))
+        moves.append('%s:{%s}' % (json.dumps(move), ",".join(dparts)))
+    write(name, "%s:{%s},\n" % (name, ",".join(moves)), argv)
+
+
+def _hue_shift(im, deg):
+    """Rotate every opaque pixel's hue by `deg`, keeping saturation and value.
+
+    Why this and not the game's tinted(): tinted() hardcodes globalAlpha=0.5, so it BLENDS halfway to
+    the target. Washing 50% blue over a red lobster lands on purple (measured: RGB 90,54,91), not blue.
+    A hue rotation moves the colour without touching the shading, so the sprite still reads as the same
+    object, lit the same way, in a different colour. Baked at ingest = no runtime cost and no tint cache.
+    """
+    import colorsys
+    out = im.copy()
+    px = out.load()
+    for y in range(out.height):
+        for x in range(out.width):
+            r, g, b, a = px[x, y]
+            if a < 8: continue
+            h, s, v = colorsys.rgb_to_hsv(r/255, g/255, b/255)
+            r2, g2, b2 = colorsys.hsv_to_rgb(((h*360 + deg) % 360)/360, s, v)
+            px[x, y] = (round(r2*255), round(g2*255), round(b2*255), a)
+    return out
+
+
+def _trim_scale(path, height, snap, hue=0):
+    """Trim to the opaque bbox, then downscale to an exact HEIGHT.
+
+    Two reasons this happens at INGEST and not at draw time:
+      1. §2 of HANDOFF_ASSET_WIRING: downscale before packing or the build bloats. A 92x92 master for a
+         9px cat is ~10x the bytes for none of the pixels.
+      2. The game flips imageSmoothingEnabled=true for detailed art (src ~1194), so letting the browser
+         do a 5:1 downscale would BLUR it. And the PixelLab masters carry 20-29px of transparent padding
+         below the feet which VARIES per direction — that's exactly what made the chef render at 12px and
+         bob as she walked (see CHANGELOG 2026-07-15a). Trimming to the opaque bbox kills both.
+
+    snap=True: resample smoothly, then force every pixel back to a colour that existed in the SOURCE.
+    A plain LANCZOS 5:1 turns a 7-colour cat into 70+ shades of grey; nearest drops thin features like
+    a white chin. Snap keeps the palette AND the coverage.
+    """
+    from PIL import Image
+    im = Image.open(path).convert("RGBA")
+    bb = im.split()[3].getbbox()
+    if bb: im = im.crop(bb)
+    if hue: im = _hue_shift(im, hue)
+    return _scale_im(im, height, snap)
+
+
+def _scale_im(im, height, snap):
+    """Downscale a trimmed RGBA image to an exact HEIGHT (aspect kept). snap forces every
+    pixel back to a source colour — see _trim_scale for why plain LANCZOS greys pixel art."""
+    from PIL import Image
+    if not height or height >= im.height:
+        return im
+    w = max(1, round(im.width * height / im.height))
+    sm = im.resize((w, height), Image.LANCZOS)
+    if not snap:
+        return sm
+    pal = [c for _, c in im.getcolors(1 << 24) if c[3] > 128]
+    out = Image.new("RGBA", (w, height), (0, 0, 0, 0))
+    for y in range(height):
+        for x in range(w):
+            r, g, b, a = sm.getpixel((x, y))
+            if a < 110: continue
+            out.putpixel((x, y), min(pal, key=lambda c: (c[0]-r)**2 + (c[1]-g)**2 + (c[2]-b)**2))
+    return out
+
+
+def _png_bytes(im):
+    import io
+    buf = io.BytesIO()
+    im.save(buf, format="PNG", optimize=True)
+    return buf.getvalue()
+
+
+def _maybe_scale(png, argv):
+    """--max N: trim to the opaque bbox and downscale so the LONGER side is <= N px, then
+    (optional) --snap back to the source palette. Without --max the bytes pass through
+    untouched, so every existing ingest stays byte-for-byte identical.
+
+    This is HANDOFF_ASSET_WIRING.md §2, the prerequisite for mass wiring: the character
+    masters are 88-136px but render ~20px in game (6-8x oversampled). Packing 16 cast +
+    16 shadow enemies + appliances at native size pushes the build past 6MB and breaks the
+    single self-contained HTML constraint. 2x the in-game size (chars 48 / customers 40 /
+    appliances 32 / props 24) is lossless at 320x180 and cuts filesize ~6-8x.
+    """
+    if "--max" not in argv:
+        return png
+    mx = int(argv[argv.index("--max") + 1])
+    snap = "--snap" in argv
+    import io
+    from PIL import Image
+    im = Image.open(io.BytesIO(png)).convert("RGBA")
+    bb = im.split()[3].getbbox()
+    if bb: im = im.crop(bb)
+    big = max(im.width, im.height)
+    if big > mx:
+        im = _scale_im(im, max(1, round(im.height * mx / big)), snap)
+    return _png_bytes(im)
+
+
+def _pack(png, argv):
+    """fetch bytes -> (optional) downscale -> data URI. One seam so every CDN mode honours --max."""
+    return datauri(_maybe_scale(png, argv))
+
+
+def cmd_local(argv):
+    """ingest local <n> <key=path> [...] [--height N] [--snap] [--out PATH]
+
+    Pack sprites already on disk (uploads, a previous session's downloads) rather than the CDN.
+    Nested keys allowed: `tux.right=path` -> {tux:{right:"datauri"}}.
+    """
+    name = argv[0]
+    height = int(argv[argv.index("--height") + 1]) if "--height" in argv else 0
+    snap = "--snap" in argv
+    hue = float(argv[argv.index("--hue") + 1]) if "--hue" in argv else 0   # per-key override: key@deg=path
+    tree = {}
+    for a in argv[1:]:
+        if "=" not in a or a.startswith("--"): continue
+        k, path = a.split("=", 1)
+        h = hue
+        if "@" in k: k, hs = k.split("@", 1); h = float(hs)   # tomato@0=..  rawlobster@205=..
+        im = _trim_scale(path, height, snap, h)
+        uri = "data:image/png;base64," + base64.b64encode(_png_bytes(im)).decode()
+        node = tree
+        parts = k.split(".")
+        for p in parts[:-1]: node = node.setdefault(p, {})
+        node[parts[-1]] = uri
+        sys.stderr.write("  %-14s %s -> %dx%d\n" % (k, os.path.basename(path), im.width, im.height))
+    def emit(d):
+        return "{%s}" % ",".join("%s:%s" % (k, emit(v) if isinstance(v, dict) else _q(v)) for k, v in d.items())
+    # NO trailing newline: a blob replaces a ONE-line marker, so any newline in it shifts every line
+    # after it and silently breaks every line ref in every doc. Existing blobs end with "," and contain
+    # zero newlines -- match them. (cmd_char's format string still emits one; it predates the check.)
+    body = ",".join("%s:%s" % (k, emit(v) if isinstance(v, dict) else _q(v)) for k, v in tree.items()) + ","
+    write(name, body, argv)
+
+
+def _q(s):
+    import json
+    return json.dumps(s)
+
+
+def main():
+    if len(sys.argv) < 2:
+        sys.exit(__doc__)
+    {"char": cmd_char, "obj": cmd_obj, "urls": cmd_urls, "combo": cmd_combo,
+     "local": cmd_local}.get(
+        sys.argv[1], lambda a: sys.exit(__doc__))(sys.argv[2:])
+
+
+if __name__ == "__main__":
+    main()
