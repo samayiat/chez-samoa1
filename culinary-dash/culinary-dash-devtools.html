@@ -1611,7 +1611,7 @@ let bossFight=null;              // {def, kind, hp, maxHP, chefHP, maxChefHP, x,
 const BOSS_NIGHT_CHANCE=0.25;    // ~1-in-4 nights, once the cooldown below clears — flagged for the balance pass
 const BOSSES=[
   { id:"vince", name:"Vince \u201cThe Landlord\u201d", tagline:"pay up, or else.", kind:"charger",
-    hp:26, windup:0.9, recover:1.6, reach:20, koChance:0.06, reward:5000, recLevel:6,
+    hp:60, windup:0.9, recover:1.6, reach:20, koChance:0.06, reward:5000, recLevel:6,
     // Six recurrent attacks (tripled from the original two): 5 on a deterministic rotation, plus GRAB —
     // a proximity punish that preempts whichever rotation slot was due if she's hugging him. EVERY one of
     // the six still resolves into "recover" — the strike window never goes away, only what precedes it varies.
@@ -1623,7 +1623,7 @@ const BOSSES=[
     stompTele:0.5, stompR:26, stompDmg:3,                               // 5. stomp: faster AOE centred on HIM now
     dchargeTime:0.4, dchargeSpeed:230, dchargeDmg:3 },                  // 6. dcharge: a two-hit charge combo
   { id:"inspector", name:"The Health Inspector", tagline:"this kitchen is CONDEMNED.", kind:"zoner",
-    hp:22, windup:0.8, recover:1.5, reach:20, koChance:0.05, reward:6500, recLevel:9,
+    hp:50, windup:0.8, recover:1.5, reach:20, koChance:0.05, reward:6500, recLevel:9,
     // A ranged "zoner" — the counterpoint to Vince's melee charger. Four distinct attacks, none of them
     // a lunge: a positional trap, a multi-point AOE, a projectile fan, and pressure from roaming adds.
     // Every one still resolves into "recover" — same guarantee as Vince's six.
@@ -1633,7 +1633,7 @@ const BOSSES=[
     spreadCount:3, spreadSpeed:200, spreadR:9, spreadDmg:2, spreadFan:0.5, // 3. spread: a fan of projectiles, not one straight line
     addHP:1, addSpeed:26, addDmg:1, addLife:6, addCount:2, addR:8 },    // 4. summon: roaming pressure, doesn't gate the strike window
   { id:"ringer", name:"Chef Bruno \u201cThe Ringer\u201d", tagline:"you're not the only one who can throw hands.", kind:"trickster",
-    hp:24, windup:0.7, recover:1.4, reach:20, koChance:0.05, reward:8000, recLevel:12,
+    hp:55, windup:0.7, recover:1.4, reach:20, koChance:0.05, reward:8000, recLevel:12,
     // A trickster \u2014 the counterpoint to Vince (positioning) and the Inspector (zone-awareness): this one
     // tests TIMING. feint and jab share the exact same telegraph so she can't tell them apart on sight;
     // combo has a deliberate gap before its 2nd hit; counter is a SUSTAINED stance, not an instant punish.
@@ -1652,7 +1652,8 @@ function startBossNight(id){
   phase="bossnight";
   bossFight = { def, kind:def.kind, hp:def.hp, maxHP:def.hp, chefHP:chefMaxHP(), maxChefHP:chefMaxHP(),
     x:262, y:78, state:"windup", t:def.windup, cycle:0, hurtFlash:0, outcome:null, endT:0, introT:BOSS_INTRO_TIME,
-    punchT:0, punchDur:0, move:null, comboStep:0, comboT:0, bufT:0 };   // same swing/combo feel as the brawl (reused, not reinvented)
+    punchT:0, punchDur:0, move:null, comboStep:0, comboT:0, bufT:0,   // same swing/combo feel as the brawl (reused, not reinvented)
+    struck:false, prevState:"windup" };   // one clean hit per recover exposure — mashing can't stack damage in one window
   customers=[]; chef.carry=null; chef.x=120; chef.y=120; chef.dir="up";
   flash(W/2,44,def.name.toUpperCase(),"#c8452e"); flash(W/2,58,def.tagline,"#e88a7a");
   sfx("burnt"); addShake(3.4);
@@ -1812,9 +1813,13 @@ function updateVince(dt){
   }
 }
 function vinceStrike(){
-  const B=bossFight; if(!B || B.state!=="recover" || B.outcome) return;
+  // One clean hit per recover window (B.struck) — mashing the strike button used to be able to land
+  // 5+ full-damage hits in a single ~1.5s exposure, killing a boss in a handful of exposures. Now it's
+  // the real boss-fight rhythm: wait for the opening, land ONE hit, wait for the next one.
+  const B=bossFight; if(!B || B.state!=="recover" || B.outcome || B.struck) return;
   if(Math.hypot(chef.x-B.x, chef.y-B.y) < B.def.reach){
     const bs = B.x<chef.x ? -1 : 1;
+    B.struck = true;
     if(Math.random()<B.def.koChance){ B.hp=0; flash(B.x,B.y-26,"KNOCKED OUT!","#ffd86b");
       sfxHit(impact(HIT.jab+HIT_KO, bs, 0, B.x, B.y-12), 0); sfx("ko"); bossNightWin(); return; }
     B.hp=Math.max(0,B.hp-punchDmg()); B.hurtFlash=0.2; flash(B.x,B.y-22,"-1","#ffd86b");
@@ -2025,6 +2030,8 @@ function updateBossNight(dt){
   if(B.punchT>0) B.punchT-=dt;
   if(B.bufT>0){ B.bufT-=dt; if(B.punchT<=punchGate()) bossNightSwing(); }   // a press mid-swing isn't lost
   if(B.comboT>0) B.comboT-=dt;                                             // walk away and the combo resets to the jab
+  if(B.state==="recover" && B.prevState!=="recover") B.struck=false;         // a fresh exposure: one clean hit
+  B.prevState = B.state;
   if(B.kind==="charger") updateVince(dt);
   else if(B.kind==="zoner") updateInspector(dt);
   else if(B.kind==="trickster") updateRinger(dt);

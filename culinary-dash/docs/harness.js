@@ -897,6 +897,18 @@ const probe = `
   bossFight.state="recover"; bossFight.punchT=0; bossFight.bufT=0;
   { const hp0=bossFight.hp; bossNightStrike();
     ok("swinging DURING recover, in reach, still damages the boss exactly as before", bossFight.hp<hp0 || bossFight.hp===0); }
+
+  // ---- one clean hit per recover exposure (Roadmap #40, slice I): mashing used to be able to land
+  // 5+ full-damage hits in a single recover window; now only the FIRST tap in a fresh exposure connects. ----
+  { const hp0=bossFight.hp; bossNightStrike();
+    ok("a second strike in the SAME recover window doesn't chip again (the mash-stacking bug is fixed)",
+       bossFight.hp===hp0); }
+  bossFight.prevState="windup"; bossFight.state="windup"; updateBossNight(1/600);   // leave recover...
+  bossFight.state="recover"; updateBossNight(1/600);                                // ...and re-enter it: fresh exposure
+  { const hp1=bossFight.hp; bossFight.punchT=0; bossFight.bufT=0; bossNightStrike();
+    ok("cycling OUT of and back INTO recover resets the cap — the next exposure can land a hit again",
+       bossFight.hp<hp1 || bossFight.hp===0); }
+
   ok("punchGate() is null-safe outside a brawl (used to throw reading brawl.buffT)", (()=>{
     const savedBrawl=brawl; brawl=null; let threw=false;
     try{ punchGate(); }catch(e){ threw=true; } brawl=savedBrawl; return !threw; })());

@@ -7,6 +7,25 @@ Commit history, newest first. Each entry: `## YYYY-MM-DD — title` + bullets of
 
 ---
 
+## 2026-07-16 (i) — Boss fights fixed a mash-stacking bug + are ~2-3x longer now
+
+Reported: boss fights "end too quickly" and the health bar is "too short." Root cause was a real bug, not
+just low HP: `vinceStrike()` had no rate limit beyond `state==="recover"`, so mashing the strike button
+during one ~1.5s exposure could land 5+ full-damage hits instead of one. Fixed with a one-clean-hit-per-
+exposure cap (`bossFight.struck`, reset by a single generic check in `updateBossNight` whenever `state`
+freshly transitions into `"recover"` — no per-boss state-machine edits needed). Boss HP retuned upward
+(Vince 26→60, Inspector 22→50, Ringer 24→55) now that the cap makes HP mean what it looks like it means —
+targets ~2-3 minutes at typical stats, with maxed stats still meaningfully faster (2a preserved).
+
+**Flagged, not fixed here:** longer fights mean more scripted attack cycles the player is exposed to, which
+raises incoming-damage risk, not just fight length — needs a hands-on playtest pass on `chefMaxHP()`/
+`guardMult()`/per-attack damage before calling pacing done. First slice of a larger boss-night overhaul
+(HP-gated attack stages + much heavier juice + wordless telegraphs coming next).
+
+### Tests
++2 checks (**890 total**): a second strike inside one recover window no longer chips the boss again;
+cycling out of and back into recover resets the cap so the next exposure can land a hit.
+
 ## 2026-07-16 (h) — Boss-night punches actually animate + combo now
 
 Reported: "punch animations and combos not working in boss fights." True since boss night was first built —
