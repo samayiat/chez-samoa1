@@ -1338,7 +1338,7 @@ for(const id in CHARS){ CHAR_IMG[id]={}; for(const d in CHARS[id]){
 /* chefF reverted to the original procedural sprite */
 const CUST_SCALE=0.30, CHEF_SCALE=0.29;    // sheet px -> game px. CHEF_SCALE targets ~30px of CHARACTER.
 const CUST_SPR_SCALE=0.55;                 // pixellab patrons render ~18px tall
-const SPRITE_CHANCE=0.22;                  // most patrons keep the classic procedural look; these show up now & then
+const SPRITE_CHANCE=1;                     // every patron uses a real cast sprite — no procedural customers
 const SCUFFLE_HP=2, SCUFFLE_TIMEOUT=11, SCUFFLE_CHANCE=0.6, SCUFFLE_MAX=3;   // P4: daytime bad-order scuffle
 let CUST_SPR=[];
 /*__ART__ 0812_CUST_SPR_SRC*/

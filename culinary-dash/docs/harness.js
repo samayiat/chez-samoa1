@@ -1272,7 +1272,7 @@ const probe = `
   startCampaign(); customers=[{x:100,y:120,type:0,spr:0,state:"eating",order:{dish:"salad"},hearts:3,bob:0,dir:"front"},
                               {x:140,y:120,type:4,spr:null,state:"waiting",order:{kind:"good",dish:"lobster"},hearts:2,bob:1,dir:"left"}]; uiLab=null;
   smoke("day", ()=>{ draw(); drawUI(); });
-  ok("only the 6 kept patrons are embedded", CUST_SPR.length===6);
+  ok("the full customer cast is embedded (6 original + 13 cast)", CUST_SPR.length===19);
   ok("a sprite patron resolves a frame", !!custSprite(customers[0]));
   ok("a classic patron uses no sprite", custSprite(customers[1])===null);
   startCampaign(); customers=[]; brawl=null; night=null; startBoss();
