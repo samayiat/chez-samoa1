@@ -3592,7 +3592,15 @@ function danceTarget(N){                          // how packed the floor "wants
 // DANCE_CAST: reused customer-cast ids (see docs/tools/ingest) with a "dancing" frame set. Filled in once
 // that art is ingested; empty until then, so spawnDancer/drawDancer fall back to the procedural raver —
 // same non-regressive pattern as the floor/wall textures (TILE_TEX et al).
-const DANCE_CAST=[];
+const DANCE_ART={
+/*__ART__ dance_cast*/
+};
+// dedicated dance-only keys (dtiana..dmonty) -> south-facing dancing frames as Images, hung under
+// CHAR_IMG[key].front.dance so danceFrames() finds them. These keys are NOT drawChar customer ids, so
+// there's zero interference with the seated cast — a dancer just picks one at random (spawnDancer).
+for(const id in DANCE_ART){ if(!CHAR_IMG[id]) CHAR_IMG[id]={};
+  CHAR_IMG[id].front={dance:DANCE_ART[id].map(u=>{ const im=new Image(); im.src=u; return im; })}; }
+const DANCE_CAST=Object.keys(DANCE_ART);   // empty until art is ingested -> procedural raver; filled = real dancers
 function spawnDancer(){
   const Z=DANCE_ZONE;
   night.dancers.push({
@@ -4519,6 +4527,17 @@ let FLOOR_CV=null;
 // texture falls back to the original procedural bake, so the room renders identically until real art is
 // assigned to TILE_TEX / WOOD_TEX / WALL_TEX (Image objects, from art/*.b64 data URIs).
 let TILE_TEX=null, WOOD_TEX=null, WALL_TEX=null;
+// generated floor/wall swatches (seamless all-upper Wang tile per surface) -> Images. buildFloor bakes
+// FLOOR_CV once, lazily; a data-URI decodes async, so onload nulls FLOOR_CV to force a re-bake WITH the
+// texture. Missing keys stay null -> the procedural bake (non-regressive). tile=kitchen ceramic, wood=
+// dining hardwood, wall=nightclub brick.
+const FLOOR_ART={
+/*__ART__ floor_tex*/
+};
+{ const mk=uri=>{ const im=new Image(); im.onload=()=>{ FLOOR_CV=null; }; im.src=uri; return im; };
+  if(FLOOR_ART.tile) TILE_TEX=mk(FLOOR_ART.tile);
+  if(FLOOR_ART.wood) WOOD_TEX=mk(FLOOR_ART.wood);
+  if(FLOOR_ART.wall) WALL_TEX=mk(FLOOR_ART.wall); }
 function texReady(im){ return im && im.complete && im.naturalWidth>0; }
 function tileInto(g,im,x0,y0,x1,y1){ const w=im.naturalWidth, h=im.naturalHeight;   // repeat a swatch across a zone
   for(let yy=y0; yy<y1; yy+=h) for(let xx=x0; xx<x1; xx+=w) g.drawImage(im, Math.round(xx), Math.round(yy)); }
