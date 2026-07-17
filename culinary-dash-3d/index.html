@@ -51,12 +51,31 @@
       box-shadow: 0 6px 20px rgba(240,168,58,.3);
     }
     #start button:focus-visible { outline: 3px solid #ffd98a; outline-offset: 3px; }
+
+    /* On-screen "start the brawl" trigger. The only other way in is the desktop
+       B key or 4 walkouts — neither reachable by tap, so touch/Pages players had
+       no way to start the fight. Shown only during service (hidden mid-brawl and
+       while the start overlay is up); toggled from the render loop by phase. */
+    #fightBtn {
+      position: fixed; top: 10px; right: 10px; z-index: 7;
+      display: none; cursor: pointer; pointer-events: auto;
+      font: 800 13px/1 system-ui, sans-serif; letter-spacing: .03em; color: #1a1018;
+      border: 0; border-radius: 9px; padding: 10px 14px;
+      background: linear-gradient(180deg, #ff9d6a, #e0553a);
+      box-shadow: 0 4px 14px rgba(224,85,58,.4);
+      touch-action: manipulation; user-select: none; -webkit-user-select: none;
+    }
+    #fightBtn.show { display: block; }
+    #fightBtn:active { transform: translateY(1px); }
+    #fightBtn:focus-visible { outline: 3px solid #ffd98a; outline-offset: 3px; }
   </style>
 </head>
 <body>
   <div id="app"></div>
   <div id="hud"></div>
   <div id="hint">WASD / arrows / left-stick to move &middot; E or A-button to interact</div>
+
+  <button id="fightBtn" type="button" aria-label="Start the brawl">👊 Fight</button>
 
   <div id="start">
     <h1>Culinary Dash 3D</h1>

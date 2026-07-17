@@ -16,6 +16,8 @@ import { ANTIALIAS, PIXEL_CAP } from './engine/quality.js';
 
 const app = document.getElementById('app');
 const hud = document.getElementById('hud');
+const fightBtn = document.getElementById('fightBtn');
+let started = false;   // flips true once the start overlay is dismissed
 
 const renderer = new THREE.WebGLRenderer({ antialias: ANTIALIAS, powerPreference: 'high-performance' });
 let pixelCap = PIXEL_CAP;                                   // adaptive: may drop under load
@@ -100,6 +102,10 @@ startLoop({
           + (state.chef.carrying ? `   · carrying ${state.chef.carrying.dish}` : '');
     }
     if (text !== lastHud) { hud.textContent = text; lastHud = text; }
+
+    // The on-screen Fight button is only meaningful during service, after the
+    // start overlay is gone — hide it mid-brawl and on the title screen.
+    if (fightBtn) fightBtn.classList.toggle('show', started && state.phase === 'service');
   },
 });
 
@@ -108,15 +114,23 @@ addEventListener('resize', () => {
   resizeCamera(camera, innerWidth / innerHeight);
 });
 
-// dev: press B to trigger the brawl on demand
+// press B (desktop) or tap the Fight button (touch/mouse) to trigger the brawl.
 addEventListener('keydown', (e) => {
   if (e.code === 'KeyB' && state.phase === 'service') startBrawl(state);
+});
+// Shield the tap from touch.js's window-level pointerdown, which would otherwise
+// spawn the movement stick under the button. stopPropagation keeps it off window;
+// the action runs on click so keyboard activation (Enter/Space) works too.
+fightBtn?.addEventListener('pointerdown', (e) => e.stopPropagation());
+fightBtn?.addEventListener('click', () => {
+  if (state.phase === 'service') startBrawl(state);
 });
 
 // dismiss the start overlay on button, key, or tap
 const startEl = document.getElementById('start');
 function dismissStart() {
   if (!startEl || startEl.classList.contains('gone')) return;
+  started = true;               // reveals the Fight button (see the render loop)
   audio.resume();               // unlock Web Audio on the first gesture
   startEl.classList.add('gone');
   setTimeout(() => startEl.remove(), 450);
