@@ -24,6 +24,7 @@ export function createState(seed = 12345) {
     served: 0,
     badOrders: 0,
     nearStation: null,        // station id within reach, for the interact prompt
+    sounds: [],               // queued non-combat sfx cues, drained by main.js
   };
   initService(state);
   return state;

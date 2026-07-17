@@ -3,11 +3,13 @@ import * as THREE from 'three';
 import { createState, stepSim } from './sim/state.js';
 import { to3 } from './sim/data.js';
 import { initInput, pollInput } from './engine/input.js';
+import { initTouch } from './engine/touch.js';
 import { startLoop } from './engine/loop.js';
 import { createCamera, updateCamera, resizeCamera } from './engine/camera.js';
 import { buildWorld, buildChef, addLights } from './render/meshes.js';
 import { syncScene, commitPrev, attachScene } from './render/scene.js';
 import { createSparks } from './render/sparks.js';
+import { createAudio } from './fx/audio.js';
 import { createImpactBus, decayImpact, impact } from './fx/impact.js';
 import { startBrawl } from './sim/combat.js';
 
@@ -32,7 +34,10 @@ refs.chef = buildChef(scene);
 const state = createState();
 const bus = createImpactBus();
 const sparks = createSparks(scene);
+const audio = createAudio();
+bus.onSound = (w) => audio.hit(w);   // impact spine drives combat sound
 initInput(window);
+initTouch();
 
 let lastRenderT = performance.now() / 1000;
 
@@ -49,6 +54,11 @@ startLoop({
         impact(bus, h.w, p.x, 1.2, p.z, h.dx, h.dy);
       }
       state.hits.length = 0;
+    }
+    // drain service sfx cues
+    if (state.sounds && state.sounds.length) {
+      for (const s of state.sounds) audio[s]?.();
+      state.sounds.length = 0;
     }
     commitPrev(state);
   },
@@ -91,6 +101,7 @@ addEventListener('keydown', (e) => {
 const startEl = document.getElementById('start');
 function dismissStart() {
   if (!startEl || startEl.classList.contains('gone')) return;
+  audio.resume();               // unlock Web Audio on the first gesture
   startEl.classList.add('gone');
   setTimeout(() => startEl.remove(), 450);
 }

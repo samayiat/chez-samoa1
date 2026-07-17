@@ -3,6 +3,8 @@
 // stick MAGNITUDE (not per-axis, which makes diagonals sticky), and edge-detected
 // action presses so a held button fires once.
 
+import { getTouch } from './touch.js';
+
 const keys = new Set();
 const KEYMAP = {
   ArrowUp: 'up', KeyW: 'up',
@@ -45,6 +47,11 @@ export function pollInput() {
 
   let primary = keys.has('primary');
   let secondary = keys.has('secondary');
+
+  // on-screen touch stick + button
+  const t = getTouch();
+  if (Math.hypot(t.x, t.y) > 0.01) { x += t.x; y += t.y; }
+  if (t.primary) primary = true;
 
   const pad = readPad();
   if (pad) {

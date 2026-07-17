@@ -30,6 +30,7 @@ export function initService(state) {
 }
 
 function flash(state, text) { state.msg = text; state.msgT = 1.6; }
+function cue(state, name) { if (state.sounds) state.sounds.push(name); }
 
 // A free table with no customer, or null.
 function freeTable(state) {
@@ -82,6 +83,7 @@ function interact(state) {
     if (!chef.carrying) {
       chef.carrying = { kind: 'raw', dish: near.starts, cooked: false };
       flash(state, 'grabbed raw ' + near.starts);
+      cue(state, 'grab');
     }
     return;
   }
@@ -94,6 +96,7 @@ function interact(state) {
     const dish = wanted ? wanted.dish : choices[0];
     chef.carrying = { kind: 'dish', dish, cooked: true, quality: 'perfect' };
     flash(state, 'plated ' + DISHES[dish].label);
+    cue(state, 'plate');
     return;
   }
 
@@ -113,6 +116,7 @@ function interact(state) {
       }
       st.cooking = true; st.t = 0;
       flash(state, near.verb + 'ing ' + DISHES[near.dish].label + '…');
+      cue(state, 'cook');
       return;
     }
     // plate what's cooking (perfect if in the green window, else burnt)
@@ -122,6 +126,7 @@ function interact(state) {
     chef.carrying = { kind: 'dish', dish: near.dish, cooked: true, quality };
     st.cooking = false; st.plated = false; st.t = 0;
     flash(state, (quality === 'perfect' ? 'PERFECT ' : 'burnt ') + DISHES[near.dish].label);
+    cue(state, 'plate');
     return;
   }
 }
@@ -139,6 +144,7 @@ function serve(state, c) {
   state.served += 1;
   c.state = 'served'; c.leaveT = 0.6;
   chef.carrying = null;
+  cue(state, 'serve');
   flash(state, `served ${dish.label}  +$${pay}` + (quality === 'perfect' ? '' : ' (burnt)'));
 }
 
@@ -166,6 +172,7 @@ export function updateService(state, dt, input) {
       if (c.hearts <= 0) {
         c.hearts = 0; c.state = 'leaving'; c.leaveT = 0.6;
         state.badOrders += 1;
+        cue(state, 'walkout');
         flash(state, 'walked out! bad orders: ' + state.badOrders);
       }
     } else {
