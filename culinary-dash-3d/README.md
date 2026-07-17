@@ -50,7 +50,22 @@ src/
 ## Status
 
 - [x] Phase 1 — scaffold: room, stations, tables, walking chef, collision
-- [ ] Phase 2 — service loop (orders, cook, serve, tips)
-- [ ] Phase 3 — combat + impact spine (punch, knockback, hitstop, enemies)
-- [ ] Phase 4 — day→brawl transition
-- [ ] Phase 5 — verification harness + feel pass
+- [x] Phase 2 — service loop (orders, cook/assemble/source, serve, decaying tips)
+- [x] Phase 3 — combat + impact spine (punch combos, knockback, hitstop, sparks, 3 enemy archetypes)
+- [x] Phase 4 — day→brawl transition (>4 walkouts starts the brawl)
+- [x] Phase 5 — verification: 20 vitest sim tests + lockstep determinism + 3 Playwright e2e
+
+Loop+combat vertical slice is playable end to end. Not yet ported (future
+tracks): after-hours night mode, boss nights + shop/stats, the drunk mechanic,
+and modelled glTF art replacing the placeholder primitives.
+
+## Verification
+
+```bash
+npm test            # 20 vitest sim tests (service, combat, determinism)
+npm run e2e         # 3 Playwright WebGL checks (builds + serves automatically)
+```
+
+The determinism test runs two sims from the same seed + inputs for 2400 frames
+(service + brawl) and asserts they stay byte-identical — the lockstep-coop
+guarantee, preserved from the 2D game.

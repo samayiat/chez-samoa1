@@ -3,3 +3,6 @@ dist/
 test-results/
 playwright-report/
 .vite/
+
+# e2e render artifacts
+e2e/*.png

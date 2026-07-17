@@ -7,6 +7,7 @@ import { startLoop } from './engine/loop.js';
 import { createCamera, updateCamera, resizeCamera } from './engine/camera.js';
 import { buildWorld, buildChef, addLights } from './render/meshes.js';
 import { syncScene, commitPrev, attachScene } from './render/scene.js';
+import { createSparks } from './render/sparks.js';
 import { createImpactBus, decayImpact, impact } from './fx/impact.js';
 import { startBrawl } from './sim/combat.js';
 
@@ -30,6 +31,7 @@ refs.chef = buildChef(scene);
 
 const state = createState();
 const bus = createImpactBus();
+const sparks = createSparks(scene);
 initInput(window);
 
 let lastRenderT = performance.now() / 1000;
@@ -56,6 +58,7 @@ startLoop({
     lastRenderT = t;
 
     decayImpact(bus, rdt);
+    sparks.update(bus, rdt);
     syncScene(refs, state, bus.hitstop > 0 ? 1 : alpha);
     updateCamera(camera, bus, t);
     renderer.render(scene, camera);
