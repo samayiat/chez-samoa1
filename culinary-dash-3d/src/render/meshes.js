@@ -154,6 +154,30 @@ export function buildCustomer(dish) {
   return g;
 }
 
+// Brawl enemy: a chunky low-poly brute, coloured by archetype, with an HP pip
+// bar above. Kept crude on purpose (placeholder until modelled assets).
+const ENEMY_COLOR = { chaser: 0xc0392b, smasher: 0x8e44ad, thief: 0xe67e22 };
+
+export function buildEnemy(kind, r = 6) {
+  const g = new THREE.Group();
+  const s = r / 6;
+  const body = outlined(new THREE.IcosahedronGeometry(0.85 * s, 0), ENEMY_COLOR[kind] ?? 0xc0392b);
+  body.position.y = 1.0 * s;
+  body.scale.set(1, 1.25, 1);
+  g.add(body);
+  g.userData.body = body.children[0]; // the toon mesh, for the hurt flash
+  g.userData.baseColor = new THREE.Color(ENEMY_COLOR[kind] ?? 0xc0392b);
+
+  const bar = new THREE.Mesh(
+    new THREE.BoxGeometry(1.4, 0.16, 0.16),
+    new THREE.MeshBasicMaterial({ color: 0x66ff88 })
+  );
+  bar.position.y = 2.1 * s;
+  g.add(bar);
+  g.userData.bar = bar;
+  return g;
+}
+
 export function addLights(scene) {
   scene.add(new THREE.AmbientLight(0xffffff, 0.65));
   const key = new THREE.DirectionalLight(0xffe9c7, 1.1);

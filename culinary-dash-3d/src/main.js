@@ -1,12 +1,14 @@
 // Bootstrap: renderer + scene + fixed-perspective camera + fixed-step loop.
 import * as THREE from 'three';
 import { createState, stepSim } from './sim/state.js';
+import { to3 } from './sim/data.js';
 import { initInput, pollInput } from './engine/input.js';
 import { startLoop } from './engine/loop.js';
 import { createCamera, updateCamera, resizeCamera } from './engine/camera.js';
 import { buildWorld, buildChef, addLights } from './render/meshes.js';
 import { syncScene, commitPrev, attachScene } from './render/scene.js';
-import { createImpactBus, decayImpact } from './fx/impact.js';
+import { createImpactBus, decayImpact, impact } from './fx/impact.js';
+import { startBrawl } from './sim/combat.js';
 
 const app = document.getElementById('app');
 const hud = document.getElementById('hud');
@@ -38,6 +40,14 @@ startLoop({
     if (bus.hitstop > 0) return;
     const input = pollInput();
     stepSim(state, dt, input);
+    // drain weighted hit events -> the impact spine (one weight, every channel)
+    if (state.hits && state.hits.length) {
+      for (const h of state.hits) {
+        const p = to3(h.x, h.y);
+        impact(bus, h.w, p.x, 1.2, p.z, h.dx, h.dy);
+      }
+      state.hits.length = 0;
+    }
     commitPrev(state);
   },
   render(alpha, now) {
@@ -50,11 +60,17 @@ startLoop({
     updateCamera(camera, bus, t);
     renderer.render(scene, camera);
 
-    hud.textContent = state.msg
-      ? `$${state.money}  served ${state.served}   —   ${state.msg}`
-      : `$${state.money}  served ${state.served}  ·  bad ${state.badOrders}`
-        + (state.nearStation ? `   · press E at ${state.nearStation}` : '')
-        + (state.chef.carrying ? `   · carrying ${state.chef.carrying.dish}` : '');
+    if (state.phase === 'brawl') {
+      const hp = '❤'.repeat(Math.max(0, state.chef.hp)) + '·'.repeat(Math.max(0, state.chef.maxHp - state.chef.hp));
+      hud.textContent = `BRAWL   HP ${hp}   enemies ${state.enemies.length}`
+        + (state.msg ? `   —   ${state.msg}` : '   · E to punch');
+    } else {
+      hud.textContent = state.msg
+        ? `$${state.money}  served ${state.served}   —   ${state.msg}`
+        : `$${state.money}  served ${state.served}  ·  bad ${state.badOrders}/${5}`
+          + (state.nearStation ? `   · press E at ${state.nearStation}` : '')
+          + (state.chef.carrying ? `   · carrying ${state.chef.carrying.dish}` : '');
+    }
   },
 });
 
@@ -63,5 +79,10 @@ addEventListener('resize', () => {
   resizeCamera(camera, innerWidth / innerHeight);
 });
 
+// dev: press B to trigger the brawl on demand
+addEventListener('keydown', (e) => {
+  if (e.code === 'KeyB' && state.phase === 'service') startBrawl(state);
+});
+
 // expose for the e2e harness to drive/inspect
-window.__game = { state, bus, THREE };
+window.__game = { state, bus, THREE, startBrawl };

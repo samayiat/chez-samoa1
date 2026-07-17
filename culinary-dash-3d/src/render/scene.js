@@ -5,10 +5,11 @@
 
 import * as THREE from 'three';
 import { to3 } from '../sim/data.js';
-import { buildCustomer, DISH_COLOR } from './meshes.js';
+import { buildCustomer, buildEnemy, DISH_COLOR } from './meshes.js';
 
 const prev = { x: 160, y: 90, facing: -Math.PI / 2 };
 const customerMeshes = new Map(); // customer id -> Group
+const enemyMeshes = new Map();    // enemy id -> Group
 let sceneRef = null;
 
 export function attachScene(scene) { sceneRef = scene; }
@@ -37,6 +38,12 @@ export function syncScene(refs, state, alpha) {
     carry.material.color.set(c);
   }
 
+  // chef hurt flash (red) during the brawl
+  const chefBody = refs.chef.children[0].children[0];
+  if (chefBody?.material) {
+    chefBody.material.color.set(chef.hurtT > 0 ? 0xff5555 : 0x3a2f5c);
+  }
+
   // station "you can use this" lift + timing-station cook colour
   for (const id in refs.stationMeshes) {
     const m = refs.stationMeshes[id];
@@ -60,6 +67,30 @@ export function syncScene(refs, state, alpha) {
   }
 
   syncCustomers(state);
+  syncEnemies(state);
+}
+
+function syncEnemies(state) {
+  if (!sceneRef) return;
+  const live = new Set();
+  for (const e of state.enemies || []) {
+    live.add(e.id);
+    let g = enemyMeshes.get(e.id);
+    if (!g) { g = buildEnemy(e.kind, e.r); enemyMeshes.set(e.id, g); sceneRef.add(g); }
+    const p = to3(e.x, e.y);
+    g.position.set(p.x, 0, p.z);
+    // face the chef
+    g.rotation.y = Math.atan2(state.chef.x - e.x, -(state.chef.y - e.y));
+    // hurt flash + HP bar
+    const flash = e.hurtT > 0;
+    g.userData.body.material.color.copy(flash ? new THREE.Color(0xffffff) : g.userData.baseColor);
+    const frac = Math.max(0, e.hp) / e.maxHp;
+    g.userData.bar.scale.x = Math.max(0.001, frac);
+    g.userData.bar.material.color.copy(lerpColor(0xff5566, 0x66ff88, frac));
+  }
+  for (const [id, g] of enemyMeshes) {
+    if (!live.has(id)) { sceneRef.remove(g); enemyMeshes.delete(id); }
+  }
 }
 
 function syncCustomers(state) {
