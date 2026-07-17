@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <meta name="theme-color" content="#0b0810" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='14' font-size='14'>🔨</text></svg>" />
+  <title>Vince — Eviction Night (3D boss preview)</title>
+  <style>
+    :root { color-scheme: dark; }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; background: #050407; overflow: hidden; font-family: system-ui, sans-serif; }
+    #app { position: fixed; inset: 0; }
+    canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+
+    /* danger + hurt full-screen overlays */
+    #danger, #hurt {
+      position: fixed; inset: 0; pointer-events: none; opacity: 0; transition: opacity .08s linear;
+      mix-blend-mode: screen;
+    }
+    #danger { background: radial-gradient(120% 100% at 50% 60%, transparent 45%, rgba(255,60,20,.0) 55%, rgba(255,60,20,.9) 100%); }
+    #hurt { background: radial-gradient(120% 100% at 50% 50%, transparent 40%, rgba(255,20,20,.95) 100%); }
+
+    /* boss bar */
+    #bossbar { position: fixed; top: 14px; left: 50%; transform: translateX(-50%); width: min(560px, 86vw); pointer-events: none; }
+    #bossName {
+      display: flex; justify-content: space-between; align-items: baseline;
+      font-weight: 800; letter-spacing: .06em; color: #ffd7b0; text-shadow: 0 2px 4px #000; font-size: 14px; margin-bottom: 5px;
+    }
+    #bossName small { font-weight: 600; letter-spacing: .1em; color: #c58a6a; font-size: 10px; }
+    #bossTrack { height: 13px; border: 1.5px solid #6a2b1a; border-radius: 7px; background: #1a0d0a; overflow: hidden; box-shadow: 0 3px 12px rgba(0,0,0,.6), inset 0 1px 2px rgba(0,0,0,.8); }
+    #bossFill { height: 100%; width: 100%; background: linear-gradient(180deg, #ff8a3a, #d83a1a); transition: width .18s ease-out; box-shadow: 0 0 12px rgba(255,90,30,.6); }
+    #enraged { text-align: center; margin-top: 6px; color: #ff5a2a; font-weight: 800; letter-spacing: .22em; font-size: 12px; opacity: 0; text-shadow: 0 0 8px rgba(255,60,20,.8); transition: opacity .2s; }
+    #enraged.on { opacity: 1; animation: pulse 1s infinite; }
+    @keyframes pulse { 50% { opacity: .5; } }
+
+    /* chef hearts + combo */
+    #hearts { position: fixed; bottom: 14px; left: 16px; font-size: 22px; letter-spacing: 3px; color: #ff5566; text-shadow: 0 2px 4px #000; pointer-events: none; }
+    #combo { position: fixed; bottom: 48px; left: 16px; color: #ffd98a; font-weight: 800; letter-spacing: .08em; font-size: 15px; text-shadow: 0 2px 4px #000; opacity: 0; transition: opacity .15s; pointer-events: none; }
+    #hint { position: fixed; bottom: 14px; right: 16px; text-align: right; color: #8a7d6a; font-size: 11px; line-height: 1.5; pointer-events: none; }
+    #hint b { color: #c9bda9; }
+
+    /* banners / start */
+    #banner {
+      position: fixed; inset: 0; z-index: 8; display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 8px; text-align: center; opacity: 0; pointer-events: none; transition: opacity .5s ease;
+      background: radial-gradient(120% 90% at 50% 45%, rgba(10,6,14,.5), rgba(5,4,7,.86));
+    }
+    #banner.show { opacity: 1; }
+    #banner h2 { margin: 0; font-size: clamp(34px, 8vw, 72px); font-weight: 900; letter-spacing: .04em;
+      background: linear-gradient(180deg, #ffd98a, #e0553a); -webkit-background-clip: text; background-clip: text; color: transparent; text-shadow: 0 6px 30px rgba(224,85,58,.3); }
+    #banner p { margin: 0; color: #c9bda9; font-size: 14px; }
+
+    #start {
+      position: fixed; inset: 0; z-index: 10; display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 14px; text-align: center; padding: 24px; transition: opacity .4s ease;
+      background: radial-gradient(120% 90% at 50% 18%, #1c1020 0%, #0b0810 62%, #050407 100%); color: #ffe9c7;
+    }
+    #start.gone { opacity: 0; pointer-events: none; }
+    #start .kicker { letter-spacing: .32em; font-size: 11px; color: #c58a6a; font-weight: 700; }
+    #start h1 { margin: 0; font-size: clamp(40px, 10vw, 92px); font-weight: 900; letter-spacing: .02em; line-height: .95;
+      background: linear-gradient(180deg, #ffd98a, #e0553a); -webkit-background-clip: text; background-clip: text; color: transparent; }
+    #start p { margin: 0; max-width: 32rem; line-height: 1.5; color: #c9bda9; font-size: 14px; }
+    #start .keys { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; margin-top: 2px; }
+    #start .keys span { font: 600 12px/1 ui-monospace, monospace; color: #ffe9c7; border: 1px solid #4a3b52; border-radius: 7px; padding: 8px 11px; background: #1d1626; }
+    #start button { margin-top: 8px; cursor: pointer; color: #1a1018; font-weight: 800; letter-spacing: .04em; font-size: 15px;
+      border: 0; border-radius: 10px; padding: 14px 30px; background: linear-gradient(180deg, #ffd98a, #f0883a); box-shadow: 0 8px 26px rgba(240,120,58,.34); }
+    #start .note { font-size: 12px; color: #7d7286; }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+  <div id="danger"></div>
+  <div id="hurt"></div>
+
+  <div id="bossbar">
+    <div id="bossName"><span id="bossNameT">VINCE <small>YOUR LANDLORD</small></span></div>
+    <div id="bossTrack"><div id="bossFill"></div></div>
+    <div id="enraged">◆ ENRAGED ◆</div>
+  </div>
+
+  <div id="combo"></div>
+  <div id="hearts"></div>
+  <div id="hint"><b>Move</b> WASD / stick &nbsp;·&nbsp; <b>Punch</b> E / A &nbsp;·&nbsp; <b>Dodge</b> Shift / X</div>
+
+  <div id="banner"><h2>—</h2><p>—</p></div>
+
+  <div id="start">
+    <div class="kicker">EVICTION NIGHT</div>
+    <h1>VINCE</h1>
+    <p>Your landlord came to collect — with a wrecking ball. Stay off his slam,
+       punch on the openings, and knock him down before he levels the place.
+       <br><br>This is an <strong>art-direction preview</strong> of the 3D boss fight:
+       lighting, shadows, the wrecking-ball boss, and a chef who actually throws hands.</p>
+    <div class="keys">
+      <span>WASD / Arrows — move</span>
+      <span>E / Space — punch (combo)</span>
+      <span>Shift — dodge</span>
+    </div>
+    <button id="startBtn" type="button">Face him</button>
+    <p class="note">Best in landscape · works with touch, keyboard, or a gamepad</p>
+  </div>
+
+  <script type="module" src="/src/preview/main-vince.js"></script>
+</body>
+</html>
