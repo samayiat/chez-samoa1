@@ -5,6 +5,7 @@
 
 import { STATIONS, TABLES, TABLE_R, CHEF, WORLD } from './data.js';
 import { makeRng } from './rng.js';
+import { initService, updateService } from './service.js';
 
 // Solid obstacles the chef slides around: dining tables + station counters.
 function buildObstacles() {
@@ -14,7 +15,7 @@ function buildObstacles() {
 }
 
 export function createState(seed = 12345) {
-  return {
+  const state = {
     t: 0,
     phase: 'service', // 'service' | 'brawl'
     rng: makeRng(seed),
@@ -30,6 +31,8 @@ export function createState(seed = 12345) {
     badOrders: 0,
     nearStation: null,        // station id within reach, for the interact prompt
   };
+  initService(state);
+  return state;
 }
 
 const CLAMP = (v, lo, hi) => (v < lo ? lo : v > hi ? hi : v);
@@ -86,6 +89,8 @@ export function stepSim(state, dt, input) {
 
   resolveCollision(chef, state.obstacles);
   state.nearStation = findNearStation(chef);
+
+  if (state.phase === 'service') updateService(state, dt, input);
 
   return state;
 }

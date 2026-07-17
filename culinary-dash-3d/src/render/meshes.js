@@ -46,6 +46,7 @@ export function buildWorld(scene) {
 
   // --- stations ---
   const stationMeshes = {};
+  const stationData = {};
   for (const s of STATIONS) {
     const p = to3(s.x, s.y);
     const box = outlined(new THREE.BoxGeometry(1.8, 1.6, 1.4), STATION_COLOR[s.id] ?? 0x888888);
@@ -53,6 +54,7 @@ export function buildWorld(scene) {
     box.userData.id = s.id;
     scene.add(box);
     stationMeshes[s.id] = box;
+    stationData[s.id] = s;
   }
 
   // --- dining tables ---
@@ -74,7 +76,7 @@ export function buildWorld(scene) {
   pass.position.set(pp.x, 0.4, pp.z);
   scene.add(pass);
 
-  return { stationMeshes, tableMeshes };
+  return { stationMeshes, stationData, tableMeshes };
 }
 
 export function buildChef(scene) {
@@ -112,6 +114,43 @@ export function buildChef(scene) {
   g.userData.carry = carry;
 
   scene.add(g);
+  return g;
+}
+
+// Colour per dish — used for customer order bubbles and the carried plate.
+export const DISH_COLOR = {
+  salad: 0x5fbf5f, karaage: 0xe0a03a, lobster: 0xe0553a,
+  'whiskey-sour': 0xd9a24a, 'gin-sour': 0x58c9c9,
+};
+
+// A seated customer: a rounded body + a floating order orb coloured by the dish
+// they want, plus a patience ring that goes green -> red as they lose heart.
+export function buildCustomer(dish) {
+  const g = new THREE.Group();
+  const body = new THREE.Mesh(
+    new THREE.CapsuleGeometry(0.55, 0.6, 4, 10),
+    new THREE.MeshToonMaterial({ color: 0x556074 })
+  );
+  body.position.y = 1.35;
+  g.add(body);
+
+  const orb = new THREE.Mesh(
+    new THREE.SphereGeometry(0.42, 14, 14),
+    new THREE.MeshToonMaterial({ color: DISH_COLOR[dish] ?? 0xffffff })
+  );
+  orb.position.y = 2.6;
+  g.add(orb);
+  g.userData.orb = orb;
+
+  const ring = new THREE.Mesh(
+    new THREE.TorusGeometry(0.5, 0.08, 8, 20),
+    new THREE.MeshBasicMaterial({ color: 0x5fbf5f })
+  );
+  ring.rotation.x = Math.PI / 2;
+  ring.position.y = 3.15;
+  g.add(ring);
+  g.userData.ring = ring;
+
   return g;
 }
 

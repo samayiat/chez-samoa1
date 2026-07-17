@@ -5,7 +5,7 @@ import { initInput, pollInput } from './engine/input.js';
 import { startLoop } from './engine/loop.js';
 import { createCamera, updateCamera, resizeCamera } from './engine/camera.js';
 import { buildWorld, buildChef, addLights } from './render/meshes.js';
-import { syncScene, commitPrev } from './render/scene.js';
+import { syncScene, commitPrev, attachScene } from './render/scene.js';
 import { createImpactBus, decayImpact } from './fx/impact.js';
 
 const app = document.getElementById('app');
@@ -22,6 +22,7 @@ scene.fog = new THREE.Fog(0x0b0810, 40, 80);
 
 const camera = createCamera(innerWidth / innerHeight);
 addLights(scene);
+attachScene(scene);
 const refs = buildWorld(scene);
 refs.chef = buildChef(scene);
 
@@ -49,8 +50,11 @@ startLoop({
     updateCamera(camera, bus, t);
     renderer.render(scene, camera);
 
-    hud.textContent = `$${state.money}   served ${state.served}   [${state.phase}]`
-      + (state.nearStation ? `   · press E at ${state.nearStation}` : '');
+    hud.textContent = state.msg
+      ? `$${state.money}  served ${state.served}   —   ${state.msg}`
+      : `$${state.money}  served ${state.served}  ·  bad ${state.badOrders}`
+        + (state.nearStation ? `   · press E at ${state.nearStation}` : '')
+        + (state.chef.carrying ? `   · carrying ${state.chef.carrying.dish}` : '');
   },
 });
 
