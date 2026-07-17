@@ -1547,6 +1547,17 @@ function pickFightFrame(id,move,dir,elapsed){
 // docs/tools/ingest once generated; empty object = every enemy renders exactly as before (legacy
 // ENEMY_IMG masked art). Same non-regressive pattern as FIGHT/STATION_TEX/DANCE_CAST/TILE_TEX.
 const ENEMY_TEX={};
+// generated shadow-enemy art (evil shadow states of the cast, one cross-punch each). ENEMY_ART[cast] =
+// {idle:{right,left(=west rotation)}, punch:{right:[frames],left:[mirrored frames]}} of data URIs, loaded
+// into ENEMY_TEX as Images. 5 done (reggie/val/sinclair/marisol/critic); the other 11 cast fall through to
+// the legacy ENEMY_IMG masked art — non-regressive. Trimmed+snapped to 66px (chef-scale match) at ingest.
+const ENEMY_ART={
+/*__ART__ enemy_tex*/
+};
+for(const cast in ENEMY_ART){ const e=ENEMY_ART[cast], out={idle:{},punch:{}};
+  for(const d in e.idle){ const im=new Image(); im.src=e.idle[d]; out.idle[d]=im; }
+  for(const d in e.punch){ out.punch[d]=e.punch[d].map(u=>{ const im=new Image(); im.src=u; return im; }); }
+  ENEMY_TEX[cast]=out; }
 // Free-running, per-enemy-offset clock for the punch loop — purely visual (does not read or drive e.t,
 // which is real combat-hit-timing state and stays untouched). Cycles every 300ms.
 function enemyPunchElapsed(e){ return (performance.now()/300 + (e.seed||0)) % 1; }
