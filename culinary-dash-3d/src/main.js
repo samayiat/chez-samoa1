@@ -12,12 +12,15 @@ import { createSparks } from './render/sparks.js';
 import { createAudio } from './fx/audio.js';
 import { createImpactBus, decayImpact, impact } from './fx/impact.js';
 import { startBrawl } from './sim/combat.js';
+import { ANTIALIAS, PIXEL_CAP } from './engine/quality.js';
 
 const app = document.getElementById('app');
 const hud = document.getElementById('hud');
 
-const renderer = new THREE.WebGLRenderer({ antialias: true });
-renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+const renderer = new THREE.WebGLRenderer({ antialias: ANTIALIAS, powerPreference: 'high-performance' });
+let pixelCap = PIXEL_CAP;                                   // adaptive: may drop under load
+const applyPixelRatio = () => renderer.setPixelRatio(Math.min(devicePixelRatio, pixelCap));
+applyPixelRatio();
 renderer.setSize(innerWidth, innerHeight);
 app.appendChild(renderer.domElement);
 
@@ -40,6 +43,9 @@ initInput(window);
 initTouch();
 
 let lastRenderT = performance.now() / 1000;
+let avgFrame = 16;            // rolling ms/frame estimate for adaptive resolution
+let adaptCooldown = 0;
+let lastHud = '';
 
 startLoop({
   tick(dt) {
@@ -67,23 +73,33 @@ startLoop({
     const rdt = t - lastRenderT;
     lastRenderT = t;
 
+    // adaptive resolution: if frames stay slow, shed pixels; recover when fast.
+    avgFrame += ((rdt * 1000) - avgFrame) * 0.1;
+    adaptCooldown -= rdt;
+    if (adaptCooldown <= 0) {
+      if (avgFrame > 24 && pixelCap > 0.6) { pixelCap = Math.max(0.6, pixelCap - 0.15); applyPixelRatio(); adaptCooldown = 1.5; }
+      else if (avgFrame < 15 && pixelCap < PIXEL_CAP) { pixelCap = Math.min(PIXEL_CAP, pixelCap + 0.15); applyPixelRatio(); adaptCooldown = 2.5; }
+    }
+
     decayImpact(bus, rdt);
     sparks.update(bus, rdt);
     syncScene(refs, state, bus.hitstop > 0 ? 1 : alpha);
     updateCamera(camera, bus, t);
     renderer.render(scene, camera);
 
+    let text;
     if (state.phase === 'brawl') {
       const hp = '❤'.repeat(Math.max(0, state.chef.hp)) + '·'.repeat(Math.max(0, state.chef.maxHp - state.chef.hp));
-      hud.textContent = `BRAWL   HP ${hp}   enemies ${state.enemies.length}`
+      text = `BRAWL   HP ${hp}   enemies ${state.enemies.length}`
         + (state.msg ? `   —   ${state.msg}` : '   · E to punch');
     } else {
-      hud.textContent = state.msg
+      text = state.msg
         ? `$${state.money}  served ${state.served}   —   ${state.msg}`
         : `$${state.money}  served ${state.served}  ·  bad ${state.badOrders}/${5}`
           + (state.nearStation ? `   · press E at ${state.nearStation}` : '')
           + (state.chef.carrying ? `   · carrying ${state.chef.carrying.dish}` : '');
     }
+    if (text !== lastHud) { hud.textContent = text; lastHud = text; }
   },
 });
 
@@ -110,4 +126,4 @@ addEventListener('keydown', dismissStart, { once: true });
 addEventListener('pointerdown', dismissStart, { once: true });
 
 // expose for the e2e harness to drive/inspect
-window.__game = { state, bus, THREE, startBrawl };
+window.__game = { state, bus, THREE, startBrawl, renderer };

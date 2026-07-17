@@ -6,21 +6,25 @@
 
 import * as THREE from 'three';
 import { STATIONS, TABLES, PASS, WORLD, to3, len2 } from '../sim/data.js';
+import { OUTLINES, RIM_LIGHT } from '../engine/quality.js';
 
 const STATION_COLOR = {
   fryer: 0xd8862e, salad: 0x4caf50, icebox: 0x8fd3ff,
   pot: 0xb0563a, bar: 0x9a6cff,
 };
 
+// Always returns a Group whose child[0] is the lit mesh, so scene.js accessors
+// are identical whether or not the outline hull is present. On the low tier the
+// inverted-hull outline (a second full draw per object) is skipped entirely.
 function outlined(geo, color, outline = 0x1a1420) {
   const g = new THREE.Group();
   const mesh = new THREE.Mesh(geo, new THREE.MeshToonMaterial({ color }));
-  const hull = new THREE.Mesh(
-    geo,
-    new THREE.MeshBasicMaterial({ color: outline, side: THREE.BackSide })
-  );
-  hull.scale.multiplyScalar(1.06);
-  g.add(mesh, hull);
+  g.add(mesh);
+  if (OUTLINES) {
+    const hull = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: outline, side: THREE.BackSide }));
+    hull.scale.multiplyScalar(1.06);
+    g.add(hull);
+  }
   return g;
 }
 
@@ -179,11 +183,14 @@ export function buildEnemy(kind, r = 6) {
 }
 
 export function addLights(scene) {
-  scene.add(new THREE.AmbientLight(0xffffff, 0.65));
+  // brighter ambient on the low tier to make up for the dropped rim light
+  scene.add(new THREE.AmbientLight(0xffffff, RIM_LIGHT ? 0.65 : 0.8));
   const key = new THREE.DirectionalLight(0xffe9c7, 1.1);
   key.position.set(6, 18, 10);
   scene.add(key);
-  const rim = new THREE.DirectionalLight(0x6a8cff, 0.35);
-  rim.position.set(-8, 6, -10);
-  scene.add(rim);
+  if (RIM_LIGHT) {
+    const rim = new THREE.DirectionalLight(0x6a8cff, 0.35);
+    rim.position.set(-8, 6, -10);
+    scene.add(rim);
+  }
 }

@@ -2,6 +2,11 @@
 // The render reads the sim but never mutates it. `alpha` is the interpolation
 // factor from the fixed-step loop (0..1 into the next pending tick); we lerp the
 // chef between its previous and current sim position so motion stays smooth.
+//
+// Performance: this runs every frame, so it does ZERO allocation in the hot
+// path — colours are scratch instances written in place, the live-set is reused,
+// and material colours are only rewritten when the underlying value changed
+// (dirty-checked via quantised keys stashed on userData).
 
 import * as THREE from 'three';
 import { to3 } from '../sim/data.js';
@@ -14,7 +19,15 @@ let sceneRef = null;
 
 export function attachScene(scene) { sceneRef = scene; }
 
-const lerpColor = (a, b, t) => new THREE.Color(a).lerp(new THREE.Color(b), t);
+// --- scratch (module-scoped, never allocated per frame) ---
+const _a = new THREE.Color();
+const _b = new THREE.Color();
+const _white = new THREE.Color(0xffffff);
+const _liveE = new Set();
+const _liveC = new Set();
+const q = (v) => Math.round(v * 24); // quantise a 0..1 fraction for dirty-checks
+// write lerp(a,b,t) into a material colour without allocating
+function lerpInto(mat, a, b, t) { mat.color.copy(_a.set(a).lerp(_b.set(b), t)); }
 
 export function syncScene(refs, state, alpha) {
   const chef = state.chef;
@@ -30,39 +43,45 @@ export function syncScene(refs, state, alpha) {
   while (df < -Math.PI) df += Math.PI * 2;
   refs.chef.rotation.y = prev.facing + df * Math.min(1, alpha * 1.5);
 
-  // carried plate marker: show + colour by dish
+  // carried plate marker: show + colour by dish (only rewrite on change)
   const carry = refs.chef.userData.carry;
   carry.visible = !!chef.carrying;
   if (chef.carrying) {
     const c = chef.carrying.cooked ? (DISH_COLOR[chef.carrying.dish] ?? 0xffd24a) : 0x3a4f7a;
-    carry.material.color.set(c);
+    if (carry.userData._c !== c) { carry.material.color.set(c); carry.userData._c = c; }
   }
 
-  // chef hurt flash (red) during the brawl
+  // chef hurt flash (red) during the brawl — dirty-checked
   const chefBody = refs.chef.children[0].children[0];
   if (chefBody?.material) {
-    chefBody.material.color.set(chef.hurtT > 0 ? 0xff5555 : 0x3a2f5c);
+    const hurt = chef.hurtT > 0;
+    if (refs.chef.userData._hurt !== hurt) {
+      chefBody.material.color.set(hurt ? 0xff5555 : 0x3a2f5c);
+      refs.chef.userData._hurt = hurt;
+    }
   }
 
-  // station "you can use this" lift + timing-station cook colour
+  // station "you can use this" lift + timing-station cook glow
   for (const id in refs.stationMeshes) {
     const m = refs.stationMeshes[id];
     m.position.y = state.nearStation === id ? 0.9 : 0.8;
     const st = state.stations?.[id];
-    if (st) {
-      const body = m.children[0];
-      if (st.cooking) {
-        const station = refs.stationData[id];
-        const frac = Math.min(1, st.t / (station.cook + station.green));
-        // raw -> green (perfect) -> red (burnt)
-        const col = st.t < station.cook
-          ? lerpColor(0x8fd3ff, 0x5fbf5f, st.t / station.cook)
-          : lerpColor(0x5fbf5f, 0xe0553a, Math.min(1, (st.t - station.cook) / station.green));
-        body.material.emissive = col;
-        body.material.emissiveIntensity = 0.5 + 0.3 * Math.sin(state.t * 8);
-      } else {
-        body.material.emissiveIntensity = 0;
+    if (!st) continue;
+    const body = m.children[0];
+    if (st.cooking) {
+      const station = refs.stationData[id];
+      const raw = st.t < station.cook;
+      const frac = raw ? st.t / station.cook : Math.min(1, (st.t - station.cook) / station.green);
+      const key = (raw ? 0 : 100) + q(frac);
+      if (m.userData._cook !== key) {          // only recompute the glow colour on change
+        // raw -> green (perfect) -> red (burnt), written into emissive in place
+        body.material.emissive.copy(raw ? _a.set(0x8fd3ff).lerp(_b.set(0x5fbf5f), frac) : _a.set(0x5fbf5f).lerp(_b.set(0xe0553a), frac));
+        m.userData._cook = key;
       }
+      body.material.emissiveIntensity = 0.5 + 0.3 * Math.sin(state.t * 8); // cheap pulse
+    } else if (m.userData._cook !== -1) {
+      body.material.emissiveIntensity = 0;
+      m.userData._cook = -1;
     }
   }
 
@@ -72,50 +91,48 @@ export function syncScene(refs, state, alpha) {
 
 function syncEnemies(state) {
   if (!sceneRef) return;
-  const live = new Set();
+  _liveE.clear();
   for (const e of state.enemies || []) {
-    live.add(e.id);
+    _liveE.add(e.id);
     let g = enemyMeshes.get(e.id);
     if (!g) { g = buildEnemy(e.kind, e.r); enemyMeshes.set(e.id, g); sceneRef.add(g); }
     const p = to3(e.x, e.y);
     g.position.set(p.x, 0, p.z);
-    // face the chef
     g.rotation.y = Math.atan2(state.chef.x - e.x, -(state.chef.y - e.y));
-    // hurt flash + HP bar
+
     const flash = e.hurtT > 0;
-    g.userData.body.material.color.copy(flash ? new THREE.Color(0xffffff) : g.userData.baseColor);
+    if (g.userData._flash !== flash) {         // dirty-checked flash
+      g.userData.body.material.color.copy(flash ? _white : g.userData.baseColor);
+      g.userData._flash = flash;
+    }
     const frac = Math.max(0, e.hp) / e.maxHp;
     g.userData.bar.scale.x = Math.max(0.001, frac);
-    g.userData.bar.material.color.copy(lerpColor(0xff5566, 0x66ff88, frac));
+    const bkey = q(frac);
+    if (g.userData._bar !== bkey) { lerpInto(g.userData.bar.material, 0xff5566, 0x66ff88, frac); g.userData._bar = bkey; }
   }
   for (const [id, g] of enemyMeshes) {
-    if (!live.has(id)) { sceneRef.remove(g); enemyMeshes.delete(id); }
+    if (!_liveE.has(id)) { sceneRef.remove(g); enemyMeshes.delete(id); }
   }
 }
 
 function syncCustomers(state) {
   if (!sceneRef) return;
-  const live = new Set();
+  _liveC.clear();
   for (const c of state.customers) {
-    live.add(c.id);
+    _liveC.add(c.id);
     let g = customerMeshes.get(c.id);
-    if (!g) {
-      g = buildCustomer(c.dish);
-      customerMeshes.set(c.id, g);
-      sceneRef.add(g);
-    }
+    if (!g) { g = buildCustomer(c.dish); customerMeshes.set(c.id, g); sceneRef.add(g); }
     const pos = to3(c.x, c.y);
     g.position.set(pos.x, c.state === 'waiting' ? 0 : -0.4, pos.z);
-    g.visible = true;
-    // patience ring: green -> red, and shrink as it drains
+
     const h = Math.max(0, c.hearts) / 3;
-    g.userData.ring.material.color.copy(lerpColor(0xe0553a, 0x5fbf5f, h));
     g.userData.ring.scale.setScalar(0.4 + 0.6 * h);
+    const rkey = q(h);
+    if (g.userData._ring !== rkey) { lerpInto(g.userData.ring.material, 0xe0553a, 0x5fbf5f, h); g.userData._ring = rkey; }
     g.userData.orb.visible = c.state === 'waiting';
   }
-  // remove departed customers
   for (const [id, g] of customerMeshes) {
-    if (!live.has(id)) { sceneRef.remove(g); customerMeshes.delete(id); }
+    if (!_liveC.has(id)) { sceneRef.remove(g); customerMeshes.delete(id); }
   }
 }
 

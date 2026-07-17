@@ -21,9 +21,11 @@ export function createSparks(scene) {
   const v = { x: new Float32Array(MAX), y: new Float32Array(MAX), z: new Float32Array(MAX) };
   const life = new Float32Array(MAX);
   let cursor = 0;
+  let liveCount = 0;
 
   function spawn(s) {
     const i = cursor; cursor = (cursor + 1) % MAX;
+    if (life[i] <= 0) liveCount++;         // reviving a dead slot
     const spread = 3 + s.w * 4;
     p.x[i] = s.x; p.y[i] = s.y; p.z[i] = s.z;
     v.x[i] = s.dx * spread + (Math.random() - 0.5) * spread;
@@ -34,9 +36,11 @@ export function createSparks(scene) {
 
   function update(bus, rdt) {
     if (bus.sparks.length) { for (const s of bus.sparks) spawn(s); bus.sparks.length = 0; }
+    if (liveCount <= 0) return;            // idle: nothing to animate, no GPU upload
     for (let i = 0; i < MAX; i++) {
-      if (life[i] <= 0) { pos[i * 3 + 1] = -999; continue; } // park dead points
+      if (life[i] <= 0) continue;
       life[i] -= rdt;
+      if (life[i] <= 0) { pos[i * 3 + 1] = -999; liveCount--; continue; } // just died -> park
       v.y[i] -= GRAV * rdt;
       p.x[i] += v.x[i] * rdt; p.y[i] += v.y[i] * rdt; p.z[i] += v.z[i] * rdt;
       pos[i * 3] = p.x[i]; pos[i * 3 + 1] = Math.max(0.05, p.y[i]); pos[i * 3 + 2] = p.z[i];
