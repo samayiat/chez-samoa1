@@ -2,7 +2,7 @@ name: Deploy Culinary Dash to GitHub Pages
 
 on:
   push:
-    branches: [main, claude/3d-js-browser-game-bq0v5l]
+    branches: [main]
   workflow_dispatch:
 
 permissions:
