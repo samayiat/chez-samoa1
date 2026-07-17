@@ -54,7 +54,7 @@ export function createFx(scene) {
   const ghostGeo = new THREE.CapsuleGeometry(0.34, 0.9, 4, 8);
   const ghosts = [];
   for (let i = 0; i < 8; i++) {
-    const m = new THREE.Mesh(ghostGeo, new THREE.MeshBasicMaterial({ color: 0x8e5bd0, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending }));
+    const m = new THREE.Mesh(ghostGeo, new THREE.MeshBasicMaterial({ color: 0xb56a92, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending }));
     m.visible = false; group.add(m);
     ghosts.push({ m, life: 0, max: 1 });
   }

@@ -20,7 +20,7 @@ await page.waitForTimeout(400);
 
 // start
 await page.click('#startBtn');
-await page.waitForTimeout(1200);
+await page.waitForTimeout(2200);
 await page.screenshot({ path: path.join(shotDir, 'vince-1-open.png') });
 
 // place the chef in punching range (headless sim runs in slow-motion under

@@ -9,11 +9,16 @@
 import * as THREE from 'three';
 import { mat, box, put, easeOut, easeOutBack, clamp01, lerp, smooth } from './util.js';
 
-const JACKET = 0xf3efe6;
-const APRON = 0x8e5bd0;     // her purple
-const SKIN = 0xe0a875;
-const TROUSER = 0x35507a;
-const HAT = 0xfbf8f2;
+// Her real palette, sampled from the 2D chef sprite (pixel lab masters,
+// sprites/chef/v2_south.png): dark-brown skin, a mauve-pink top, a tan apron,
+// a cream toque, dark braided hair. She must read as the SAME person across the
+// 2D->3D cut, so these are matched, not invented.
+const TOP = 0xb56a92;      // mauve-pink top (#905070 sample, brightened to read in 3D light)
+const APRON = 0x9c6636;    // tan/brown apron (#a06030)
+const SKIN = 0x7a4328;     // dark brown (#703020)
+const HAIR = 0x17110d;     // dark braided hair
+const TROUSER = 0x2a1f18;  // dark leggings under the skirt
+const HAT = 0xf1efe6;      // cream toque (#f0f0f0)
 
 // combo moves: [armSide, dur, reach, weight, knock, lunge]
 const COMBO = [
@@ -36,36 +41,40 @@ function buildChef() {
   legR.add(put(box(0.22, 0.52, 0.26, trouser), 0, -0.26, 0));
   legR.add(put(box(0.26, 0.12, 0.34, mat(0x1a1a20, { flat: true })), 0, -0.5, 0.05));
 
-  // torso — white double-breasted jacket + purple apron
-  const jacketMat = mat(JACKET, { flat: true, rough: 0.75 });
+  // torso — pink top under a tan apron
+  const topMat = mat(TOP, { flat: true, rough: 0.7 });
   const torso = new THREE.Group(); torso.position.y = 0.9; body.add(torso);
-  torso.add(put(box(0.6, 0.72, 0.42, jacketMat), 0, 0, 0));
-  torso.add(put(box(0.44, 0.6, 0.06, mat(APRON, { flat: true, rough: 0.7 })), 0, -0.06, 0.22)); // apron
-  // double-breasted buttons
-  const btn = mat(0x2a2a30);
-  for (let i = 0; i < 3; i++) {
-    torso.add(put(box(0.05, 0.05, 0.04, btn), -0.1, 0.18 - i * 0.16, 0.26));
-    torso.add(put(box(0.05, 0.05, 0.04, btn), 0.1, 0.18 - i * 0.16, 0.26));
-  }
-  // collar
-  torso.add(put(box(0.5, 0.12, 0.3, jacketMat), 0, 0.4, 0.06));
+  torso.add(put(box(0.6, 0.72, 0.42, topMat), 0, 0, 0));
+  // apron over the front, with a waist tie
+  torso.add(put(box(0.46, 0.66, 0.06, mat(APRON, { flat: true, rough: 0.8 })), 0, -0.08, 0.22));
+  torso.add(put(box(0.62, 0.08, 0.06, mat(0x6f4626, { flat: true })), 0, 0.02, 0.235)); // apron tie
+  // collar of the top
+  torso.add(put(box(0.5, 0.1, 0.3, topMat), 0, 0.4, 0.06));
 
-  // head + toque
+  // head — dark braided hair framing a brown face, cream toque on top
   const head = new THREE.Group(); head.position.y = 1.42; body.add(head);
-  head.add(put(new THREE.Mesh(new THREE.SphereGeometry(0.24, 16, 12), mat(SKIN, { rough: 0.7 })), 0, 0, 0));
+  const hairMat = mat(HAIR, { flat: true, rough: 0.85 });
+  const hair = new THREE.Mesh(new THREE.SphereGeometry(0.27, 16, 12), hairMat);
+  hair.castShadow = true; hair.position.z = -0.02; head.add(hair);   // hair behind
+  head.add(put(new THREE.Mesh(new THREE.SphereGeometry(0.235, 16, 12), mat(SKIN, { rough: 0.72 })), 0, 0, 0.04)); // face in front
+  // braids down both sides
+  head.add(put(box(0.09, 0.5, 0.09, hairMat), -0.22, -0.18, -0.02));
+  head.add(put(box(0.09, 0.5, 0.09, hairMat), 0.22, -0.18, -0.02));
+  head.add(put(box(0.1, 0.1, 0.1, hairMat), -0.22, -0.44, -0.02)); // braid beads
+  head.add(put(box(0.1, 0.1, 0.1, hairMat), 0.22, -0.44, -0.02));
   // eyes
-  head.add(put(box(0.05, 0.06, 0.03, mat(0x20140c)), -0.09, 0.02, 0.22));
-  head.add(put(box(0.05, 0.06, 0.03, mat(0x20140c)), 0.09, 0.02, 0.22));
+  head.add(put(box(0.05, 0.06, 0.03, mat(0x120a06)), -0.09, 0.02, 0.24));
+  head.add(put(box(0.05, 0.06, 0.03, mat(0x120a06)), 0.09, 0.02, 0.24));
   // toque — puffy squashed sphere + band
-  const puff = new THREE.Mesh(new THREE.SphereGeometry(0.26, 16, 12), mat(HAT, { rough: 0.85 }));
-  puff.castShadow = true; puff.position.y = 0.34; puff.scale.set(1.05, 0.9, 1.05);
+  const puff = new THREE.Mesh(new THREE.SphereGeometry(0.27, 16, 12), mat(HAT, { rough: 0.85 }));
+  puff.castShadow = true; puff.position.y = 0.32; puff.scale.set(1.05, 0.9, 1.05);
   head.add(puff);
-  head.add(put(new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.22, 0.14, 16), mat(HAT, { rough: 0.8 })), 0, 0.16, 0));
+  head.add(put(new THREE.Mesh(new THREE.CylinderGeometry(0.23, 0.23, 0.14, 16), mat(HAT, { rough: 0.8 })), 0, 0.15, 0));
 
-  // arms — shoulder-pivoted groups hanging down; thrust forward on a punch
+  // arms — pink sleeves, brown fists; thrust forward on a punch
   function arm() {
     const grp = new THREE.Group();
-    const upper = put(box(0.16, 0.5, 0.16, jacketMat), 0, -0.25, 0);
+    const upper = put(box(0.16, 0.5, 0.16, topMat), 0, -0.25, 0);
     grp.add(upper);
     const fist = put(box(0.2, 0.2, 0.2, mat(SKIN, { flat: true, rough: 0.7 })), 0, -0.52, 0);
     grp.add(fist);

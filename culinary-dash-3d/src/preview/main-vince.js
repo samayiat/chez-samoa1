@@ -179,6 +179,7 @@ startLoop({
     bus.kickX *= Math.exp(-12 * rdt); bus.kickZ *= Math.exp(-12 * rdt);
     bus.punch = Math.max(0, bus.punch - 3 * rdt);
     bus.hurtFlash = Math.max(0, bus.hurtFlash - 3 * rdt);
+    introT = Math.max(0, introT - rdt * 1.1);
 
     arena.update(rdt, t);
     fx.update(rdt, {
@@ -196,7 +197,7 @@ startLoop({
 // ---------- cinematic camera ----------
 const camPos = new THREE.Vector3(0, 6, 10);
 const camLook = new THREE.Vector3(0, 1.2, 0);
-let camStrike = 0, camKO = 0;
+let camStrike = 0, camKO = 0, introT = 0;
 function updateCamera(dt, t) {
   const cp = chef.pos, bp = boss.pos;
   let fx2 = bp.x - cp.x, fz2 = bp.z - cp.z;
@@ -213,9 +214,10 @@ function updateCamera(dt, t) {
   const look = tmp.set(cp.x + fx2 * sep * lookBias, 1.3 + camKO * 0.2, cp.z + fz2 * sep * lookBias);
   // camera sits behind + well off to one side (a 3/4-profile), so a punch thrown
   // toward the boss reads laterally instead of hiding behind the chef's back.
-  const back = 4.6 - camStrike * 1.3 - camKO * 1.6 + sep * 0.42 - bus.punch * 0.7;
+  // arrival beat: the camera swoops down from a high wide shot into the fight
+  const back = 4.6 - camStrike * 1.3 - camKO * 1.6 + sep * 0.42 - bus.punch * 0.7 + introT * 4;
   const side = 4.8 + camStrike * 2.8 + Math.sin(t * 0.25) * 0.5;   // more profile mid-punch
-  const height = 3.9 + sep * 0.12 - camKO * 0.9;
+  const height = 3.9 + sep * 0.12 - camKO * 0.9 + introT * 7;
   const wantX = cp.x - fx2 * back + rx * side;
   const wantZ = cp.z - fz2 * back + rz * side;
   const s = smooth(dt, 4.5);
@@ -264,6 +266,8 @@ function begin() {
   initInput(window); initTouch();
   startEl.classList.add('gone');
   setTimeout(() => startEl.remove(), 400);
+  // arrival beat: swoop in + Vince announces himself
+  introT = 1.3; bus.shake = 5; audio.slam();
 }
 document.getElementById('startBtn')?.addEventListener('click', begin);
 addEventListener('keydown', begin, { once: true });
