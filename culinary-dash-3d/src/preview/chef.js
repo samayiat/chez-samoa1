@@ -100,9 +100,12 @@ export function createChef(scene) {
     hitFired: false, hurtT: 0, invuln: 0,
     dashT: 0, dashDir: new THREE.Vector3(),
     walkPhase: 0, lungeZ: 0, squash: 0,
+    kbx: 0, kbz: 0,
     ghosts: [],
   };
   mesh.position.copy(c.pos);
+
+  c.knockback = (kx, kz, s) => { const m = Math.hypot(kx, kz) || 1; c.kbx += (kx / m) * s; c.kbz += (kz / m) * s; };
 
   const SPEED = 4.6, DASH_SPEED = 12, ARENA_R = 8.5;
 
@@ -150,6 +153,9 @@ export function createChef(scene) {
       mz += Math.cos(c.facing) * drive;
     }
     c.pos.x += mx * dt; c.pos.z += mz * dt;
+    // knockback impulse (from a slam / charge / grab)
+    c.pos.x += c.kbx * dt; c.pos.z += c.kbz * dt;
+    c.kbx *= Math.exp(-9 * dt); c.kbz *= Math.exp(-9 * dt);
 
     // clamp to arena, push out of the boss
     const rr = Math.hypot(c.pos.x, c.pos.z);

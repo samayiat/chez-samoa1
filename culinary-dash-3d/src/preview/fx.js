@@ -60,6 +60,58 @@ export function createFx(scene) {
   }
   let gh = 0;
 
+  // ---- telegraph danger footprint (persistent: a disc that fills + a ring) ----
+  const dDisc = new THREE.Mesh(new THREE.CircleGeometry(1, 44),
+    new THREE.MeshBasicMaterial({ color: 0xff5a2a, transparent: true, opacity: 0, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending }));
+  const dRing = new THREE.Mesh(new THREE.RingGeometry(0.9, 1.0, 48),
+    new THREE.MeshBasicMaterial({ color: 0xff5a2a, transparent: true, opacity: 0, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending }));
+  dDisc.rotation.x = dRing.rotation.x = -Math.PI / 2;
+  dDisc.position.y = 0.04; dRing.position.y = 0.05;
+  dDisc.visible = dRing.visible = false;
+  group.add(dDisc, dRing);
+  let dangerSet = false;
+
+  // ---- charge aim-line (persistent quad from boss toward the lunge target) ----
+  const aim = new THREE.Mesh(new THREE.PlaneGeometry(1, 1),
+    new THREE.MeshBasicMaterial({ color: 0xffb14a, transparent: true, opacity: 0, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending }));
+  aim.rotation.x = -Math.PI / 2; aim.position.y = 0.06; aim.visible = false;
+  group.add(aim);
+  let aimSet = false;
+
+  // ---- thrown "eviction notice" papers ----
+  const paperGeo = new THREE.PlaneGeometry(0.5, 0.65);
+  const papers = [];
+  for (let i = 0; i < 8; i++) {
+    const m = new THREE.Mesh(paperGeo, new THREE.MeshStandardMaterial({ color: 0xf2ede0, roughness: 0.9, side: THREE.DoubleSide, emissive: 0x554433, emissiveIntensity: 0.4 }));
+    m.castShadow = true; m.visible = false; group.add(m);
+    papers.push({ m, life: 0, v: new THREE.Vector3(), spin: 0, dmg: 1 });
+  }
+  let pp = 0;
+
+  function setDanger(x, z, r, k, color = 0xff5a2a) {
+    dangerSet = true;
+    dDisc.visible = dRing.visible = true;
+    dDisc.position.set(x, 0.04, z); dRing.position.set(x, 0.05, z);
+    dDisc.scale.setScalar(r); dRing.scale.setScalar(r * (0.96 + Math.sin(k * 12) * 0.03));
+    dDisc.material.color.setHex(color); dRing.material.color.setHex(color);
+    dDisc.material.opacity = k * 0.28; dRing.material.opacity = 0.35 + k * 0.6;
+  }
+  function setAim(ax, az, bx, bz, k, w = 0.5) {
+    aimSet = true; aim.visible = true;
+    const dx = bx - ax, dz = bz - az, len = Math.hypot(dx, dz) || 0.001;
+    aim.position.set((ax + bx) / 2, 0.06, (az + bz) / 2);
+    aim.rotation.z = 0; aim.rotation.y = Math.atan2(dx, dz);
+    aim.scale.set(w, len, 1);
+    aim.material.opacity = k * 0.5;
+  }
+  function spawnPaper(from, to, dmg = 1) {
+    const p = papers[pp = (pp + 1) % papers.length];
+    p.m.visible = true; p.m.position.copy(from);
+    const dir = to.clone().sub(from); dir.y = 0; dir.normalize();
+    p.v.copy(dir).multiplyScalar(9); p.v.y = 2.2;
+    p.life = 2.2; p.spin = (Math.random() * 2 - 1) * 14; p.dmg = dmg;
+  }
+
   function sparkBurst(p, w, dx = 0, dz = 0) {
     const n = Math.round(6 + w * 8);
     for (let i = 0; i < n; i++) {
@@ -100,7 +152,7 @@ export function createFx(scene) {
     g.life = g.max = 0.35;
   }
 
-  function update(dt) {
+  function update(dt, proj) {
     for (const s of sparks) {
       if (s.life <= 0) continue;
       s.life -= dt;
@@ -141,7 +193,35 @@ export function createFx(scene) {
       if (g.life <= 0) { g.m.visible = false; continue; }
       g.m.material.opacity = k * 0.4;
     }
+
+    // telegraph decorations fade out on any frame the boss didn't refresh them
+    if (!dangerSet) {
+      dDisc.material.opacity = Math.max(0, dDisc.material.opacity - dt * 3);
+      dRing.material.opacity = Math.max(0, dRing.material.opacity - dt * 3);
+      if (dRing.material.opacity <= 0) dDisc.visible = dRing.visible = false;
+    }
+    if (!aimSet) {
+      aim.material.opacity = Math.max(0, aim.material.opacity - dt * 4);
+      if (aim.material.opacity <= 0) aim.visible = false;
+    }
+    dangerSet = false; aimSet = false;
+
+    // papers: fly, spin, land or strike the chef
+    for (const p of papers) {
+      if (p.life <= 0) continue;
+      p.life -= dt;
+      p.v.y -= 6 * dt;
+      p.m.position.addScaledVector(p.v, dt);
+      p.m.rotation.x += p.spin * dt; p.m.rotation.y += p.spin * 0.5 * dt;
+      if (proj && !proj.invuln) {
+        const dx = p.m.position.x - proj.chefPos.x, dz = p.m.position.z - proj.chefPos.z;
+        if (dx * dx + dz * dz < 0.6 * 0.6 && p.m.position.y < 2) {
+          proj.hit(p.dmg, p.m.position); p.life = 0;
+        }
+      }
+      if (p.m.position.y < 0.1 || p.life <= 0) { p.m.visible = false; p.life = 0; }
+    }
   }
 
-  return { sparkBurst, flash, shockwave, dust, ghost, update };
+  return { sparkBurst, flash, shockwave, dust, ghost, setDanger, setAim, spawnPaper, update };
 }

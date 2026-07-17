@@ -39,10 +39,20 @@ for (let i = 0; i < 3; i++) {
 const hpAfter = await page.evaluate(() => window.__vince.boss.hp);
 console.log('BOSS HP:', hpBefore, '->', hpAfter, '(combo landed:', hpBefore > hpAfter, ')');
 
-// force a telegraph to capture the danger read + hauled-up wrecking ball
-await page.evaluate(() => { const b = window.__vince.boss; b.state = 'windup'; b.t = 0; b.slamFired = false; b.slamTarget.set(0, 0, -3.4); });
-await page.waitForTimeout(500);
-await page.screenshot({ path: path.join(shotDir, 'vince-3-action.png') });
+// back off to mid-range so the rotation (not just grab) fires; capture a
+// ground-slam telegraph and collect which attack types actually run.
+await page.evaluate(() => { window.__vince.chef.pos.set(3.2, 0, 3.4); });
+let captured = false, seen = new Set();
+for (let i = 0; i < 110; i++) {
+  await page.waitForTimeout(110);
+  const s = await page.evaluate(() => { const b = window.__vince.boss; return { tg: b.telegraph, type: b.atk && b.atk.type, state: b.state, chefHp: window.__vince.chef.hp }; });
+  if (s.type && s.state === 'windup') seen.add(s.type);
+  if (!captured && s.tg > 0.55 && (s.type === 'pound' || s.type === 'stomp' || s.type === 'wreckingball')) {
+    await page.screenshot({ path: path.join(shotDir, 'vince-3-action.png') }); captured = true;
+  }
+}
+if (!captured) await page.screenshot({ path: path.join(shotDir, 'vince-3-action.png') });
+console.log('ATTACKS SEEN:', [...seen].join(', ') || 'none');
 
 // probe live state
 const state = await page.evaluate(() => {

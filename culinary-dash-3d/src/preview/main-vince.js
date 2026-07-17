@@ -128,18 +128,32 @@ function onPunch(move, fistWorld) {
     if (boss.dead) { audio.win(); }
   }
 }
-function onSlam(target, r, phase) {
-  fx.shockwave(target, r + 0.5, 0xff7a3a);
-  fx.dust(target, 18);
-  fx.flash(tmp.set(target.x, 0.6, target.z), 1.6, 0xff8a3a);
-  impact(2.6, 0, 0);
+// a hit that checks the chef against a circle (AOE, charge body, grab). Respects
+// i-frames (dodge), damages, knocks back, and shakes.
+function resolveStrike(center, r, dmg, dir = null, isGrab = false) {
+  if (chef.invuln > 0) return false;
+  const d = Math.hypot(chef.pos.x - center.x, chef.pos.z - center.z);
+  if (d >= r) return false;
+  if (!chef.hurt(dmg)) return false;
+  bus.hurtFlash = 1; audio.hurt();
+  bus.shake = Math.min(bus.shake + 2 + dmg, 6);
+  const kx = dir ? dir.x : (chef.pos.x - center.x) / (d || 1);
+  const kz = dir ? dir.z : (chef.pos.z - center.z) / (d || 1);
+  chef.knockback(kx, kz, isGrab ? 5 : 2.6);
+  fx.flash(tmp.set(chef.pos.x, 0.9, chef.pos.z), 0.9, 0xff4a4a);
+  return true;
+}
+// a ground slam (pound / stomp / wrecking ball): FX + AOE resolution.
+function onGroundStrike(target, r, dmg, isWreck) {
+  fx.shockwave(target, r + 0.5, isWreck ? 0xff3020 : 0xff7a3a);
+  fx.dust(target, isWreck ? 26 : 16);
+  fx.flash(tmp.set(target.x, 0.6, target.z), isWreck ? 2.4 : 1.5, 0xff8a3a);
+  impact(isWreck ? 3.6 : 2.4, 0, 0);
   audio.slam();
-  const d = Math.hypot(chef.pos.x - target.x, chef.pos.z - target.z);
-  if (d < r) {
-    if (chef.hurt(phase >= 3 ? 2 : 1)) { bus.hurtFlash = 1; audio.hurt(); bus.shake = Math.min(bus.shake + 3, 6); }
-  }
+  resolveStrike(target, r, dmg);
 }
 function spawnGhost(p, f) { fx.ghost(p, f); }
+const sound = (s) => audio[s] && audio[s]();
 
 // ---------- loop ----------
 let lastT = performance.now() / 1000;
@@ -148,8 +162,8 @@ startLoop({
     if (bus.hitstop > 0) return;              // hitstop freezes the sim, not the camera
     if (ended) return;
     const input = pollInput();
-    chef.update(dt, { input, bossPos: boss.pos, hud, onPunch, spawnGhost, sound: (s) => audio[s] && audio[s]() });
-    boss.update(dt, { chefPos: chef.pos, hud, onSlam, sound: (s) => audio[s] && audio[s]() });
+    chef.update(dt, { input, bossPos: boss.pos, hud, onPunch, spawnGhost, sound });
+    boss.update(dt, { chefPos: chef.pos, chefInvuln: chef.invuln > 0, hud, fx, resolveStrike, onGroundStrike, sound });
 
     // end states
     if (boss.dead && boss.winT > 1.3 && !ended) { ended = 1; showBanner('VINCE IS DOWN', 'Your lease is safe — tap to rematch'); }
@@ -167,7 +181,11 @@ startLoop({
     bus.hurtFlash = Math.max(0, bus.hurtFlash - 3 * rdt);
 
     arena.update(rdt, t);
-    fx.update(rdt);
+    fx.update(rdt, {
+      chefPos: chef.pos,
+      invuln: chef.invuln > 0,
+      hit: (dmg, pos) => { if (chef.hurt(dmg)) { bus.hurtFlash = 1; audio.hurt(); bus.shake = Math.min(bus.shake + 2, 6); fx.flash(pos, 0.8, 0xffd24a); } },
+    });
     updateCamera(rdt, t);
     updateHud();
 
@@ -178,18 +196,26 @@ startLoop({
 // ---------- cinematic camera ----------
 const camPos = new THREE.Vector3(0, 6, 10);
 const camLook = new THREE.Vector3(0, 1.2, 0);
+let camStrike = 0, camKO = 0;
 function updateCamera(dt, t) {
   const cp = chef.pos, bp = boss.pos;
   let fx2 = bp.x - cp.x, fz2 = bp.z - cp.z;
   const sep = Math.hypot(fx2, fz2) || 1; fx2 /= sep; fz2 /= sep;
   const rx = fz2, rz = -fx2;               // right vector
-  // frame both: look at a point biased toward the boss
-  const look = tmp.set(cp.x + fx2 * sep * 0.44, 1.3, cp.z + fz2 * sep * 0.44);
+
+  // swing toward a profile while the chef is mid-punch (strike reads laterally),
+  // and dolly in on the KO for a finisher beat.
+  camStrike = lerp(camStrike, chef.punchT > 0 ? 1 : 0, smooth(dt, chef.punchT > 0 ? 11 : 3.5));
+  camKO = lerp(camKO, boss.dead ? 1 : 0, smooth(dt, 1.6));
+
+  // frame both: look at a point biased toward the boss (toward Vince on the KO)
+  const lookBias = boss.dead ? 0.75 : 0.44;
+  const look = tmp.set(cp.x + fx2 * sep * lookBias, 1.3 + camKO * 0.2, cp.z + fz2 * sep * lookBias);
   // camera sits behind + well off to one side (a 3/4-profile), so a punch thrown
   // toward the boss reads laterally instead of hiding behind the chef's back.
-  const back = 4.6 + sep * 0.42 - bus.punch * 0.7;
-  const side = 4.8 + Math.sin(t * 0.25) * 0.5;   // gentle drift
-  const height = 3.9 + sep * 0.12;
+  const back = 4.6 - camStrike * 1.3 - camKO * 1.6 + sep * 0.42 - bus.punch * 0.7;
+  const side = 4.8 + camStrike * 2.8 + Math.sin(t * 0.25) * 0.5;   // more profile mid-punch
+  const height = 3.9 + sep * 0.12 - camKO * 0.9;
   const wantX = cp.x - fx2 * back + rx * side;
   const wantZ = cp.z - fz2 * back + rz * side;
   const s = smooth(dt, 4.5);

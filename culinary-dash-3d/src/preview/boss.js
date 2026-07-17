@@ -131,7 +131,27 @@ export function buildVince() {
   return g;
 }
 
-// A boss controller wrapping the mesh with a state machine + HP.
+// --- attack roster (3D-tuned port of the 2D Vince, docs/BOSS_SHOP_SPEC + BOSSES[]) ---
+// Same design: telegraph -> strike -> recover, every attack resolves into an opening.
+// HP-gated rotations pick the moveset; phase only shortens WINDUP, never the recover
+// (the strike window), so landing an opening is never punished harder.
+const PHASE_TEMPO = { 1: 1, 2: 0.85, 3: 0.68 };
+const ROT = {
+  1: ['charge', 'pound', 'paper', 'stomp', 'dcharge'],
+  2: ['stomp', 'dcharge', 'charge', 'pound', 'paper'],
+  3: ['dcharge', 'stomp', 'wreckingball'],
+};
+const ATK = {
+  charge: { wu: 0.62, dash: 0.34, speed: 15, hitR: 1.7, dmg: 1, col: 0xffb14a },
+  dcharge: { wu: 0.5, dash: 0.26, speed: 17, hitR: 1.6, dmg: 1, col: 0xffb14a, reps: 2 },
+  pound: { wu: 0.9, strike: 0.36, r: 3.0, dmg: 1, col: 0xff7a3a },
+  stomp: { wu: 0.5, strike: 0.3, r: 3.4, dmg: 1, col: 0xff9a3a },
+  paper: { wu: 0.66, strike: 0.24, dmg: 1, col: 0xffd24a },
+  grab: { wu: 0.36, strike: 0.28, r: 2.2, dmg: 2, col: 0xff4a4a },
+  wreckingball: { wu: 1.4, strike: 0.44, r: 6.0, dmg: 2, col: 0xff3020 },
+};
+const ARENA_R = 7.4;
+
 export function createBoss(scene) {
   const mesh = buildVince();
   scene.add(mesh);
@@ -140,14 +160,13 @@ export function createBoss(scene) {
   const b = {
     mesh, u,
     pos: new THREE.Vector3(0, 0, -5.5),
-    facing: 0,
     hp: 28, maxHp: 28,
-    state: 'idle', t: 0, nextAttack: 2.6,
+    state: 'idle', t: 0, gap: 1.4,
     hurtT: 0, recoilZ: 0,
-    slamFired: false,
-    telegraph: 0,          // 0..1 during windup
-    slamTarget: new THREE.Vector3(),
-    slamR: 3.0,
+    telegraph: 0,
+    atk: null, cycle: 0, struck: false, reps: 0,
+    target: new THREE.Vector3(),   // remembered slam spot / charge destination
+    dir: new THREE.Vector3(),
     dead: false, winT: 0,
   };
   mesh.position.copy(b.pos);
@@ -159,43 +178,43 @@ export function createBoss(scene) {
     b.hp = Math.max(0, b.hp - w);
     b.hurtT = 0.16;
     b.recoilZ = Math.min(0.5, 0.14 * w);
-    if (b.hp <= 0 && !b.dead) { b.dead = true; b.state = 'dead'; b.t = 0; }
+    if (b.hp <= 0 && !b.dead) { b.dead = true; b.state = 'dead'; b.t = 0; b.telegraph = 0; }
   };
+
+  // pick the next attack: grab preempts if the chef is hugging him; else rotation.
+  function chooseAttack(ctx) {
+    const ph = b.phase();
+    const hug = Math.hypot(ctx.chefPos.x - b.pos.x, ctx.chefPos.z - b.pos.z) < ATK.grab.r * 0.95;
+    const type = hug ? 'grab' : ROT[ph][b.cycle++ % ROT[ph].length];
+    b.atk = { type, ...ATK[type] };
+    b.reps = b.atk.reps || 1;
+    b.struck = false;
+    // remember the target NOW for slams (dodge = leave the spot) / aim charges & paper
+    b.target.set(ctx.chefPos.x, 0, ctx.chefPos.z);
+  }
 
   b.update = (dt, ctx) => {
     b.t += dt;
     const ph = b.phase();
-
-    // face the chef
-    const dx = ctx.chefPos.x - b.pos.x, dz = ctx.chefPos.z - b.pos.z;
-    const want = Math.atan2(dx, dz);
-    b.facing = want; // Vince is slow but always squares up
-    u.lean.rotation.y = 0; // body faces +Z; whole mesh yaws:
-    mesh.rotation.y += (want - mesh.rotation.y) * smooth(dt, b.dead ? 2 : 3);
-
-    // idle breathing + ball pendulum
-    const breathe = Math.sin(b.t * 1.7) * 0.03;
-    u.belly.scale.y = 1 + breathe;
-    u.belly.scale.x = 1 - breathe * 0.5;
-
-    // hurt flash
-    if (b.hurtT > 0) {
-      b.hurtT -= dt;
-      const f = Math.max(0, b.hurtT / 0.16);
-      u.suitMats.forEach((m) => m.emissive.setRGB(f, f, f));
-    } else {
-      u.suitMats.forEach((m) => m.emissive.setScalar(0));
-    }
-    // recoil
-    b.recoilZ *= Math.exp(-10 * dt);
-
-    // enrage tint by phase
     const rage = ph === 3 ? 1 : ph === 2 ? 0.4 : 0;
+
+    // face the chef (except while charging, where we face the locked direction)
+    let faceX = ctx.chefPos.x - b.pos.x, faceZ = ctx.chefPos.z - b.pos.z;
+    if (b.state === 'strike' && (b.atk?.type === 'charge' || b.atk?.type === 'dcharge')) {
+      faceX = b.dir.x; faceZ = b.dir.z;
+    }
+    mesh.rotation.y += (Math.atan2(faceX, faceZ) - mesh.rotation.y) * smooth(dt, b.dead ? 2 : 5);
+
+    // breathing + hurt flash + enrage glow (always)
+    const breathe = Math.sin(b.t * 1.7) * 0.03;
+    u.belly.scale.y = 1 + breathe; u.belly.scale.x = 1 - breathe * 0.5;
+    if (b.hurtT > 0) { b.hurtT -= dt; const f = Math.max(0, b.hurtT / 0.16); u.suitMats.forEach((m) => m.emissive.setRGB(f, f, f)); }
+    else u.suitMats.forEach((m) => m.emissive.setScalar(0));
+    b.recoilZ *= Math.exp(-10 * dt);
     u.eyeMat.emissiveIntensity = 2.0 + rage * 2.5 + Math.sin(b.t * 8) * rage * 0.6;
     u.rageLight.intensity = lerp(u.rageLight.intensity, b.telegraph * (1.4 + rage * 1.4), smooth(dt, 8));
 
     if (b.state === 'dead') {
-      // topple + fade the fight to a win
       b.winT += dt;
       u.lean.rotation.x = lerp(u.lean.rotation.x, -Math.PI * 0.42, smooth(dt, 3));
       mesh.position.y = -Math.min(1.0, b.winT * 0.4);
@@ -204,57 +223,117 @@ export function createBoss(scene) {
       return;
     }
 
-    const windupDur = ({ 1: 1.0, 2: 0.8, 3: 0.6 }[ph]);
-    const gap = ({ 1: 3.0, 2: 2.4, 3: 1.8 }[ph]);
+    mesh.position.set(b.pos.x, 0, b.pos.z);
 
-    if (b.state === 'idle') {
-      u.ballPivot.rotation.x = Math.sin(b.t * 1.4) * 0.32;       // pendulum
+    if (b.state === 'idle' || b.state === 'recover') {
+      // slow charger approach + neutral pose
+      const toX = ctx.chefPos.x - b.pos.x, toZ = ctx.chefPos.z - b.pos.z;
+      const d = Math.hypot(toX, toZ) || 1;
+      if (d > 3) { const sp = 1.3 * dt; b.pos.x += (toX / d) * sp; b.pos.z += (toZ / d) * sp; }
+      u.ballPivot.rotation.x = lerp(u.ballPivot.rotation.x, Math.sin(b.t * 1.4) * 0.3, smooth(dt, 5));
       u.ballPivot.rotation.z = Math.sin(b.t * 1.1) * 0.1;
       u.lean.rotation.x = lerp(u.lean.rotation.x, -b.recoilZ, smooth(dt, 8));
+      u.armR.rotation.x = lerp(u.armR.rotation.x, 0, smooth(dt, 8));
       b.telegraph = lerp(b.telegraph, 0, smooth(dt, 6));
-      if (b.t > b.nextAttack) { b.state = 'windup'; b.t = 0; b.slamFired = false;
-        // aim the slam where the chef is now
-        b.slamTarget.set(ctx.chefPos.x, 0, ctx.chefPos.z);
-      }
+      if (b.t > b.gap) { chooseAttack(ctx); b.state = 'windup'; b.t = 0; }
     } else if (b.state === 'windup') {
-      const k = clamp01(b.t / windupDur);
+      const wu = b.atk.wu * PHASE_TEMPO[ph];
+      const k = clamp01(b.t / wu);
       b.telegraph = k;
-      // rear back, haul the ball up and behind
-      u.lean.rotation.x = lerp(0, 0.28, easeIn(k));
-      u.ballPivot.rotation.x = lerp(0.3, -1.7, easeOut(k));
-      u.armR.rotation.x = lerp(0, -0.6, easeOut(k));
-      if (b.t >= windupDur) { b.state = 'slam'; b.t = 0; }
-    } else if (b.state === 'slam') {
-      const dur = 0.36;
-      const k = clamp01(b.t / dur);
-      // whip the body and ball forward/down
-      u.lean.rotation.x = lerp(0.28, -0.34, easeIn(Math.min(1, k * 1.4)));
-      u.ballPivot.rotation.x = lerp(-1.7, 1.5, easeOutBack(k));
-      u.armR.rotation.x = lerp(-0.6, 0.5, easeOut(k));
-      if (!b.slamFired && k > 0.55) {
-        b.slamFired = true;
-        ctx.onSlam(b.slamTarget, b.slamR, ph);
+      windupPose(b.atk.type, k);
+      showTelegraph(b.atk, ctx, k);
+      if (b.t >= wu) { b.state = 'strike'; b.t = 0; }
+    } else if (b.state === 'strike') {
+      const done = doStrike(dt, ctx);
+      if (done) {
+        if (--b.reps > 0 && (b.atk.type === 'dcharge' || b.atk.type === 'charge')) {
+          // chain the next charge: re-aim + re-wind briefly
+          b.target.set(ctx.chefPos.x, 0, ctx.chefPos.z); b.struck = false; b.state = 'windup'; b.t = b.atk.wu * PHASE_TEMPO[ph] * 0.55;
+        } else {
+          b.state = 'recover'; b.t = 0;
+          b.gap = 1.15 + Math.random() * 0.4;   // the opening (never tempo-shrunk)
+        }
       }
-      if (b.t >= dur) { b.state = 'recover'; b.t = 0; }
-    } else if (b.state === 'recover') {
-      const k = clamp01(b.t / 0.7);
-      u.lean.rotation.x = lerp(-0.34, 0, easeOut(k));
-      u.ballPivot.rotation.x = lerp(1.5, 0.3, easeOut(k));
-      u.armR.rotation.x = lerp(0.5, 0, easeOut(k));
-      b.telegraph = lerp(b.telegraph, 0, smooth(dt, 6));
-      if (b.t >= 0.7) { b.state = 'idle'; b.t = 0; b.nextAttack = gap; }
     }
 
     ctx.hud.boss = b.hp / b.maxHp;
     ctx.hud.enraged = ph === 3;
   };
 
-  // world position of the ball, for hit reactions (unused in preview but handy)
-  b.ballWorld = () => {
-    const v = new THREE.Vector3();
-    u.ball.getWorldPosition(v);
-    return v;
-  };
+  // --- pose per attack windup ---
+  function windupPose(type, k) {
+    if (type === 'pound' || type === 'wreckingball') {
+      u.lean.rotation.x = lerp(0, 0.3, easeIn(k)); u.ballPivot.rotation.x = lerp(0.3, -1.8, easeOut(k)); u.armR.rotation.x = lerp(0, -0.7, easeOut(k));
+    } else if (type === 'stomp') {
+      u.lean.rotation.x = lerp(0, -0.12, easeOut(k)); mesh.position.y = Math.sin(k * Math.PI) * 0.25;
+    } else if (type === 'charge' || type === 'dcharge') {
+      u.lean.rotation.x = lerp(0, 0.22, easeIn(k)); u.armL.rotation.x = lerp(0, -0.5, k); u.armR.rotation.x = lerp(0, -0.3, k);
+    } else if (type === 'paper') {
+      u.armL.rotation.x = lerp(0, -1.8, easeOut(k));
+    } else if (type === 'grab') {
+      u.armL.rotation.x = lerp(0, -1.4, easeOut(k)); u.armR.rotation.x = lerp(0, -1.4, easeOut(k)); u.lean.rotation.x = lerp(0, -0.15, k);
+    }
+  }
 
+  // --- telegraph decoration per attack ---
+  function showTelegraph(atk, ctx, k) {
+    const t = atk.type;
+    if (t === 'pound' || t === 'wreckingball') ctx.fx.setDanger(b.target.x, b.target.z, atk.r, k, atk.col);
+    else if (t === 'stomp') ctx.fx.setDanger(b.pos.x, b.pos.z, atk.r, k, atk.col);
+    else if (t === 'charge' || t === 'dcharge') {
+      // lock the lunge direction at 65% of the windup
+      if (k < 0.65) b.target.set(ctx.chefPos.x, 0, ctx.chefPos.z);
+      ctx.fx.setAim(b.pos.x, b.pos.z, b.target.x, b.target.z, k, 1.0);
+    } else if (t === 'paper') ctx.fx.setAim(b.pos.x, b.pos.z, ctx.chefPos.x, ctx.chefPos.z, k * 0.7, 0.4);
+    else if (t === 'grab') ctx.fx.setDanger(b.pos.x, b.pos.z, atk.r, k, atk.col);
+  }
+
+  // --- execute a strike; return true when the strike phase is complete ---
+  function doStrike(dt, ctx) {
+    const a = b.atk, ph = b.phase();
+    const k = clamp01(b.t / (a.strike || a.dash));
+    if (a.type === 'pound' || a.type === 'wreckingball') {
+      u.lean.rotation.x = lerp(0.3, -0.34, easeIn(Math.min(1, k * 1.4)));
+      u.ballPivot.rotation.x = lerp(-1.8, 1.5, easeOutBack(k));
+      u.armR.rotation.x = lerp(-0.7, 0.5, easeOut(k));
+      if (!b.struck && k > 0.55) { b.struck = true; ctx.onGroundStrike(b.target, a.r, a.dmg, a.type === 'wreckingball'); }
+      return b.t >= a.strike;
+    }
+    if (a.type === 'stomp') {
+      mesh.position.y = lerp(0.25, 0, easeIn(Math.min(1, k * 1.6)));
+      if (!b.struck && k > 0.4) { b.struck = true; ctx.onGroundStrike(b.pos, a.r, a.dmg, false); }
+      return b.t >= a.strike;
+    }
+    if (a.type === 'charge' || a.type === 'dcharge') {
+      if (b.t === dt || b.dir.lengthSq() === 0 || k < 0.02) {
+        b.dir.set(b.target.x - b.pos.x, 0, b.target.z - b.pos.z);
+        if (b.dir.lengthSq() < 0.01) b.dir.set(0, 0, 1); b.dir.normalize();
+      }
+      const step = a.speed * dt;
+      b.pos.x += b.dir.x * step; b.pos.z += b.dir.z * step;
+      const rr = Math.hypot(b.pos.x, b.pos.z);
+      if (rr > ARENA_R) { b.pos.x *= ARENA_R / rr; b.pos.z *= ARENA_R / rr; }
+      u.lean.rotation.x = 0.22;
+      if (!b.struck) { if (ctx.resolveStrike(b.pos, a.hitR, a.dmg, b.dir)) b.struck = true; }
+      return b.t >= a.dash;
+    }
+    if (a.type === 'paper') {
+      u.armL.rotation.x = lerp(-1.8, 0.4, easeOut(k));
+      if (!b.struck && k > 0.35) {
+        b.struck = true;
+        ctx.fx.spawnPaper(new THREE.Vector3(b.pos.x, 2.2, b.pos.z), ctx.chefPos, a.dmg);
+        ctx.sound('whiff');
+      }
+      return b.t >= a.strike;
+    }
+    if (a.type === 'grab') {
+      u.armL.rotation.x = lerp(-1.4, -0.2, easeOut(k)); u.armR.rotation.x = lerp(-1.4, -0.2, easeOut(k));
+      if (!b.struck && k > 0.3) { b.struck = true; ctx.resolveStrike(b.pos, a.r, a.dmg, null, true); }
+      return b.t >= a.strike;
+    }
+    return true;
+  }
+
+  b.ballWorld = () => { const v = new THREE.Vector3(); u.ball.getWorldPosition(v); return v; };
   return b;
 }
