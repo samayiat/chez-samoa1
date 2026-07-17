@@ -25,7 +25,9 @@ jobs:
       - name: Prepare site
         run: |
           mkdir site
-          cp culinary-dash/culinary-dash-devtools.html site/index.html
+          # Ship the DEV=false build. culinary-dash-devtools.html is DEV=true and
+          # exposes the pause dev menu (wave/enemy overrides, START BRAWL) — never public.
+          cp culinary-dash/culinary-dash.html site/index.html
           cp culinary-dash/site-assets/manifest.json site/manifest.json
           cp culinary-dash/site-assets/icon-192.png site/icon-192.png
           cp culinary-dash/site-assets/icon-512.png site/icon-512.png

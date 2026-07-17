@@ -1,2 +1,5 @@
 extracted/
 node_modules/
+
+# Redundant self-backup bundle (do not re-commit)
+git .zip
