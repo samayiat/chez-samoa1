@@ -1338,7 +1338,7 @@ for(const id in CHARS){ CHAR_IMG[id]={}; for(const d in CHARS[id]){
 /* chefF reverted to the original procedural sprite */
 const CUST_SCALE=0.30, CHEF_SCALE=0.29;    // sheet px -> game px. CHEF_SCALE targets ~30px of CHARACTER.
 const CUST_SPR_SCALE=0.55;                 // pixellab patrons render ~18px tall
-const SPRITE_CHANCE=0.22;                  // most patrons keep the classic procedural look; these show up now & then
+const SPRITE_CHANCE=1;                     // every patron uses a real cast sprite — no procedural customers
 const SCUFFLE_HP=2, SCUFFLE_TIMEOUT=11, SCUFFLE_CHANCE=0.6, SCUFFLE_MAX=3;   // P4: daytime bad-order scuffle
 let CUST_SPR=[];
 /*__ART__ 0812_CUST_SPR_SRC*/
@@ -1547,6 +1547,17 @@ function pickFightFrame(id,move,dir,elapsed){
 // docs/tools/ingest once generated; empty object = every enemy renders exactly as before (legacy
 // ENEMY_IMG masked art). Same non-regressive pattern as FIGHT/STATION_TEX/DANCE_CAST/TILE_TEX.
 const ENEMY_TEX={};
+// generated shadow-enemy art (evil shadow states of the cast, one cross-punch each). ENEMY_ART[cast] =
+// {idle:{right,left(=west rotation)}, punch:{right:[frames],left:[mirrored frames]}} of data URIs, loaded
+// into ENEMY_TEX as Images. 5 done (reggie/val/sinclair/marisol/critic); the other 11 cast fall through to
+// the legacy ENEMY_IMG masked art — non-regressive. Trimmed+snapped to 66px (chef-scale match) at ingest.
+const ENEMY_ART={
+/*__ART__ enemy_tex*/
+};
+for(const cast in ENEMY_ART){ const e=ENEMY_ART[cast], out={idle:{},punch:{}};
+  for(const d in e.idle){ const im=new Image(); im.src=e.idle[d]; out.idle[d]=im; }
+  for(const d in e.punch){ out.punch[d]=e.punch[d].map(u=>{ const im=new Image(); im.src=u; return im; }); }
+  ENEMY_TEX[cast]=out; }
 // Free-running, per-enemy-offset clock for the punch loop — purely visual (does not read or drive e.t,
 // which is real combat-hit-timing state and stays untouched). Cycles every 300ms.
 function enemyPunchElapsed(e){ return (performance.now()/300 + (e.seed||0)) % 1; }
@@ -3581,7 +3592,15 @@ function danceTarget(N){                          // how packed the floor "wants
 // DANCE_CAST: reused customer-cast ids (see docs/tools/ingest) with a "dancing" frame set. Filled in once
 // that art is ingested; empty until then, so spawnDancer/drawDancer fall back to the procedural raver —
 // same non-regressive pattern as the floor/wall textures (TILE_TEX et al).
-const DANCE_CAST=[];
+const DANCE_ART={
+/*__ART__ dance_cast*/
+};
+// dedicated dance-only keys (dtiana..dmonty) -> south-facing dancing frames as Images, hung under
+// CHAR_IMG[key].front.dance so danceFrames() finds them. These keys are NOT drawChar customer ids, so
+// there's zero interference with the seated cast — a dancer just picks one at random (spawnDancer).
+for(const id in DANCE_ART){ if(!CHAR_IMG[id]) CHAR_IMG[id]={};
+  CHAR_IMG[id].front={dance:DANCE_ART[id].map(u=>{ const im=new Image(); im.src=u; return im; })}; }
+const DANCE_CAST=Object.keys(DANCE_ART);   // empty until art is ingested -> procedural raver; filled = real dancers
 function spawnDancer(){
   const Z=DANCE_ZONE;
   night.dancers.push({
@@ -4065,6 +4084,13 @@ function drawStation(st){
 // body below — same non-regressive pattern as TILE_TEX/WOOD_TEX/WALL_TEX and DANCE_CAST. The progress bar,
 // heat shimmer/steam and ingredient crates stay code either way (forces, not things).
 const STATION_TEX={};
+// generated appliance art keyed "<id>:<state>" -> data URI, loaded into STATION_TEX as Images. Missing
+// keys fall through to the procedural body (non-regressive). fryer/pot idle + pot cooking + bar/salad idle
+// wired; fryer:cooking/ready, pot:ready, icebox, bar:shaken still procedural (art gaps, see ASSET_CATALOG).
+const STATION_ART={
+/*__ART__ station_tex*/
+};
+for(const k in STATION_ART){ const im=new Image(); im.src=STATION_ART[k]; STATION_TEX[k]=im; }
 function stationTexFor(st){ const im=STATION_TEX[st.id+":"+st.state]||STATION_TEX[st.id+":idle"]; return texReady(im)?im:null; }
 // The chrome that stays CODE even once the appliance body is real art: progress bar, ready label,
 // idle heat/steam, raw-ingredient crates. Mirrors the timing-station tail below — kept as its own small
@@ -4501,6 +4527,17 @@ let FLOOR_CV=null;
 // texture falls back to the original procedural bake, so the room renders identically until real art is
 // assigned to TILE_TEX / WOOD_TEX / WALL_TEX (Image objects, from art/*.b64 data URIs).
 let TILE_TEX=null, WOOD_TEX=null, WALL_TEX=null;
+// generated floor/wall swatches (seamless all-upper Wang tile per surface) -> Images. buildFloor bakes
+// FLOOR_CV once, lazily; a data-URI decodes async, so onload nulls FLOOR_CV to force a re-bake WITH the
+// texture. Missing keys stay null -> the procedural bake (non-regressive). tile=kitchen ceramic, wood=
+// dining hardwood, wall=nightclub brick.
+const FLOOR_ART={
+/*__ART__ floor_tex*/
+};
+{ const mk=uri=>{ const im=new Image(); im.onload=()=>{ FLOOR_CV=null; }; im.src=uri; return im; };
+  if(FLOOR_ART.tile) TILE_TEX=mk(FLOOR_ART.tile);
+  if(FLOOR_ART.wood) WOOD_TEX=mk(FLOOR_ART.wood);
+  if(FLOOR_ART.wall) WALL_TEX=mk(FLOOR_ART.wall); }
 function texReady(im){ return im && im.complete && im.naturalWidth>0; }
 function tileInto(g,im,x0,y0,x1,y1){ const w=im.naturalWidth, h=im.naturalHeight;   // repeat a swatch across a zone
   for(let yy=y0; yy<y1; yy+=h) for(let xx=x0; xx<x1; xx+=w) g.drawImage(im, Math.round(xx), Math.round(yy)); }
