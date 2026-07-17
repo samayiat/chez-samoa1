@@ -4065,6 +4065,13 @@ function drawStation(st){
 // body below — same non-regressive pattern as TILE_TEX/WOOD_TEX/WALL_TEX and DANCE_CAST. The progress bar,
 // heat shimmer/steam and ingredient crates stay code either way (forces, not things).
 const STATION_TEX={};
+// generated appliance art keyed "<id>:<state>" -> data URI, loaded into STATION_TEX as Images. Missing
+// keys fall through to the procedural body (non-regressive). fryer/pot idle + pot cooking + bar/salad idle
+// wired; fryer:cooking/ready, pot:ready, icebox, bar:shaken still procedural (art gaps, see ASSET_CATALOG).
+const STATION_ART={
+/*__ART__ station_tex*/
+};
+for(const k in STATION_ART){ const im=new Image(); im.src=STATION_ART[k]; STATION_TEX[k]=im; }
 function stationTexFor(st){ const im=STATION_TEX[st.id+":"+st.state]||STATION_TEX[st.id+":idle"]; return texReady(im)?im:null; }
 // The chrome that stays CODE even once the appliance body is real art: progress bar, ready label,
 // idle heat/steam, raw-ingredient crates. Mirrors the timing-station tail below — kept as its own small
