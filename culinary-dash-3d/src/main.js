@@ -87,5 +87,16 @@ addEventListener('keydown', (e) => {
   if (e.code === 'KeyB' && state.phase === 'service') startBrawl(state);
 });
 
+// dismiss the start overlay on button, key, or tap
+const startEl = document.getElementById('start');
+function dismissStart() {
+  if (!startEl || startEl.classList.contains('gone')) return;
+  startEl.classList.add('gone');
+  setTimeout(() => startEl.remove(), 450);
+}
+document.getElementById('startBtn')?.addEventListener('click', dismissStart);
+addEventListener('keydown', dismissStart, { once: true });
+addEventListener('pointerdown', dismissStart, { once: true });
+
 // expose for the e2e harness to drive/inspect
 window.__game = { state, bus, THREE, startBrawl };

@@ -22,12 +22,57 @@
       text-align: center; pointer-events: none;
       font: 500 11px/1.3 system-ui, sans-serif; color: #9a8c78;
     }
+    #start {
+      position: fixed; inset: 0; z-index: 10;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 14px; text-align: center; padding: 24px;
+      background: radial-gradient(120% 90% at 50% 20%, #16101f 0%, #0b0810 70%);
+      color: #ffe9c7; font-family: system-ui, sans-serif;
+      transition: opacity .4s ease;
+    }
+    #start.gone { opacity: 0; pointer-events: none; }
+    #start h1 {
+      margin: 0; font-size: clamp(28px, 6vw, 52px); font-weight: 800;
+      letter-spacing: .04em; text-wrap: balance;
+      background: linear-gradient(180deg, #ffd98a, #e0553a);
+      -webkit-background-clip: text; background-clip: text; color: transparent;
+    }
+    #start p { margin: 0; max-width: 30rem; line-height: 1.5; color: #c9bda9; font-size: 14px; }
+    #start .keys { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; margin-top: 4px; }
+    #start .keys span {
+      font: 600 12px/1 ui-monospace, monospace; color: #ffe9c7;
+      border: 1px solid #4a3b52; border-radius: 7px; padding: 8px 11px; background: #1d1626;
+    }
+    #start button {
+      margin-top: 10px; cursor: pointer; color: #1a1018; font-weight: 800; letter-spacing: .03em;
+      font-family: system-ui, sans-serif; font-size: 15px;
+      border: 0; border-radius: 10px; padding: 13px 26px;
+      background: linear-gradient(180deg, #ffd98a, #f0a83a);
+      box-shadow: 0 6px 20px rgba(240,168,58,.3);
+    }
+    #start button:focus-visible { outline: 3px solid #ffd98a; outline-offset: 3px; }
   </style>
 </head>
 <body>
   <div id="app"></div>
   <div id="hud"></div>
   <div id="hint">WASD / arrows / left-stick to move &middot; E or A-button to interact</div>
+
+  <div id="start">
+    <h1>Culinary Dash 3D</h1>
+    <p>Run the restaurant: walk to a station, cook or pour the order, and carry the
+       plate to the customer before their patience runs out. Let too many walk out
+       angry &mdash; and the mob comes back <strong>swinging</strong>.</p>
+    <div class="keys">
+      <span>WASD / Arrows — move</span>
+      <span>E / Space — cook &amp; serve</span>
+      <span>E — punch (in a brawl)</span>
+      <span>B — start a brawl</span>
+    </div>
+    <button id="startBtn" type="button">Open the kitchen</button>
+    <p style="font-size:12px;color:#8a7d6a">A 3D reimagining of the 2D game &middot; placeholder art, real mechanics.</p>
+  </div>
+
   <script type="module" src="/src/main.js"></script>
 </body>
 </html>

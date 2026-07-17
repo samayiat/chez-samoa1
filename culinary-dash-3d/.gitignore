@@ -6,3 +6,5 @@ playwright-report/
 
 # e2e render artifacts
 e2e/*.png
+dist-single/
+artifact.html
