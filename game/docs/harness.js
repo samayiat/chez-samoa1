@@ -2847,6 +2847,24 @@ const probe = `
     phase="title";
   })();
 
+  /* ---- #33 FIXED TIMESTEP: the sim advances the same simulated time no matter the frame rate, so the
+     game plays identically at 30fps and 60fps. simSteps is the pure heart of it; the loop just runs its
+     count. ---- */
+  (()=>{
+    const run=(dts)=>{ let carry=0, steps=0; for(const d of dts){ const s=simSteps(carry,d); carry=s.carry; steps+=s.n; } return {steps, carry}; };
+    const at60=run(Array(120).fill(1/60)), at30=run(Array(60).fill(1/30));
+    ok("60fps runs 60 sim steps per second", at60.steps===120);
+    ok("30fps and 60fps run the SAME steps over the same wall-time (frame-rate independent)", at30.steps===at60.steps);
+    const jit=[]; for(let i=0;i<300;i++) jit.push([1/60,1/30,1/90,1/45,1/50][i%5]);   // messy real-world frame times
+    const capped=jit.reduce((a,d)=>a+Math.min(d,MAX_FRAME),0);
+    const j=run(jit);
+    ok("the accumulator conserves wall time (nothing lost or invented)", Math.abs(j.steps*FIXED_DT + j.carry - capped) < 1e-9);
+    ok("...and the leftover is always a sub-step (0 <= carry < one step)", j.carry>=0 && j.carry<FIXED_DT);
+    ok("a lag spike is clamped to a few catch-up steps, never a death spiral", simSteps(0,5).n>=1 && simSteps(0,5).n<=Math.ceil(MAX_FRAME/FIXED_DT));
+    let c=0,s=0; for(let i=0;i<4;i++){ const r=simSteps(c,1/120); c=r.carry; s+=r.n; }
+    ok("sub-frame dt accumulates rather than starving the sim", s===2);   // 4*(1/120)=1/30=2 steps
+  })();
+
   globalThis.__RESULT = R;
 })();
 `;

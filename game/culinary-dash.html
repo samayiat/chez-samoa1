@@ -4964,18 +4964,34 @@ function drawBossButtons(){
   X.fillStyle= ready?"#171020":"#e9d8b8"; X.font="6px monospace"; X.textAlign="center"; X.fillText("STRIKE",P.x,P.y+2); X.textAlign="left";
 }
 /* ================= loop ================= */
+/* FIXED TIMESTEP (#33). The loop fed the sim a wall-clock dt, so it advanced by a different amount each
+   frame — the game literally played differently at 30fps than 60 (the integrators are dt-shaped, but
+   x+=v*dt still accumulates differently at different steps). Now real time feeds an accumulator and the
+   sim runs in whole FIXED_DT steps: update() always sees exactly 1/60, so the simulation is frame-rate
+   independent (and lockstep-ready). A lag spike is clamped to MAX_FRAME, so a slow frame catches up by at
+   most a few steps rather than death-spiralling. simSteps is pure so the harness owns it — the loop keeps
+   only the render and the step COUNT, never the timing math. */
+const FIXED_DT=1/60, MAX_FRAME=0.05;             // MAX_FRAME = the old dt clamp = at most 3 catch-up steps/frame
+let acc=0;
+function simSteps(carry, dt){                     // -> {n: whole FIXED_DT steps to run this frame, carry: leftover}
+  const t = carry + Math.min(dt, MAX_FRAME);      // clamp the spike; never create more than 3 steps of work
+  const n = Math.floor(t / FIXED_DT);
+  return { n, carry: t - n*FIXED_DT };            // carry the sub-step remainder so no real time is lost
+}
 let last=performance.now();
 function loop(now){
-  const dt=Math.min((now-last)/1000,0.05); last=now;
-  // HITSTOP: the held frame. Freezing the sim (not the render) is the single biggest impact
-  // primitive in the genre, and the pause path below already proved the architecture: freeze
-  // update(), keep drawing. The kick decays with the sim so it holds through the freeze too.
-  pollPad();                                    // before the hitstop gate: update() is skipped while
-                                                // frozen, and a press eaten there is a press you made
-  const cine = (phase==="brawl" && brawl.cine) ? brawl.cine : null;   // #20: the GOING-LIVE cinematic freezes the sim, like hitstop/pause
-  if(!paused && !cine && !tickHitstop(dt)){ update(dt); tickKick(dt); }
-  if(cine){ cine.t+=dt; if(cine.t>=CINE_TOTAL) brawl.cine=null; }      // ...but the camera advances on REAL time while the sim is frozen
+  const dt=(now-last)/1000; last=now;
+  pollPad();                                    // input: sampled once per frame, before the fixed steps
+  // #33: run the sim in whole 1/60 steps. HITSTOP and the #20 cinematic freeze the sim exactly as before,
+  // just per step now; the camera still rides real time during a cine because it reads cine.t AFTER the steps.
+  const st=simSteps(acc, dt); acc=st.carry;
+  for(let i=0;i<st.n;i++){
+    const c = (phase==="brawl" && brawl.cine) ? brawl.cine : null;
+    if(!paused && !c && !tickHitstop(FIXED_DT)){ update(FIXED_DT); tickKick(FIXED_DT); }
+    if(c){ c.t+=FIXED_DT; if(c.t>=CINE_TOTAL) brawl.cine=null; }
+  }
   // world (with shake + directional kick + punch-zoom)
+  const cine = (phase==="brawl" && brawl.cine) ? brawl.cine : null;   // #20: post-step state drives the camera/render
   const sx = Math.round((shake>0 ? (Math.random()*2-1)*shake : 0) + kick.x);
   const sy = Math.round((shake>0 ? (Math.random()*2-1)*shake : 0) + kick.y);
   // Zoom off the SMOOTH magnitudes, not sx/sy: those are re-randomised every frame, so zooming on
