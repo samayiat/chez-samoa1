@@ -1,6 +1,11 @@
 // Vince preview — bootstrap. Wires the arena, boss, chef and FX into a cinematic,
 // bloom-lit, shadow-cast beat-'em-up vertical slice. This is the "what would the 3D
 // boss fight LOOK like" prototype: elevated procedural art, no models.
+//
+// The 3D is booted LAZILY inside the start button (not at module load), so:
+//  - the button handler is always attached even if WebGL/init would fail, and
+//  - a viewer without WebGL (an inline preview sandbox, some in-app webviews) gets a
+//    clear message to open it in a real browser instead of a dead button.
 import * as THREE from 'three';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
@@ -17,46 +22,6 @@ import { createChef } from './chef.js';
 import { createFx } from './fx.js';
 import { clamp01, lerp, smooth } from './util.js';
 
-const app = document.getElementById('app');
-
-// ---------- renderer ----------
-const renderer = new THREE.WebGLRenderer({ antialias: RIM_LIGHT, powerPreference: 'high-performance' });
-renderer.setPixelRatio(Math.min(devicePixelRatio, PIXEL_CAP + 0.25));
-renderer.setSize(innerWidth, innerHeight);
-renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.15;
-app.appendChild(renderer.domElement);
-
-// ---------- scene + gradient backdrop ----------
-const scene = new THREE.Scene();
-scene.fog = new THREE.FogExp2(0x0b0810, 0.028);
-{
-  const c = document.createElement('canvas'); c.width = 2; c.height = 256;
-  const ctx = c.getContext('2d');
-  const grd = ctx.createLinearGradient(0, 0, 0, 256);
-  grd.addColorStop(0, '#1a1226'); grd.addColorStop(0.5, '#100b18'); grd.addColorStop(1, '#050407');
-  ctx.fillStyle = grd; ctx.fillRect(0, 0, 2, 256);
-  const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace;
-  scene.background = tex;
-}
-
-const camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 0.1, 100);
-camera.position.set(0, 6, 10);
-
-const arena = buildArena(scene, renderer);
-const fx = createFx(scene);
-const boss = createBoss(scene);
-const chef = createChef(scene);
-
-// ---------- post: bloom ----------
-const composer = new EffectComposer(renderer);
-composer.addPass(new RenderPass(scene, camera));
-const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.7, 0.5, 0.82);
-composer.addPass(bloom);
-composer.addPass(new OutputPass());
-
 // ---------- impact spine (local) ----------
 const bus = { shake: 0, hitstop: 0, kickX: 0, kickZ: 0, punch: 0, hurtFlash: 0 };
 function impact(w, dx = 0, dz = 0) {
@@ -66,10 +31,10 @@ function impact(w, dx = 0, dz = 0) {
   bus.punch = Math.min(bus.punch + 0.5 + w * 0.35, 2.2);
 }
 
-// ---------- audio (tiny procedural) ----------
+// ---------- audio (tiny procedural; tolerant of a missing AudioContext) ----------
 const audio = (() => {
   let ac = null;
-  const on = () => { if (!ac) ac = new (window.AudioContext || window.webkitAudioContext)(); if (ac.state === 'suspended') ac.resume(); };
+  const on = () => { try { if (!ac) ac = new (window.AudioContext || window.webkitAudioContext)(); if (ac && ac.state === 'suspended') ac.resume(); } catch (e) { ac = null; } };
   function blip(freq, dur, type, gain, slideTo) {
     if (!ac) return;
     const o = ac.createOscillator(), g = ac.createGain();
@@ -98,10 +63,11 @@ const audio = (() => {
   };
 })();
 
-// ---------- HUD refs ----------
+// ---------- DOM ----------
+const app = document.getElementById('app');
+const startEl = document.getElementById('start');
 const H = {
   bossFill: document.getElementById('bossFill'),
-  bossName: document.getElementById('bossName'),
   hearts: document.getElementById('hearts'),
   combo: document.getElementById('combo'),
   danger: document.getElementById('danger'),
@@ -109,11 +75,17 @@ const H = {
   banner: document.getElementById('banner'),
   enraged: document.getElementById('enraged'),
 };
+
+// ---------- state (assigned in boot) ----------
+let renderer, scene, camera, arena, fx, boss, chef, composer, booted = false;
 const hud = { boss: 1, hp: 6, combo: 0, enraged: false };
-let ended = 0;
+const tmp = new THREE.Vector3();
+let ended = 0, lastT = 0;
+const camPos = new THREE.Vector3(0, 6, 10);
+const camLook = new THREE.Vector3(0, 1.2, 0);
+let camStrike = 0, camKO = 0, introT = 0;
 
 // ---------- combat glue ----------
-const tmp = new THREE.Vector3();
 function onPunch(move, fistWorld) {
   const dx = boss.pos.x - chef.pos.x, dz = boss.pos.z - chef.pos.z;
   const d = Math.hypot(dx, dz);
@@ -125,7 +97,7 @@ function onPunch(move, fistWorld) {
     fx.sparkBurst(fistWorld, move.w, nx, nz);
     fx.flash(fistWorld, 0.5 + move.w * 0.3, 0xfff2c8);
     audio.hit(move.w);
-    if (boss.dead) { audio.win(); }
+    if (boss.dead) audio.win();
   }
 }
 // a hit that checks the chef against a circle (AOE, charge body, grab). Respects
@@ -152,52 +124,41 @@ function onGroundStrike(target, r, dmg, isWreck) {
   audio.slam();
   resolveStrike(target, r, dmg);
 }
-function spawnGhost(p, f) { fx.ghost(p, f); }
+const spawnGhost = (p, f) => fx.ghost(p, f);
 const sound = (s) => audio[s] && audio[s]();
 
-// ---------- loop ----------
-let lastT = performance.now() / 1000;
-startLoop({
-  tick(dt) {
-    if (bus.hitstop > 0) return;              // hitstop freezes the sim, not the camera
-    if (ended) return;
-    const input = pollInput();
-    chef.update(dt, { input, bossPos: boss.pos, hud, onPunch, spawnGhost, sound });
-    boss.update(dt, { chefPos: chef.pos, chefInvuln: chef.invuln > 0, hud, fx, resolveStrike, onGroundStrike, sound });
+// ---------- loop callbacks ----------
+function tick(dt) {
+  if (bus.hitstop > 0) return;              // hitstop freezes the sim, not the camera
+  if (ended) return;
+  const input = pollInput();
+  chef.update(dt, { input, bossPos: boss.pos, hud, onPunch, spawnGhost, sound });
+  boss.update(dt, { chefPos: chef.pos, chefInvuln: chef.invuln > 0, hud, fx, resolveStrike, onGroundStrike, sound });
+  if (boss.dead && boss.winT > 1.3 && !ended) { ended = 1; showBanner('VINCE IS DOWN', 'Your lease is safe — tap to rematch'); }
+  if (chef.hp <= 0 && !ended) { ended = -1; showBanner('EVICTED', 'Vince got the better of you — tap to rematch'); }
+}
+function render(alpha, now) {
+  const t = now / 1000;
+  const rdt = Math.min(0.05, t - lastT); lastT = t;
+  if (bus.hitstop > 0) bus.hitstop = Math.max(0, bus.hitstop - rdt);
+  bus.shake = Math.max(0, bus.shake - 10 * rdt);
+  bus.kickX *= Math.exp(-12 * rdt); bus.kickZ *= Math.exp(-12 * rdt);
+  bus.punch = Math.max(0, bus.punch - 3 * rdt);
+  bus.hurtFlash = Math.max(0, bus.hurtFlash - 3 * rdt);
+  introT = Math.max(0, introT - rdt * 1.1);
 
-    // end states
-    if (boss.dead && boss.winT > 1.3 && !ended) { ended = 1; showBanner('VINCE IS DOWN', 'Your lease is safe — tap to rematch'); }
-    if (chef.hp <= 0 && !ended) { ended = -1; showBanner('EVICTED', 'Vince got the better of you — tap to rematch'); }
-  },
-  render(alpha, now) {
-    const t = now / 1000;
-    const rdt = Math.min(0.05, t - lastT); lastT = t;
-
-    // decay impact channels on the real clock
-    if (bus.hitstop > 0) bus.hitstop = Math.max(0, bus.hitstop - rdt);
-    bus.shake = Math.max(0, bus.shake - 10 * rdt);
-    bus.kickX *= Math.exp(-12 * rdt); bus.kickZ *= Math.exp(-12 * rdt);
-    bus.punch = Math.max(0, bus.punch - 3 * rdt);
-    bus.hurtFlash = Math.max(0, bus.hurtFlash - 3 * rdt);
-    introT = Math.max(0, introT - rdt * 1.1);
-
-    arena.update(rdt, t);
-    fx.update(rdt, {
-      chefPos: chef.pos,
-      invuln: chef.invuln > 0,
-      hit: (dmg, pos) => { if (chef.hurt(dmg)) { bus.hurtFlash = 1; audio.hurt(); bus.shake = Math.min(bus.shake + 2, 6); fx.flash(pos, 0.8, 0xffd24a); } },
-    });
-    updateCamera(rdt, t);
-    updateHud();
-
-    composer.render();
-  },
-});
+  arena.update(rdt, t);
+  fx.update(rdt, {
+    chefPos: chef.pos,
+    invuln: chef.invuln > 0,
+    hit: (dmg, pos) => { if (chef.hurt(dmg)) { bus.hurtFlash = 1; audio.hurt(); bus.shake = Math.min(bus.shake + 2, 6); fx.flash(pos, 0.8, 0xffd24a); } },
+  });
+  updateCamera(rdt, t);
+  updateHud();
+  composer.render();
+}
 
 // ---------- cinematic camera ----------
-const camPos = new THREE.Vector3(0, 6, 10);
-const camLook = new THREE.Vector3(0, 1.2, 0);
-let camStrike = 0, camKO = 0, introT = 0;
 function updateCamera(dt, t) {
   const cp = chef.pos, bp = boss.pos;
   let fx2 = bp.x - cp.x, fz2 = bp.z - cp.z;
@@ -209,14 +170,11 @@ function updateCamera(dt, t) {
   camStrike = lerp(camStrike, chef.punchT > 0 ? 1 : 0, smooth(dt, chef.punchT > 0 ? 11 : 3.5));
   camKO = lerp(camKO, boss.dead ? 1 : 0, smooth(dt, 1.6));
 
-  // frame both: look at a point biased toward the boss (toward Vince on the KO)
   const lookBias = boss.dead ? 0.75 : 0.44;
   const look = tmp.set(cp.x + fx2 * sep * lookBias, 1.3 + camKO * 0.2, cp.z + fz2 * sep * lookBias);
-  // camera sits behind + well off to one side (a 3/4-profile), so a punch thrown
-  // toward the boss reads laterally instead of hiding behind the chef's back.
-  // arrival beat: the camera swoops down from a high wide shot into the fight
+  // camera sits behind + well off to one side (3/4-profile); swoops in on arrival.
   const back = 4.6 - camStrike * 1.3 - camKO * 1.6 + sep * 0.42 - bus.punch * 0.7 + introT * 4;
-  const side = 4.8 + camStrike * 2.8 + Math.sin(t * 0.25) * 0.5;   // more profile mid-punch
+  const side = 4.8 + camStrike * 2.8 + Math.sin(t * 0.25) * 0.5;
   const height = 3.9 + sep * 0.12 - camKO * 0.9 + introT * 7;
   const wantX = cp.x - fx2 * back + rx * side;
   const wantZ = cp.z - fz2 * back + rz * side;
@@ -226,7 +184,6 @@ function updateCamera(dt, t) {
   camPos.z = lerp(camPos.z, wantZ, s);
   camLook.lerp(look, smooth(dt, 6));
 
-  // shake + kick
   const sh = bus.shake * 0.05;
   camera.position.set(
     camPos.x + (Math.random() - 0.5) * sh + bus.kickX,
@@ -239,41 +196,91 @@ function updateCamera(dt, t) {
 // ---------- HUD ----------
 function updateHud() {
   H.bossFill.style.width = (clamp01(hud.boss) * 100).toFixed(1) + '%';
-  H.hearts.textContent = '❤'.repeat(Math.max(0, hud.hp)) + '<'.repeat(0) + '·'.repeat(Math.max(0, chef.maxHp - hud.hp));
+  H.hearts.textContent = '❤'.repeat(Math.max(0, hud.hp)) + '·'.repeat(Math.max(0, chef.maxHp - hud.hp));
   H.combo.style.opacity = hud.combo >= 2 ? '1' : '0';
   H.combo.textContent = hud.combo >= 2 ? 'COMBO ×' + hud.combo : '';
   H.danger.style.opacity = (boss.telegraph * 0.55).toFixed(2);
   H.hurt.style.opacity = (bus.hurtFlash * 0.6).toFixed(2);
   H.enraged.classList.toggle('on', !!hud.enraged && !ended);
 }
-
 function showBanner(title, sub) {
   H.banner.querySelector('h2').textContent = title;
   H.banner.querySelector('p').textContent = sub;
   H.banner.classList.add('show');
 }
 
-// ---------- lifecycle ----------
+// ---------- boot the 3D (may throw if WebGL is unavailable) ----------
+function boot() {
+  renderer = new THREE.WebGLRenderer({ antialias: RIM_LIGHT, powerPreference: 'high-performance' });
+  renderer.setPixelRatio(Math.min(devicePixelRatio, PIXEL_CAP + 0.25));
+  renderer.setSize(innerWidth, innerHeight);
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.15;
+  app.appendChild(renderer.domElement);
+
+  scene = new THREE.Scene();
+  scene.fog = new THREE.FogExp2(0x0b0810, 0.028);
+  {
+    const c = document.createElement('canvas'); c.width = 2; c.height = 256;
+    const cx = c.getContext('2d');
+    const grd = cx.createLinearGradient(0, 0, 0, 256);
+    grd.addColorStop(0, '#1a1226'); grd.addColorStop(0.5, '#100b18'); grd.addColorStop(1, '#050407');
+    cx.fillStyle = grd; cx.fillRect(0, 0, 2, 256);
+    const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace;
+    scene.background = tex;
+  }
+
+  camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 0.1, 100);
+  camera.position.set(0, 6, 10);
+
+  arena = buildArena(scene, renderer);
+  fx = createFx(scene);
+  boss = createBoss(scene);
+  chef = createChef(scene);
+
+  composer = new EffectComposer(renderer);
+  composer.addPass(new RenderPass(scene, camera));
+  composer.addPass(new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.7, 0.5, 0.82));
+  composer.addPass(new OutputPass());
+
+  lastT = performance.now() / 1000;
+  startLoop({ tick, render });
+  window.__vince = { boss, chef, bus, scene, THREE };
+}
+
+// ---------- start / lifecycle ----------
+function begin() {
+  if (booted || (startEl && startEl.classList.contains('gone'))) return;
+  audio.on();
+  try {
+    boot();
+    booted = true;
+  } catch (e) {
+    // no WebGL here — tell the player how to actually run it, keep the button alive
+    const note = document.getElementById('glnote') || document.createElement('p');
+    note.id = 'glnote';
+    note.style.cssText = 'color:#ff9a8a;max-width:30rem;margin-top:6px;font-size:13px';
+    note.textContent = "This 3D preview needs WebGL, which isn't available in this view. Open the file in your phone's browser (Chrome or Safari) and tap Face him there.";
+    if (startEl && !document.getElementById('glnote')) startEl.appendChild(note);
+    return;
+  }
+  initInput(window); initTouch();
+  startEl.classList.add('gone');
+  setTimeout(() => startEl && startEl.remove(), 400);
+  introT = 1.3; bus.shake = 5; audio.slam();   // arrival beat: swoop in + Vince announces himself
+}
+
+document.getElementById('startBtn')?.addEventListener('click', begin);
+addEventListener('keydown', (e) => { if (!booted && (e.code === 'Enter' || e.code === 'Space')) begin(); });
+
 addEventListener('resize', () => {
+  if (!renderer) return;
   camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
   renderer.setSize(innerWidth, innerHeight); composer.setSize(innerWidth, innerHeight);
 });
 
-const startEl = document.getElementById('start');
-function begin() {
-  if (!startEl || startEl.classList.contains('gone')) return;
-  audio.on();
-  initInput(window); initTouch();
-  startEl.classList.add('gone');
-  setTimeout(() => startEl.remove(), 400);
-  // arrival beat: swoop in + Vince announces himself
-  introT = 1.3; bus.shake = 5; audio.slam();
-}
-document.getElementById('startBtn')?.addEventListener('click', begin);
-addEventListener('keydown', begin, { once: true });
-
-// tap-to-rematch once ended
+// tap / key to rematch once the fight has ended
 addEventListener('pointerdown', () => { if (ended) location.reload(); });
 addEventListener('keydown', (e) => { if (ended && (e.code === 'Enter' || e.code === 'Space')) location.reload(); });
-
-window.__vince = { boss, chef, bus, scene, THREE };
