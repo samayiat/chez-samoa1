@@ -2,7 +2,7 @@ name: Deploy Culinary Dash to GitHub Pages
 
 on:
   push:
-    branches: [main]
+    branches: [main, claude/3d-js-browser-game-bq0v5l]
   workflow_dispatch:
 
 permissions:
@@ -31,6 +31,9 @@ jobs:
           cp culinary-dash/site-assets/icon-512.png site/icon-512.png
           cp culinary-dash/site-assets/apple-touch-icon.png site/apple-touch-icon.png
           cp culinary-dash/site-assets/favicon-32.png site/favicon-32.png
+          # 3D game (self-contained single-file build) served at /3d/
+          mkdir -p site/3d
+          cp culinary-dash-3d/play/index.html site/3d/index.html
       - uses: actions/upload-pages-artifact@v3
         with:
           path: site
