@@ -1238,6 +1238,7 @@ function updateCustomers(dt){
 
 /* ================= update ================= */
 function update(dt){
+  if(phase==="arena") return;                    // 3D boss arena overlay up: freeze the 2D sim
   applyKeyboardMove();                          // WASD -> joystick vector (keyboard mode)
   applyPadMove();                               // ...and the gamepad, last, so a live stick wins
   updateCats(dt);                               // ticks in EVERY phase: update() returns early for
@@ -1290,7 +1291,7 @@ function update(dt){
   for(const f of iflashes) f.t-=dt; iflashes=iflashes.filter(f=>f.t>0);   // impact pops: no drift, they mark a SPOT
   if(dayT>0){ dayT-=dt; if(dayT<0) dayT=0; }
   else if(customers.length===0){                       // store empty: day truly over
-    if(run.bossTomorrow){ const bid=run.bossTomorrow; run.bossTomorrow=null; startBossNight(bid); return; }  // #40 (3a): the telegraphed boss takes priority tonight
+    if(run.bossTomorrow){ const bid=run.bossTomorrow; run.bossTomorrow=null; if(USE_3D_VINCE&&bid==="vince"){ launch3DVince(bid); } else { startBossNight(bid); } return; }  // #40 (3a): the telegraphed boss takes priority tonight
     if(Math.random()<brawlChance()){ startBrawl(); return; }   // P4: the after-close brawl (Beli-gated); bad orders still decide WHO returns
     if(isNightDay()){ startNight(); } else { finishDay(); }  // after-hours only runs Thu–Sun
     return;
@@ -1716,6 +1717,44 @@ function bossRotation(B){
   return p===1 ? D.rotation : (p===2 ? (D.rotation2||D.rotation) : (D.rotation3||D.rotation2||D.rotation));
 }
 function bossNightExposed(){ return !!bossFight && bossFight.state==="recover"; }
+/* ── 2D↔—3D seam (rebuild) ─────────────────────────────────────
+   USE_3D_VINCE routes the Vince boss-night to the standalone 3D arena (served at
+   ./vince/) as a full-screen overlay, per docs/SEAM_CONTRACT.md. OFF by default;
+   opt in per-session with ?vince3d=1 so it is testable on the live site without a
+   code change and the shipped default stays the polished 2D fight. If the arena
+   can't be reached (no /vince/, e.g. the in-chat single file) it falls back to the
+   2D fight after a short timeout, so a boss night never hangs. */
+const USE_3D_VINCE = /[?&]vince3d=1/.test(location.search);
+function launch3DVince(bid){
+  const def=BOSSES.find(b=>b.id===bid)||BOSSES[0];
+  phase="arena";                                  // freeze the 2D sim behind the overlay
+  const frame=document.createElement("iframe");
+  frame.src="vince/?embed";
+  frame.style.cssText="position:fixed;inset:0;width:100%;height:100%;border:0;z-index:99999;background:#050407";
+  let done=false, ready=false;
+  const payload={ chefHp:chefMaxHP() };           // SEAM_CONTRACT IN payload (grows later)
+  const cleanup=()=>{ window.removeEventListener("message",onMsg); frame.remove(); };
+  const onMsg=(e)=>{ const d=e.data||{};
+    if(d.type==="chez:ready"){ ready=true; frame.contentWindow.postMessage({type:"chez:startFight",payload},"*"); }
+    else if(d.type==="chez:fightResult" && !done){ done=true; cleanup(); apply3DResult(def, d.result); }
+  };
+  window.addEventListener("message",onMsg);
+  document.body.appendChild(frame);
+  setTimeout(()=>{ if(!ready && !done){ done=true; cleanup(); startBossNight(bid); } },4000);  // arena unreachable -> 2D fight
+}
+function apply3DResult(def,result){                // mirrors endBossNight's win/lose effects
+  if(result && result.outcome==="win"){
+    run.bossesBeaten=(run.bossesBeaten||0)+1;
+    run.bank += def.reward;
+    flash(W/2,70,"+$"+def.reward,"#ffd86b");
+    if(isNightDay()) startNight(); else finishDay();
+  } else {
+    run.bossWipe=def.name; phase="gameover";
+  }
+}
+// dev (only under ?vince3d=1): press V to summon Vince tonight, so the 2D->3D
+// handoff is testable without grinding to a scheduled boss night.
+if(USE_3D_VINCE){ addEventListener("keydown",(e)=>{ if(e.code==="KeyV" && typeof run!=="undefined" && run && phase==="play"){ run.bossTomorrow="vince"; if(typeof customers!=="undefined") customers.length=0; if(typeof dayT!=="undefined") dayT=0; } }); }
 function startBossNight(id){
   if(!run) return;
   const def = BOSSES.find(b=>b.id===id) || BOSSES[0];
@@ -4870,6 +4909,7 @@ function drawWorldBase(){
   if(phase==="brawl") for(const st of STATIONS) drawStation(st);   // stations visible (and wreckable-looking) behind the fight
 }
 function draw(){
+  if(phase==="arena") return;                    // the 3D arena overlay covers the screen
   drawWorldBase();
   const items=[];
   // stations (data-driven)
