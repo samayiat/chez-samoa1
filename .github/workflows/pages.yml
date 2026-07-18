@@ -22,6 +22,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Build the 3D Vince preview (self-contained single file)
+        run: |
+          cd culinary-dash-3d
+          npm ci
+          npx vite build --config vite.vince.config.js
       - name: Prepare site
         run: |
           mkdir site
@@ -36,6 +44,9 @@ jobs:
           # 3D game (self-contained single-file build) served at /3d/
           mkdir -p site/3d
           cp culinary-dash-3d/play/index.html site/3d/index.html
+          # 3D "Eviction Night" Vince boss-fight preview at /vince/
+          mkdir -p site/vince
+          cp culinary-dash-3d/dist-vince/vince.html site/vince/index.html
       - uses: actions/upload-pages-artifact@v3
         with:
           path: site
