@@ -80,7 +80,15 @@ const H = {
 let renderer, scene, camera, arena, fx, boss, chef, composer, booted = false;
 const hud = { boss: 1, hp: 6, combo: 0, enraged: false };
 const tmp = new THREE.Vector3();
-let ended = 0, lastT = 0;
+let ended = 0, lastT = 0, resultPosted = false;
+
+// ---------- embed mode (launched by the 2D game as an overlay) ----------
+// When run inside an iframe / with ?embed, the arena takes a fight payload from
+// the host (chef HP, etc.) and posts the result back, per docs/SEAM_CONTRACT.md.
+// Standalone (the /vince/ preview) is unchanged.
+const EMBED = new URLSearchParams(location.search).has('embed') || window.parent !== window;
+let fightPayload = { chefHp: 6 };
+function postToHost(msg) { try { window.parent.postMessage(msg, '*'); } catch (e) { /* no host */ } }
 const camPos = new THREE.Vector3(0, 6, 10);
 const camLook = new THREE.Vector3(0, 1.2, 0);
 let camStrike = 0, camKO = 0, introT = 0;
@@ -135,8 +143,16 @@ function tick(dt) {
   cameraRelative(input);                    // stick maps to the screen, not world axes
   chef.update(dt, { input, bossPos: boss.pos, hud, onPunch, spawnGhost, sound });
   boss.update(dt, { chefPos: chef.pos, chefInvuln: chef.invuln > 0, hud, fx, resolveStrike, onGroundStrike, sound });
-  if (boss.dead && boss.winT > 1.3 && !ended) { ended = 1; showBanner('VINCE IS DOWN', 'Your lease is safe — tap to rematch'); }
-  if (chef.hp <= 0 && !ended) { ended = -1; showBanner('EVICTED', 'Vince got the better of you — tap to rematch'); }
+  const sub = EMBED ? 'returning to the restaurant…' : 'tap to rematch';
+  if (boss.dead && boss.winT > 1.3 && !ended) { ended = 1; showBanner('VINCE IS DOWN', 'Your lease is safe — ' + sub); reportResult('win'); }
+  if (chef.hp <= 0 && !ended) { ended = -1; showBanner('EVICTED', 'Vince got the better of you — ' + sub); reportResult('lose'); }
+}
+// hand the outcome back to the 2D game (it maps win/lose -> Beli + wrecked
+// stations via its existing bossNightWin/Lose path). Held ~1.6s so the KO reads.
+function reportResult(outcome) {
+  if (!EMBED || resultPosted) return;
+  resultPosted = true;
+  setTimeout(() => postToHost({ type: 'chez:fightResult', result: { outcome, boss: 'vince', chefHpLeft: Math.max(0, chef.hp) } }), 1600);
 }
 function render(alpha, now) {
   const t = now / 1000;
@@ -273,6 +289,8 @@ function begin() {
   try {
     boot();
     booted = true;
+    // apply the host's fight payload (chef HP scaled by her upgrades, etc.)
+    if (chef && fightPayload.chefHp) { chef.maxHp = fightPayload.chefHp; chef.hp = chef.maxHp; hud.hp = chef.hp; }
   } catch (e) {
     // no WebGL here — tell the player how to actually run it, keep the button alive
     const note = document.getElementById('glnote') || document.createElement('p');
@@ -307,12 +325,25 @@ function lockLandscape() {
 document.getElementById('startBtn')?.addEventListener('click', begin);
 addEventListener('keydown', (e) => { if (!booted && (e.code === 'Enter' || e.code === 'Space')) begin(); });
 
+// embed: take the fight payload from the 2D host, then auto-start. If the host
+// never speaks (opened directly), fall back to starting on its own so it's never
+// stuck on the overlay.
+if (EMBED) {
+  addEventListener('message', (e) => {
+    const d = e.data;
+    if (d && d.type === 'chez:startFight') { fightPayload = { ...fightPayload, ...(d.payload || {}) }; begin(); }
+  });
+  postToHost({ type: 'chez:ready' });
+  setTimeout(() => { if (!booted) begin(); }, 1800);
+}
+
 addEventListener('resize', () => {
   if (!renderer) return;
   camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
   renderer.setSize(innerWidth, innerHeight); composer.setSize(innerWidth, innerHeight);
 });
 
-// tap / key to rematch once the fight has ended
-addEventListener('pointerdown', () => { if (ended) location.reload(); });
-addEventListener('keydown', (e) => { if (ended && (e.code === 'Enter' || e.code === 'Space')) location.reload(); });
+// tap / key to rematch once the fight has ended — standalone only; embedded, the
+// host closes the overlay after it gets the result.
+addEventListener('pointerdown', () => { if (ended && !EMBED) location.reload(); });
+addEventListener('keydown', (e) => { if (ended && !EMBED && (e.code === 'Enter' || e.code === 'Space')) location.reload(); });
