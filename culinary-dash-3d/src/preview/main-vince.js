@@ -132,6 +132,7 @@ function tick(dt) {
   if (bus.hitstop > 0) return;              // hitstop freezes the sim, not the camera
   if (ended) return;
   const input = pollInput();
+  cameraRelative(input);                    // stick maps to the screen, not world axes
   chef.update(dt, { input, bossPos: boss.pos, hud, onPunch, spawnGhost, sound });
   boss.update(dt, { chefPos: chef.pos, chefInvuln: chef.invuln > 0, hud, fx, resolveStrike, onGroundStrike, sound });
   if (boss.dead && boss.winT > 1.3 && !ended) { ended = 1; showBanner('VINCE IS DOWN', 'Your lease is safe — tap to rematch'); }
@@ -156,6 +157,21 @@ function render(alpha, now) {
   updateCamera(rdt, t);
   updateHud();
   composer.render();
+}
+
+// Rotate the raw stick/keys into the CAMERA's frame so "up" is always "away from
+// the camera / up the screen", regardless of where the orbiting camera sits. This
+// is what kills the "controls randomly invert" feeling when the camera crosses to
+// the chef's other side (e.g. after Vince charges past her).
+function cameraRelative(input) {
+  let fx = chef.pos.x - camera.position.x, fz = chef.pos.z - camera.position.z;
+  const m = Math.hypot(fx, fz);
+  if (m < 0.001) return;
+  fx /= m; fz /= m;                 // camera-forward on the ground plane
+  const rx = fz, rz = -fx;          // camera-right
+  const ix = input.move.x, iy = input.move.y;
+  input.move.x = ix * rx + (-iy) * fx;
+  input.move.y = ix * rz + (-iy) * fz;
 }
 
 // ---------- cinematic camera ----------
@@ -267,9 +283,25 @@ function begin() {
     return;
   }
   initInput(window); initTouch();
+  goLandscape();
   startEl.classList.add('gone');
   setTimeout(() => startEl && startEl.remove(), 400);
   introT = 1.3; bus.shake = 5; audio.slam();   // arrival beat: swoop in + Vince announces himself
+}
+
+// force landscape on the first gesture: fullscreen (so the lock is allowed) then
+// lock the orientation. Both are best-effort — iOS Safari ignores the lock, which
+// is why the CSS "rotate your device" guard in portrait is the real backstop.
+function goLandscape() {
+  const touch = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
+  if (!touch) return;                 // don't yank a desktop mouse user into fullscreen
+  const el = document.documentElement;
+  const fs = el.requestFullscreen || el.webkitRequestFullscreen;
+  try { fs && fs.call(el).then?.(lockLandscape).catch?.(lockLandscape); } catch (e) { lockLandscape(); }
+  lockLandscape();
+}
+function lockLandscape() {
+  try { screen.orientation && screen.orientation.lock && screen.orientation.lock('landscape').catch(() => {}); } catch (e) { /* unsupported */ }
 }
 
 document.getElementById('startBtn')?.addEventListener('click', begin);
