@@ -52,6 +52,7 @@ export function pollInput() {
   const t = getTouch();
   if (Math.hypot(t.x, t.y) > 0.01) { x += t.x; y += t.y; }
   if (t.primary) primary = true;
+  if (t.secondary) secondary = true;
 
   const pad = readPad();
   if (pad) {

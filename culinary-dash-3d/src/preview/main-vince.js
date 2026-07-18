@@ -168,7 +168,7 @@ function cameraRelative(input) {
   const m = Math.hypot(fx, fz);
   if (m < 0.001) return;
   fx /= m; fz /= m;                 // camera-forward on the ground plane
-  const rx = fz, rz = -fx;          // camera-right
+  const rx = -fz, rz = fx;          // camera-right (screen-right)
   const ix = input.move.x, iy = input.move.y;
   input.move.x = ix * rx + (-iy) * fx;
   input.move.y = ix * rz + (-iy) * fz;

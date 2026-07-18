@@ -4,7 +4,7 @@
 // players never see it. Uses Pointer Events, so the stick and button can be held
 // at the same time (distinct pointerIds).
 
-const stickState = { x: 0, y: 0, primary: false };
+const stickState = { x: 0, y: 0, primary: false, secondary: false };
 let shown = false;
 
 export function getTouch() { return stickState; }
@@ -22,12 +22,18 @@ export function initTouch() {
   base.appendChild(knob);
 
   const btn = document.createElement('div');
-  btn.textContent = 'E';
-  btn.style.cssText = 'position:absolute;right:26px;bottom:34px;width:88px;height:88px;border-radius:50%;pointer-events:auto;'
-    + 'background:radial-gradient(circle at 50% 40%,#ffd98a,#f0a83a);color:#1a1018;font-weight:800;font-size:26px;'
+  btn.textContent = 'PUNCH';
+  btn.style.cssText = 'position:absolute;right:24px;bottom:40px;width:92px;height:92px;border-radius:50%;pointer-events:auto;'
+    + 'background:radial-gradient(circle at 50% 40%,#ffd98a,#f0a83a);color:#1a1018;font-weight:800;font-size:15px;letter-spacing:.03em;'
     + 'display:flex;align-items:center;justify-content:center;box-shadow:0 6px 18px rgba(240,168,58,.35);user-select:none;touch-action:none';
 
-  root.append(base, btn);
+  const dodge = document.createElement('div');
+  dodge.textContent = 'DODGE';
+  dodge.style.cssText = 'position:absolute;right:132px;bottom:34px;width:74px;height:74px;border-radius:50%;pointer-events:auto;'
+    + 'background:radial-gradient(circle at 50% 40%,#7fc7ff,#3f7fd0);color:#08131f;font-weight:800;font-size:13px;letter-spacing:.02em;'
+    + 'display:flex;align-items:center;justify-content:center;box-shadow:0 6px 18px rgba(63,127,208,.35);user-select:none;touch-action:none';
+
+  root.append(base, btn, dodge);
   document.body.appendChild(root);
 
   function reveal() { if (!shown) { shown = true; root.style.opacity = '1'; } }
@@ -38,7 +44,7 @@ export function initTouch() {
 
   window.addEventListener('pointerdown', (e) => {
     reveal();
-    if (e.target === btn) return;               // the button handles itself
+    if (e.target === btn || e.target === dodge) return;   // the buttons handle themselves
     if (moveId !== null) return;                // one movement pointer at a time
     moveId = e.pointerId; ox = e.clientX; oy = e.clientY;
     base.style.display = 'block';
@@ -63,9 +69,13 @@ export function initTouch() {
   window.addEventListener('pointerup', endMove);
   window.addEventListener('pointercancel', endMove);
 
-  const press = (v) => (e) => { e.preventDefault(); stickState.primary = v; };
-  btn.addEventListener('pointerdown', press(true));
-  btn.addEventListener('pointerup', press(false));
-  btn.addEventListener('pointercancel', press(false));
-  btn.addEventListener('pointerleave', press(false));
+  const press = (key, v) => (e) => { e.preventDefault(); stickState[key] = v; };
+  btn.addEventListener('pointerdown', press('primary', true));
+  btn.addEventListener('pointerup', press('primary', false));
+  btn.addEventListener('pointercancel', press('primary', false));
+  btn.addEventListener('pointerleave', press('primary', false));
+  dodge.addEventListener('pointerdown', press('secondary', true));
+  dodge.addEventListener('pointerup', press('secondary', false));
+  dodge.addEventListener('pointercancel', press('secondary', false));
+  dodge.addEventListener('pointerleave', press('secondary', false));
 }
