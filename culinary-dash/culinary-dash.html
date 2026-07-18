@@ -1752,9 +1752,14 @@ function apply3DResult(def,result){                // mirrors endBossNight's win
     run.bossWipe=def.name; phase="gameover";
   }
 }
-// dev (only under ?vince3d=1): press V to summon Vince tonight, so the 2D->3D
-// handoff is testable without grinding to a scheduled boss night.
-if(USE_3D_VINCE){ addEventListener("keydown",(e)=>{ if(e.code==="KeyV" && typeof run!=="undefined" && run && phase==="play"){ run.bossTomorrow="vince"; if(typeof customers!=="undefined") customers.length=0; if(typeof dayT!=="undefined") dayT=0; } }); }
+// dev (only under ?vince3d=1): summon Vince tonight — a tappable button (mobile)
+// + the V key — so the 2D->3D handoff is testable without grinding to a boss night.
+if(USE_3D_VINCE){
+  const summonVince=()=>{ if(typeof run==="undefined"||!run) return; run.bossTomorrow="vince"; if(phase==="play"){ if(typeof customers!=="undefined") customers.length=0; if(typeof dayT!=="undefined") dayT=0; } };
+  addEventListener("keydown",(e)=>{ if(e.code==="KeyV") summonVince(); });
+  const mkBtn=()=>{ if(document.getElementById("dev3dBtn")) return; const b=document.createElement("button"); b.id="dev3dBtn"; b.textContent="\u2694 SUMMON VINCE"; b.style.cssText="position:fixed;top:8px;right:8px;z-index:99990;padding:10px 13px;border:0;border-radius:9px;font:700 12px/1 system-ui,sans-serif;letter-spacing:.04em;color:#1a1018;background:linear-gradient(180deg,#ffd98a,#f0883a);box-shadow:0 4px 14px rgba(240,120,58,.4);opacity:.93;touch-action:manipulation"; b.addEventListener("click",(ev)=>{ ev.preventDefault(); summonVince(); }); document.body.appendChild(b); };
+  if(document.body) mkBtn(); else addEventListener("DOMContentLoaded",mkBtn);
+}
 function startBossNight(id){
   if(!run) return;
   const def = BOSSES.find(b=>b.id===id) || BOSSES[0];
