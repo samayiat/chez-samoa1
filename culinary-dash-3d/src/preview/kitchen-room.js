@@ -15,30 +15,30 @@ export function buildKitchen(scene) {
   const g = new THREE.Group(); scene.add(g);
   const steamers = [];
 
-  // floor + planks
-  const floor = new THREE.Mesh(new THREE.BoxGeometry(16, 0.4, 11), mat(FLOOR, { rough: 0.85 }));
-  floor.position.set(0, -0.2, 0); floor.receiveShadow = true; g.add(floor);
-  for (let i = -7; i <= 7; i++) g.add(put(box(0.04, 0.01, 11, mat(0x5f3f22, { rough: 1 })), i * 1.05, 0.011, 0));
+  // floor + planks (roomier now that 2.5D lifts the size limit)
+  const floor = new THREE.Mesh(new THREE.BoxGeometry(19, 0.4, 12), mat(FLOOR, { rough: 0.85 }));
+  floor.position.set(0, -0.2, 0.5); floor.receiveShadow = true; g.add(floor);
+  for (let i = -9; i <= 9; i++) g.add(put(box(0.04, 0.01, 12, mat(0x5f3f22, { rough: 1 })), i * 1.05, 0.011, 0.5));
 
   // walls
   const wallMat = mat(WALL, { rough: 0.95 });
-  g.add(put(box(16, 6, 0.4, wallMat), 0, 2.6, -5.4));
-  g.add(put(box(0.4, 6, 11, wallMat), -7.9, 2.6, 0));
-  g.add(put(box(0.4, 6, 11, wallMat), 7.9, 2.6, 0));
-  g.add(put(box(16, 1.0, 0.5, mat(TEAL, { rough: 0.7 })), 0, 0.3, -5.35));
-  g.add(put(box(16, 0.12, 0.55, mat(BRASS, { metal: 0.6, rough: 0.4 })), 0, 0.85, -5.33));
+  g.add(put(box(19, 6, 0.4, wallMat), 0, 2.6, -4.2));
+  g.add(put(box(0.4, 6, 12, wallMat), -9.4, 2.6, 0.5));
+  g.add(put(box(0.4, 6, 12, wallMat), 9.4, 2.6, 0.5));
+  g.add(put(box(19, 1.0, 0.5, mat(TEAL, { rough: 0.7 })), 0, 0.3, -4.15));
+  g.add(put(box(19, 0.12, 0.55, mat(BRASS, { metal: 0.6, rough: 0.4 })), 0, 0.85, -4.13));
 
   // window (daylight)
-  const win = new THREE.Group(); win.position.set(-5.4, 3.1, -5.2); g.add(win);
+  const win = new THREE.Group(); win.position.set(-6.8, 3.1, -4.0); g.add(win);
   win.add(put(box(3, 2.2, 0.1, mat(0xffe6b0, { emissive: 0xffdf9c, emi: 1.1 })), 0, 0, 0));
   win.add(put(box(3.3, 0.16, 0.24, mat(WOOD)), 0, 1.1, 0.08));
   win.add(put(box(3.3, 0.16, 0.24, mat(WOOD)), 0, -1.1, 0.08));
   win.add(put(box(0.14, 2.2, 0.24, mat(WOOD)), 0, 0, 0.08));
 
   // back counter running behind the stations
-  const counter = put(box(15, 1.2, 0.7, mat(WOOD, { rough: 0.8 })), 0, 0.6, -4.3);
+  const counter = put(box(18, 1.2, 0.7, mat(WOOD, { rough: 0.8 })), 0, 0.6, -3.5);
   counter.castShadow = true; counter.receiveShadow = true; g.add(counter);
-  g.add(put(box(15.2, 0.12, 0.85, mat(CREAM, { rough: 0.5 })), 0, 1.25, -4.3));
+  g.add(put(box(18.2, 0.12, 0.85, mat(CREAM, { rough: 0.5 })), 0, 1.25, -3.5));
 
   // ---- stations at the sim's positions ----
   const stations = {};
@@ -57,8 +57,8 @@ export function buildKitchen(scene) {
 
   // ---- warm hanging lamps ----
   const lamps = [];
-  [-4, 0, 4].forEach((x) => {
-    const lg = new THREE.Group(); lg.position.set(x, 4.3, 0.2); g.add(lg);
+  [-5.5, -1.8, 1.8, 5.5].forEach((x) => {
+    const lg = new THREE.Group(); lg.position.set(x, 4.3, 0.4); g.add(lg);
     lg.add(put(box(0.05, 1.3, 0.05, mat(0x2a2a2a)), 0, 0.65, 0));
     const shade = new THREE.Mesh(new THREE.ConeGeometry(0.52, 0.46, 16, 1, true), mat(BRASS, { metal: 0.5, rough: 0.5, emissive: 0x3a2a10, emi: 0.4 }));
     shade.rotation.x = Math.PI; lg.add(shade);
@@ -105,6 +105,11 @@ function buildStation(g, x, z, def, steamers) {
   } else if (def.kind === 'source') {
     body.material = mat(0x9fbfd0, { metal: 0.2, rough: 0.4 }); // icy box
     s.add(put(box(1.5, 0.5, 0.9, mat(0xbfe0ef, { rough: 0.3, emissive: 0x143244, emi: 0.3 })), 0, 1.0, 0.02));
+  } else if (def.kind === 'prep') {
+    s.add(put(box(1.1, 0.08, 0.6, mat(0xc9a06a, { rough: 0.6 })), 0, 1.42, 0));            // cutting board
+    s.add(put(box(0.3, 0.14, 0.3, mat(0x6a9a4a, { rough: 0.7 })), -0.22, 1.5, 0.04));      // veg
+    s.add(put(box(0.05, 0.03, 0.34, mat(0xd8dde2, { metal: 0.6, rough: 0.3 })), 0.24, 1.5, -0.02)); // knife blade
+    s.add(put(box(0.06, 0.07, 0.16, mat(0x3a2a1a)), 0.24, 1.5, 0.2));                       // knife handle
   } else if (def.id === 'salad') {
     s.add(put(box(1.4, 0.08, 0.7, mat(CREAM, { rough: 0.5 })), 0, 1.4, 0));
     s.add(put(box(0.36, 0.1, 0.28, mat(0x6a9a4a, { rough: 0.7 })), -0.3, 1.48, 0.06));

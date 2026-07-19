@@ -8,16 +8,20 @@
 // so the floor spans x:[-16,16], z:[-9,9]. Y is up.
 
 export const PX = 10;
-export const WORLD = { w: 320, h: 180 };
+// 2.5D lifts the old 320x180 ceiling — the diner floor can breathe now, with room
+// for a real prep line (chopping) and more tables.
+export const WORLD = { w: 400, h: 240 };
 
-export const to3 = (x2, y2) => ({ x: (x2 - 160) / PX, z: (y2 - 90) / PX });
+export const to3 = (x2, y2) => ({ x: (x2 - WORLD.w / 2) / PX, z: (y2 - WORLD.h / 2) / PX });
 export const len2 = (x2) => x2 / PX; // scalar length px -> units
 
 // --- Dishes (ported from DISHES, src line 137) -----------------------------
 // make: "assemble" (combine ingredients), "timing" (cook with a green window),
 // "source" (fetch a raw ingredient that `starts` another dish).
 export const DISHES = {
-  salad:          { label: 'garden salad', make: 'assemble', station: 'salad', pts: { perfect: 12 }, recipe: ['lettuce', 'tomato'] },
+  // salad is a multi-step dish now: chop the veg at the cutting board, carry the
+  // chopped veg to the salad bar, then plate. (make:'prep' = needs a prepped ingredient.)
+  salad:          { label: 'garden salad', make: 'prep', station: 'salad', prepAt: 'cutboard', pts: { perfect: 14 }, recipe: ['lettuce', 'tomato'] },
   karaage:        { label: 'karaage',      make: 'timing',   station: 'fryer', pts: { perfect: 20, burnt: 8 }, recipe: ['chicken'] },
   lobster:        { label: 'lobster',      make: 'timing',   station: 'pot',   pts: { perfect: 24, burnt: 10 }, recipe: ['rawlobster'] },
   'whiskey-sour': { label: 'whiskey sour', make: 'assemble', station: 'bar',   pts: { perfect: 16 }, recipe: ['whiskey', 'sourmix'] },
@@ -27,24 +31,28 @@ export const MENU = Object.keys(DISHES);
 
 // --- Stations (ported from STATIONS, src line 218) -------------------------
 // Positions are original 2D px; render maps them to 3D via to3().
+// Stations run along the back counter (y=52). The prep line: cutboard (chop) sits
+// beside the salad bar; the ice box sits beside the pot (raw lobster -> boil).
 export const STATIONS = [
-  { id: 'fryer',  x: 48,  y: 40, kind: 'timing',   dish: 'karaage', verb: 'fry',  cook: 2.6, green: 1.6 },
-  { id: 'salad',  x: 123, y: 40, kind: 'assemble', dish: 'salad' },
-  { id: 'icebox', x: 170, y: 40, kind: 'source',   starts: 'lobster' },
-  { id: 'pot',    x: 210, y: 40, kind: 'timing',   dish: 'lobster', verb: 'boil', cook: 3.4, green: 1.9 },
-  { id: 'bar',    x: 260, y: 40, kind: 'assemble', dishes: ['whiskey-sour', 'gin-sour'] },
+  { id: 'fryer',    x: 64,  y: 52, kind: 'timing',   dish: 'karaage', verb: 'fry',  cook: 2.6, green: 1.6 },
+  { id: 'cutboard', x: 128, y: 52, kind: 'prep',     dish: 'salad',   verb: 'chop', cut: 1.4 },
+  { id: 'salad',    x: 184, y: 52, kind: 'assemble', dish: 'salad' },
+  { id: 'icebox',   x: 248, y: 52, kind: 'source',   starts: 'lobster' },
+  { id: 'pot',      x: 300, y: 52, kind: 'timing',   dish: 'lobster', verb: 'boil', cook: 3.4, green: 1.9 },
+  { id: 'bar',      x: 352, y: 52, kind: 'assemble', dishes: ['whiskey-sour', 'gin-sour'] },
 ];
 
-// The pass: where plated dishes wait to be served (src line 232).
-export const PASS = { x: 158, y: 90 };
+// The pass: where plated dishes wait to be served.
+export const PASS = { x: 200, y: 120 };
 
-// Dining tables (seats). The 2D game recasts these per-locale; for the slice we
-// use a fixed four-top layout in the lower half of the room.
+// Dining tables — a roomier six-top floor now that 2.5D lifts the size limit.
 export const TABLES = [
-  { id: 't0', x: 96,  y: 128 },
-  { id: 't1', x: 158, y: 138 },
-  { id: 't2', x: 220, y: 128 },
-  { id: 't3', x: 158, y: 108 },
+  { id: 't0', x: 96,  y: 160 },
+  { id: 't1', x: 180, y: 182 },
+  { id: 't2', x: 264, y: 160 },
+  { id: 't3', x: 330, y: 156 },
+  { id: 't4', x: 136, y: 206 },
+  { id: 't5', x: 256, y: 206 },
 ];
 export const TABLE_R = 8;   // solid radius, px (src line 578)
 

@@ -50,8 +50,8 @@ function boot() {
     const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace; scene.background = tex;
   }
 
-  camera = new THREE.PerspectiveCamera(42, innerWidth / innerHeight, 0.1, 100);
-  camera.position.set(0.3, 7.6, 8.4); camera.lookAt(0, 0.4, -0.6);
+  camera = new THREE.PerspectiveCamera(46, innerWidth / innerHeight, 0.1, 100);
+  camera.position.set(0.4, 9.6, 10.9); camera.lookAt(0, 0.5, -0.1);
 
   state = createState((Date_now_safe() & 0x7fffffff) || 12345);
   kitchen = buildKitchen(scene);
@@ -138,6 +138,12 @@ function syncScene(dt, t) {
       }
       ref.setCook(cooking, frac, phase);
       ref.setPlated(cooking && phase !== 'raw');
+    } else if (s.kind === 'prep') {
+      const st = state.stations[s.id];
+      const chopping = st && st.chopping;
+      const done = chopping && st.t >= s.cut;
+      ref.setCook(chopping, chopping ? clamp01(st.t / s.cut) : 0, done ? 'perfect' : 'raw');
+      ref.setPlated(done);
     }
   }
 
@@ -159,10 +165,16 @@ function updateHud() {
   // action prompt
   let hint = '';
   const c = state.chef;
-  if (c.carrying && c.carrying.cooked) hint = 'carry to the table & serve';
-  else if (state.nearStation) {
+  if (c.carrying) {
+    if (c.carrying.kind === 'prep') hint = 'take chopped veg to the salad bar';
+    else if (c.carrying.kind === 'raw') hint = 'take raw lobster to the pot';
+    else if (c.carrying.cooked) hint = 'carry to the table & serve';
+  } else if (state.nearStation) {
     const s = stationDef[state.nearStation];
-    hint = s.kind === 'source' ? 'grab raw lobster' : s.kind === 'assemble' ? 'plate ' + (DISHES[s.dish]?.label || 'drink') : (s.verb || 'cook');
+    hint = s.kind === 'source' ? 'grab raw lobster'
+      : s.kind === 'prep' ? 'chop vegetables'
+      : s.kind === 'assemble' ? (s.id === 'salad' ? 'plate the salad' : 'pour a drink')
+      : (s.verb || 'cook');
   }
   H.prompt.textContent = hint ? '▲ ' + hint : '';
   H.prompt.style.opacity = hint ? '1' : '0';

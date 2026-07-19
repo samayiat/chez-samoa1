@@ -4,6 +4,7 @@
 // determinism harness run two clocks and get byte-identical results.
 
 import { makeRng } from './rng.js';
+import { WORLD } from './data.js';
 import { initService, updateService } from './service.js';
 import { updateCombat } from './combat.js';
 import { buildObstacles, moveChef, findNearStation } from './movement.js';
@@ -14,7 +15,7 @@ export function createState(seed = 12345) {
     phase: 'service', // 'service' | 'brawl'
     rng: makeRng(seed),
     chef: {
-      x: 160, y: 90,          // room centre (2D px space)
+      x: WORLD.w / 2, y: WORLD.h / 2,   // room centre (2D px space)
       facing: -Math.PI / 2,   // radians on XZ plane; start facing the counter
       carrying: null,         // dish id being carried, or null
       vx: 0, vy: 0,

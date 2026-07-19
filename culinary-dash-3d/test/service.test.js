@@ -33,14 +33,20 @@ describe('service loop', () => {
   it('advances time and keeps the chef still with no input', () => {
     idle(s, 1);
     expect(s.t).toBeGreaterThan(0.9);
-    expect(s.chef.x).toBe(160);
+    expect(s.chef.x).toBe(200);             // room centre (WORLD.w/2)
   });
 
-  it('assembles a salad and serves it for money', () => {
+  it('chops veg, assembles a salad, and serves it for money', () => {
     seat(s, 'salad');
+    teleport(s, 'cutboard');
+    press(s);                               // start chopping
+    idle(s, 1.5);                           // past the 1.4s chop
+    press(s);                               // grab the chopped veg
+    expect(s.chef.carrying?.kind).toBe('prep');
     teleport(s, 'salad');
-    press(s);                               // assemble
+    press(s);                               // assemble into a plated salad
     expect(s.chef.carrying?.dish).toBe('salad');
+    expect(s.chef.carrying?.cooked).toBe(true);
     teleport(s, 't0', true);
     press(s);                               // serve
     expect(s.served).toBe(1);

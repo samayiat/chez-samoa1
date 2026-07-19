@@ -24,6 +24,7 @@ export function initService(state) {
   state.stations = {};
   for (const s of STATIONS) {
     if (s.kind === 'timing') state.stations[s.id] = { cooking: false, t: 0, plated: false, quality: null };
+    else if (s.kind === 'prep') state.stations[s.id] = { chopping: false, t: 0 };
   }
   state.msg = '';       // brief feedback line for the HUD
   state.msgT = 0;
@@ -88,8 +89,32 @@ function interact(state) {
     return;
   }
 
-  // 3) assemble station (salad / bar): instantly plate. Prefer a waiting order.
+  // 2b) prep station (cutting board): chop veg into a carried ingredient. Start
+  // with empty hands, wait out the chop, then grab the chopped veg.
+  if (near.kind === 'prep') {
+    if (chef.carrying) return;                         // starting and grabbing both need free hands
+    const st = state.stations[near.id];
+    if (!st.chopping) { st.chopping = true; st.t = 0; flash(state, 'chopping the veg…'); cue(state, 'cook'); return; }
+    if (st.t >= near.cut) {
+      chef.carrying = { kind: 'prep', dish: near.dish, cooked: false };
+      st.chopping = false; st.t = 0;
+      flash(state, 'chopped — take it to the salad bar'); cue(state, 'plate'); return;
+    }
+    flash(state, 'still chopping…'); return;
+  }
+
+  // 3) assemble station. The bar pours instantly; the salad bar is multi-step now
+  // and needs chopped veg carried from the cutting board.
   if (near.kind === 'assemble') {
+    if (near.id === 'salad') {
+      if (chef.carrying && chef.carrying.kind === 'prep' && chef.carrying.dish === 'salad') {
+        chef.carrying = { kind: 'dish', dish: 'salad', cooked: true, quality: 'perfect' };
+        flash(state, 'plated ' + DISHES.salad.label); cue(state, 'plate');
+      } else if (!chef.carrying) {
+        flash(state, 'chop veg at the cutting board first');
+      }
+      return;
+    }
     if (chef.carrying) return;
     const choices = near.dishes || [near.dish];
     const wanted = state.customers.find((c) => c.state === 'waiting' && choices.includes(c.dish));
@@ -151,10 +176,10 @@ function serve(state, c) {
 export function updateService(state, dt, input) {
   if (state.msgT > 0) { state.msgT -= dt; if (state.msgT <= 0) state.msg = ''; }
 
-  // advance timing stations (cook clock; overcooks toward burnt but never blocks)
+  // advance timing (cook clock) + prep (chop clock) stations
   for (const id in state.stations) {
     const st = state.stations[id];
-    if (st.cooking) st.t += dt;
+    if (st.cooking || st.chopping) st.t += dt;
   }
 
   // spawn
