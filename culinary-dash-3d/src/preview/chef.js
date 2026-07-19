@@ -69,20 +69,31 @@ export function buildChef() {
   torso.add(put(cyl(0.1, 0.11, 0.14, mat(SKIN, { rough: 0.72 }), 10), 0, 0.44, 0.02)); // neck
   torso.add(put(cyl(0.17, 0.19, 0.1, topMat, 12), 0, 0.37, 0.02));   // collar
 
-  // head — dark braided hair framing a brown face, cream toque on top
+  // head — a brown face inside a wide, voluminous crown of natural hair, framed
+  // by fuller beaded braids. Built from overlapping faceted puffs so the hair has
+  // volume and an expressive silhouette (wider than the head), not a smooth cap.
   const head = new THREE.Group(); head.position.y = 1.42; body.add(head);
-  const hairMat = mat(HAIR, { flat: true, rough: 0.85 });
-  const hair = new THREE.Mesh(new THREE.SphereGeometry(0.27, 16, 12), hairMat);
-  hair.castShadow = true; hair.position.z = -0.02; head.add(hair);   // hair behind
-  head.add(put(new THREE.Mesh(new THREE.SphereGeometry(0.235, 16, 12), mat(SKIN, { rough: 0.72 })), 0, 0, 0.04)); // face in front
-  // braids down both sides
-  head.add(put(box(0.09, 0.5, 0.09, hairMat), -0.22, -0.18, -0.02));
-  head.add(put(box(0.09, 0.5, 0.09, hairMat), 0.22, -0.18, -0.02));
-  head.add(put(box(0.1, 0.1, 0.1, hairMat), -0.22, -0.44, -0.02)); // braid beads
-  head.add(put(box(0.1, 0.1, 0.1, hairMat), 0.22, -0.44, -0.02));
+  const hairMat = mat(HAIR, { flat: true, rough: 0.9 });
+  const hairPuff = (r, x, y, z, sx = 1, sy = 1, sz = 1) => { const m = new THREE.Mesh(new THREE.SphereGeometry(r, 12, 10), hairMat); m.scale.set(sx, sy, sz); m.castShadow = true; head.add(put(m, x, y, z)); return m; };
+  // wide crown behind the face + clustered volume puffs (top, sides, back)
+  hairPuff(0.28, 0, 0.03, -0.1, 1.42, 1.1, 0.9);      // main crown — wide, set back
+  hairPuff(0.2, 0, 0.0, -0.16);                        // back volume
+  hairPuff(0.16, 0, 0.14, -0.13);                      // upper-back puff (under the toque)
+  hairPuff(0.16, -0.24, 0.12, -0.06); hairPuff(0.16, 0.24, 0.12, -0.06);   // upper-side volume
+  hairPuff(0.17, -0.28, 0.0, -0.04); hairPuff(0.17, 0.28, 0.0, -0.04);     // cheek-framing sides
+  // face in front of the crown
+  head.add(put(new THREE.Mesh(new THREE.SphereGeometry(0.235, 16, 12), mat(SKIN, { rough: 0.72 })), 0, 0, 0.05));
+  // two fuller braids down the sides, widening outward as they fall, ending in a bead
+  const beadMat = mat(0x7a4f2a, { flat: true, rough: 0.6 });
+  for (const s of [-1, 1]) {
+    hairPuff(0.085, s * 0.29, -0.15, 0.02, 1, 1.25, 1);
+    hairPuff(0.078, s * 0.32, -0.29, 0.04, 1, 1.25, 1);
+    hairPuff(0.07, s * 0.35, -0.42, 0.06, 1, 1.2, 1);
+    head.add(put(new THREE.Mesh(new THREE.SphereGeometry(0.055, 10, 8), beadMat), s * 0.36, -0.52, 0.07)); // cuff/bead
+  }
   // eyes
-  head.add(put(box(0.05, 0.06, 0.03, mat(0x120a06)), -0.09, 0.02, 0.24));
-  head.add(put(box(0.05, 0.06, 0.03, mat(0x120a06)), 0.09, 0.02, 0.24));
+  head.add(put(box(0.05, 0.06, 0.03, mat(0x120a06)), -0.09, 0.02, 0.25));
+  head.add(put(box(0.05, 0.06, 0.03, mat(0x120a06)), 0.09, 0.02, 0.25));
   // toque — puffy squashed sphere + band
   const puff = new THREE.Mesh(new THREE.SphereGeometry(0.27, 16, 12), mat(HAT, { rough: 0.85 }));
   puff.castShadow = true; puff.position.y = 0.32; puff.scale.set(1.05, 0.9, 1.05);
