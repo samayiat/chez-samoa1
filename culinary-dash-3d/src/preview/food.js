@@ -16,18 +16,43 @@ function plate() {
   return g;
 }
 
-// a red (cooked) / blue (raw) lobster — elongated body, fan tail, two claws
+// a red (cooked) / blue (raw) lobster — domed carapace up front, a segmented
+// abdomen curling up to a spread fan tail at the back, two big front claws and
+// swept antennae. Reads from the diorama's high angle by silhouette, not colour.
 function lobster(color) {
   const g = new THREE.Group();
-  const m = { flat: true, rough: 0.45 };
-  const body = put(new THREE.Mesh(new THREE.CapsuleGeometry(0.055, 0.15, 3, 8), mat(color, m)), 0, 0.07, 0.02);
-  body.rotation.x = 1.3; body.castShadow = true; g.add(body);
-  const tail = put(new THREE.Mesh(new THREE.ConeGeometry(0.11, 0.09, 6), mat(color, m)), 0, 0.06, 0.16);
-  tail.rotation.x = -1.9; tail.scale.set(1, 1, 0.5); g.add(tail);
-  for (const s of [-1, 1]) {
-    const claw = put(sph(0.05, color, m), s * 0.08, 0.06, -0.12); claw.scale.set(1, 0.7, 1.5); g.add(claw);
-    g.add(put(box(0.018, 0.018, 0.09, mat(color, m)), s * 0.05, 0.08, -0.16)); // feeler
+  const m = { flat: true, rough: 0.4 };
+  const mat0 = () => mat(color, m);
+  const dark = 0x000000;
+
+  // domed head / carapace at the front (-z is toward the diner)
+  const head = put(ico(0.075, color, m), 0, 0.055, -0.13); head.scale.set(1.1, 0.85, 1.25); g.add(head);
+  // two little black eyes on stalks
+  for (const s of [-1, 1]) g.add(put(sph(0.014, dark, { rough: 0.3 }), s * 0.035, 0.1, -0.19));
+
+  // abdomen — 4 tapering segments stepping back and curling up, then the fan tail
+  const seg = [[0.09, 0.05, -0.03], [0.08, 0.055, 0.04], [0.07, 0.065, 0.1], [0.055, 0.08, 0.15]];
+  for (const [w, y, z] of seg) { const s = put(box(w, 0.055, 0.07, mat0()), 0, y, z); s.castShadow = true; g.add(s); }
+  // fan tail — five flukes spread flat at the tip
+  for (let i = 0; i < 5; i++) {
+    const a = (i - 2) * 0.34;
+    const fl = put(new THREE.Mesh(new THREE.ConeGeometry(0.032, 0.075, 4), mat0()), Math.sin(a) * 0.05, 0.088, 0.2 + Math.cos(a) * 0.02);
+    fl.rotation.set(-1.15, a, 0); fl.scale.set(1, 1, 0.4); g.add(fl);
   }
+
+  // two front claws — a thin arm reaching forward-out to a big pincer (two nippers)
+  for (const s of [-1, 1]) {
+    const arm = new THREE.Group(); arm.position.set(s * 0.08, 0.045, -0.17); arm.rotation.y = s * 0.6; g.add(arm);
+    const upper = put(cyl(0.018, 0.024, 0.12, color, { seg: 6, flat: true, rough: 0.4 }), 0, 0, -0.07); upper.rotation.x = Math.PI / 2; arm.add(upper);
+    const claw = new THREE.Group(); claw.position.set(0, 0, -0.14); arm.add(claw);
+    const pincer = put(ico(0.06, color, m), 0, 0, 0); pincer.scale.set(0.85, 0.75, 1.4); pincer.castShadow = true; claw.add(pincer);
+    claw.add(put(box(0.025, 0.028, 0.08, mat0()), -0.02, 0.016, -0.07));   // upper nipper
+    claw.add(put(box(0.025, 0.028, 0.08, mat0()), 0.02, -0.016, -0.07));   // lower nipper
+  }
+  // swept antennae
+  for (const s of [-1, 1]) { const a = put(cyl(0.004, 0.006, 0.16, color, { seg: 4, flat: true }), s * 0.04, 0.09, -0.24); a.rotation.set(1.15, 0, s * 0.25); g.add(a); }
+
+  g.rotation.y = Math.PI;   // face the head + claws toward the diner / camera
   return g;
 }
 
