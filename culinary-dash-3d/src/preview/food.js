@@ -40,14 +40,17 @@ function lobster(color) {
     fl.rotation.set(-1.15, a, 0); fl.scale.set(1, 1, 0.4); g.add(fl);
   }
 
-  // two front claws — a thin arm reaching forward-out to a big pincer (two nippers)
+  // two front claws — a jointed arm (upper + forearm) reaching well out front to a
+  // big OPEN pincer, the two nippers splayed apart like a lobster mid-grab.
   for (const s of [-1, 1]) {
-    const arm = new THREE.Group(); arm.position.set(s * 0.08, 0.045, -0.17); arm.rotation.y = s * 0.6; g.add(arm);
-    const upper = put(cyl(0.018, 0.024, 0.12, color, { seg: 6, flat: true, rough: 0.4 }), 0, 0, -0.07); upper.rotation.x = Math.PI / 2; arm.add(upper);
-    const claw = new THREE.Group(); claw.position.set(0, 0, -0.14); arm.add(claw);
-    const pincer = put(ico(0.06, color, m), 0, 0, 0); pincer.scale.set(0.85, 0.75, 1.4); pincer.castShadow = true; claw.add(pincer);
-    claw.add(put(box(0.025, 0.028, 0.08, mat0()), -0.02, 0.016, -0.07));   // upper nipper
-    claw.add(put(box(0.025, 0.028, 0.08, mat0()), 0.02, -0.016, -0.07));   // lower nipper
+    const arm = new THREE.Group(); arm.position.set(s * 0.09, 0.045, -0.16); arm.rotation.y = s * 0.42; g.add(arm);
+    const upper = put(cyl(0.02, 0.026, 0.15, color, { seg: 6, flat: true, rough: 0.4 }), 0, 0, -0.09); upper.rotation.x = Math.PI / 2; arm.add(upper);
+    const fore = new THREE.Group(); fore.position.set(0, 0, -0.17); fore.rotation.y = s * -0.25; arm.add(fore);   // elbow: bend the reach forward
+    const f2 = put(cyl(0.022, 0.028, 0.14, color, { seg: 6, flat: true, rough: 0.4 }), 0, 0, -0.08); f2.rotation.x = Math.PI / 2; fore.add(f2);
+    const claw = new THREE.Group(); claw.position.set(0, 0, -0.17); fore.add(claw);
+    const knuckle = put(ico(0.055, color, m), 0, 0, 0.01); knuckle.scale.set(0.9, 0.8, 1.1); knuckle.castShadow = true; claw.add(knuckle);
+    const up = put(box(0.028, 0.03, 0.13, mat0()), 0, 0.03, -0.08); up.rotation.x = -0.4; claw.add(up);   // upper nipper, splayed open
+    const lo = put(box(0.028, 0.03, 0.13, mat0()), 0, -0.03, -0.08); lo.rotation.x = 0.4; claw.add(lo);   // lower nipper
   }
   // swept antennae
   for (const s of [-1, 1]) { const a = put(cyl(0.004, 0.006, 0.16, color, { seg: 4, flat: true }), s * 0.04, 0.09, -0.24); a.rotation.set(1.15, 0, s * 0.25); g.add(a); }
