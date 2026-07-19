@@ -4,6 +4,7 @@
 import * as THREE from 'three';
 import { mat, box, put, clamp01, lerp } from './util.js';
 import { HEARTS_MAX } from '../sim/data.js';
+import { dishModel } from './food.js';
 
 const SKINS = [0x7a4328, 0x8a5a3a, 0xb07a4e, 0x633119, 0x9c6b45];
 const TOPS = [0xc85a6a, 0x4f7fa8, 0x6a9a5a, 0xc8913a, 0x8a6bb0, 0x3f7f78];
@@ -52,15 +53,15 @@ export function createCustomers(scene, tables) {
     }
 
     // order bubble with a dish-colored icon
-    const bubble = new THREE.Group(); bubble.position.set(0, 2.0, 0.1); m.add(bubble);
-    const bub = put(new THREE.Mesh(new THREE.SphereGeometry(0.2, 14, 10), mat(0xf4eee2, { rough: 0.7 })), 0, 0, 0);
-    bub.scale.set(1.2, 0.95, 0.7); bubble.add(bub);
-    bubble.add(put(box(0.08, 0.14, 0.02, mat(0xf4eee2, { rough: 0.7 })), 0, -0.19, 0)); // tail
-    const icon = put(new THREE.Mesh(new THREE.SphereGeometry(0.1, 12, 8), mat(DISH_COLOR[c.dish] ?? 0xcccccc, { rough: 0.6 })), 0, 0, 0.13); bubble.add(icon);
+    const bubble = new THREE.Group(); bubble.position.set(0, 2.12, 0.1); m.add(bubble);
+    const bub = put(new THREE.Mesh(new THREE.SphereGeometry(0.29, 16, 12), mat(0xf4eee2, { rough: 0.7 })), 0, 0, 0);
+    bub.scale.set(1.12, 1.0, 0.9); bubble.add(bub);
+    bubble.add(put(box(0.1, 0.16, 0.02, mat(0xf4eee2, { rough: 0.7 })), 0, -0.27, 0)); // tail
+    const icon = dishModel(c.dish); icon.scale.setScalar(0.74); icon.position.set(0, -0.1, 0.08); bubble.add(icon);
 
     // patience bar under the bubble
-    const barBg = put(box(0.5, 0.07, 0.03, mat(0x201811, { rough: 0.9 })), 0, 0.32, 0.12); bubble.add(barBg);
-    const bar = put(box(0.48, 0.05, 0.05, mat(0x8be27a)), 0, 0.32, 0.14); bubble.add(bar);
+    const barBg = put(box(0.54, 0.07, 0.03, mat(0x201811, { rough: 0.9 })), 0, 0.46, 0.12); bubble.add(barBg);
+    const bar = put(box(0.52, 0.05, 0.05, mat(0x8be27a)), 0, 0.46, 0.14); bubble.add(bar);
 
     return { mesh: m, torso, head, bubble, bar, seed, servedT: 0 };
   }
@@ -79,7 +80,7 @@ export function createCustomers(scene, tables) {
       e.bar.position.x = -0.24 * (1 - h);
       e.bar.material.color.setHSL(0.33 * h, 0.85, 0.5);   // green -> red
       e.bubble.visible = waiting;
-      e.bubble.position.y = 2.0 + Math.sin(t * 2 + e.seed) * 0.03;
+      e.bubble.position.y = 2.12 + Math.sin(t * 2 + e.seed) * 0.03;
       // leaving: slump + a red flash; served: a happy little bounce
       if (c.state === 'served') { e.servedT += dt; e.mesh.position.y = Math.abs(Math.sin(e.servedT * 12)) * 0.12; e.torso.material.emissive.setRGB(0, 0.15, 0); }
       else if (c.state === 'leaving') { e.torso.material.emissive.setRGB(0.25, 0, 0); e.head.rotation.z = lerp(e.head.rotation.z, 0.3, 1 - Math.exp(-6 * dt)); }

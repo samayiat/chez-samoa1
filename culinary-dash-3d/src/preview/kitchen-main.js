@@ -17,6 +17,7 @@ import { rpos } from './kitchen-space.js';
 import { buildKitchen } from './kitchen-room.js';
 import { createCustomers, DISH_COLOR } from './kitchen-customers.js';
 import { buildChef } from './chef.js';
+import { carriedModel } from './food.js';
 import { lerp, smooth, clamp01, mat, box, put } from './util.js';
 
 const app = document.getElementById('app');
@@ -29,7 +30,7 @@ const H = {
 };
 
 let renderer, scene, camera, kitchen, customers, chef, cu, carry, composer, booted = false, lastT = 0;
-let state, walkPhase = 0, facing = Math.PI, dayT = 80, ended = 0, workBurst = 0;
+let state, walkPhase = 0, facing = Math.PI, dayT = 80, ended = 0, workBurst = 0, lastCarryKey = null;
 const stationDef = Object.fromEntries(STATIONS.map((s) => [s.id, s]));
 
 function boot() {
@@ -58,12 +59,9 @@ function boot() {
   customers = createCustomers(scene, kitchen.tables);
   chef = buildChef(); scene.add(chef); cu = chef.userData;
 
-  // a plate the chef carries (shown when state.chef.carrying)
+  // what the chef carries — the real dish/ingredient model, swapped when it changes
   carry = new THREE.Group();
-  carry.add(put(new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, 0.04, 14), mat(0xf0e6cf, { rough: 0.4 })), 0, 0, 0));
-  const food = put(new THREE.Mesh(new THREE.SphereGeometry(0.11, 12, 8), mat(0xffffff, { rough: 0.6 })), 0, 0.08, 0);
-  carry.userData.food = food; carry.add(food);
-  carry.position.set(0, 1.02, 0.34); carry.visible = false; chef.add(carry);
+  carry.position.set(0, 1.02, 0.42); carry.visible = false; chef.add(carry);
 
   composer = new EffectComposer(renderer);
   composer.addPass(new RenderPass(scene, camera));
@@ -149,15 +147,24 @@ function syncScene(dt, t) {
     eL.rotation.x = lerp(eL.rotation.x, 0.28, smooth(dt, 10)); eR.rotation.x = lerp(eR.rotation.x, 0.28, smooth(dt, 10));
     cu.body.position.y = lerp(cu.body.position.y, 0, smooth(dt, 8));
   }
+  // carrying a dish: bring both arms forward to hold it (overrides the swing)
+  if (c.carrying && !working) {
+    cu.armL.rotation.x = lerp(cu.armL.rotation.x, -0.7, smooth(dt, 12));
+    cu.armR.rotation.x = lerp(cu.armR.rotation.x, -0.7, smooth(dt, 12));
+    eL.rotation.x = lerp(eL.rotation.x, 0.95, smooth(dt, 12));
+    eR.rotation.x = lerp(eR.rotation.x, 0.95, smooth(dt, 12));
+  }
   chef.rotation.y = facing;
 
-  // carried plate
-  if (c.carrying) {
-    carry.visible = true;
-    const raw = c.carrying.kind === 'raw';
-    carry.userData.food.material.color.setHex(raw ? 0x3a4f7a : (DISH_COLOR[c.carrying.dish] ?? 0xdddddd));
-    carry.position.y = 1.02 + Math.sin(t * 3) * 0.02;
-  } else carry.visible = false;
+  // carried dish/ingredient — rebuild the model only when what she holds changes
+  const carryKey = c.carrying ? (c.carrying.kind + ':' + (c.carrying.dish || '')) : null;
+  if (carryKey !== lastCarryKey) {
+    while (carry.children.length) carry.remove(carry.children[0]);
+    if (c.carrying) { const fm = carriedModel(c.carrying); fm.scale.setScalar(0.85); carry.add(fm); }
+    lastCarryKey = carryKey;
+  }
+  carry.visible = !!c.carrying;
+  if (c.carrying) carry.position.y = 1.02 + Math.sin(t * 3) * 0.02;
 
   // stations: cooking bars + ready + near-highlight
   for (const s of STATIONS) {

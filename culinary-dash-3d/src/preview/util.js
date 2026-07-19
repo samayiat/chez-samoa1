@@ -3,7 +3,7 @@
 import * as THREE from 'three';
 
 export function mat(color, o = {}) {
-  return new THREE.MeshStandardMaterial({
+  const m = new THREE.MeshStandardMaterial({
     color,
     roughness: o.rough ?? 0.72,
     metalness: o.metal ?? 0.0,
@@ -11,6 +11,8 @@ export function mat(color, o = {}) {
     emissive: new THREE.Color(o.emissive ?? 0x000000),
     emissiveIntensity: o.emi ?? 1,
   });
+  if (o.transparent || o.opacity != null) { m.transparent = true; m.opacity = o.opacity ?? 1; }
+  return m;
 }
 
 export function box(w, h, d, material) {

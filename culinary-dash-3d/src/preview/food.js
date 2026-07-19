@@ -1,0 +1,90 @@
+// Dish + ingredient models. Small stylized-procedural props so the food reads as
+// FOOD at diorama distance — colour + rough silhouette do the work. Used for what
+// the chef carries and what customers order (the bubble icon).
+import * as THREE from 'three';
+import { mat, box, put } from './util.js';
+
+const ico = (r, color, o = {}) => { const m = new THREE.Mesh(new THREE.IcosahedronGeometry(r, 0), mat(color, { flat: true, rough: o.rough ?? 0.6, ...o })); m.castShadow = true; return m; };
+const sph = (r, color, o = {}) => new THREE.Mesh(new THREE.SphereGeometry(r, 10, 8), mat(color, { rough: o.rough ?? 0.6, ...o }));
+const cyl = (rt, rb, h, color, o = {}) => new THREE.Mesh(new THREE.CylinderGeometry(rt, rb, h, o.seg ?? 14), mat(color, { rough: o.rough ?? 0.5, ...o }));
+
+// a shallow plate the plated dishes sit on
+function plate() {
+  const g = new THREE.Group();
+  const p = cyl(0.19, 0.17, 0.035, 0xf1e9d6, { rough: 0.35 }); p.castShadow = true; g.add(p);
+  g.add(put(cyl(0.19, 0.185, 0.02, 0xe3d6bd, { rough: 0.35 }), 0, 0.02, 0)); // rim
+  return g;
+}
+
+// a red (cooked) / blue (raw) lobster — elongated body, fan tail, two claws
+function lobster(color) {
+  const g = new THREE.Group();
+  const m = { flat: true, rough: 0.45 };
+  const body = put(new THREE.Mesh(new THREE.CapsuleGeometry(0.055, 0.15, 3, 8), mat(color, m)), 0, 0.07, 0.02);
+  body.rotation.x = 1.3; body.castShadow = true; g.add(body);
+  const tail = put(new THREE.Mesh(new THREE.ConeGeometry(0.11, 0.09, 6), mat(color, m)), 0, 0.06, 0.16);
+  tail.rotation.x = -1.9; tail.scale.set(1, 1, 0.5); g.add(tail);
+  for (const s of [-1, 1]) {
+    const claw = put(sph(0.05, color, m), s * 0.08, 0.06, -0.12); claw.scale.set(1, 0.7, 1.5); g.add(claw);
+    g.add(put(box(0.018, 0.018, 0.09, mat(color, m)), s * 0.05, 0.08, -0.16)); // feeler
+  }
+  return g;
+}
+
+// the plated dishes (with base) — id from sim/data DISHES
+export function dishModel(id) {
+  const g = new THREE.Group();
+  if (id === 'whiskey-sour' || id === 'gin-sour') {
+    // an open tumbler: the coloured liquid IS the visible body (no enclosing glass
+    // to hide it), read as glass by a bright rim lip + a clear foot ring.
+    const liq = id === 'whiskey-sour' ? 0xd88a24 : 0xe4dfb0;
+    const glassMat = { rough: 0.08, metal: 0.1, transparent: true, opacity: 0.45 };
+    g.add(put(cyl(0.075, 0.075, 0.02, 0xdfeef2, glassMat), 0, 0.02, 0));        // glass foot
+    g.add(put(cyl(0.045, 0.045, 0.06, 0xdfeef2, glassMat), 0, 0.05, 0));        // stem
+    g.add(put(cyl(0.115, 0.09, 0.2, liq, { rough: 0.2, emissive: id === 'whiskey-sour' ? 0x351f04 : 0x323018, emi: 0.35 }), 0, 0.19, 0)); // liquid body
+    const rim = put(new THREE.Mesh(new THREE.TorusGeometry(0.115, 0.012, 6, 18), mat(0xeef6f8, glassMat)), 0, 0.29, 0); rim.rotation.x = Math.PI / 2; g.add(rim); // glass rim lip
+    g.add(put(cyl(0.108, 0.108, 0.025, 0xf6f1e8, { rough: 0.9 }), 0, 0.29, 0)); // foam cap
+    g.add(put(sph(0.032, 0xc0202e), 0.05, 0.315, 0.03));                        // cherry
+    g.add(put(box(0.012, 0.14, 0.012, mat(0x8a1a24)), 0.05, 0.37, 0.03));       // cherry stick
+    return g;
+  }
+  g.add(plate());
+  if (id === 'salad') {
+    const greens = [0x5f9a3e, 0x74ab4c, 0x4f8a38];
+    for (let i = 0; i < 7; i++) { const a = i / 7 * Math.PI * 2; const leaf = put(ico(0.06, greens[i % 3], { rough: 0.7 }), Math.cos(a) * 0.07, 0.07 + (i % 2) * 0.02, Math.sin(a) * 0.07); leaf.scale.y = 0.6; g.add(leaf); }
+    g.add(put(sph(0.045, 0xc8402c), -0.04, 0.09, 0.03));                        // tomato
+    g.add(put(sph(0.04, 0xc8402c), 0.06, 0.08, -0.03));
+    g.add(put(ico(0.035, 0xe0a63a, { rough: 0.7 }), 0.02, 0.1, 0.06));          // carrot bit
+  } else if (id === 'karaage') {
+    for (let i = 0; i < 4; i++) { const a = i / 4 * Math.PI * 2 + 0.5; g.add(put(ico(0.075, [0xcf9038, 0xc07f2c][i % 2], { rough: 0.6 }), Math.cos(a) * 0.06, 0.08, Math.sin(a) * 0.06)); }
+    const lem = put(new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.02, 8, 1, false, 0, Math.PI), mat(0xe9d24a, { rough: 0.5 })), 0.1, 0.06, 0.08); lem.rotation.x = -0.4; g.add(lem); // lemon wedge
+  } else if (id === 'lobster') {
+    const l = lobster(0xcf3a24); l.position.y = 0.05; g.add(l);
+  } else {
+    g.add(put(sph(0.1, 0xd9c9a8), 0, 0.09, 0)); // fallback blob
+  }
+  return g;
+}
+
+// a raw ingredient the chef carries between stations
+export function rawModel(dish) {
+  if (dish === 'lobster') { const g = lobster(0x3a4f7a); g.position.y = 0.05; return g; }  // raw = blue (the raw/cooked tell)
+  const g = new THREE.Group(); g.add(put(sph(0.11, 0x8aa0c0), 0, 0.08, 0)); return g;
+}
+
+// chopped veg carried from the cutting board to the salad bar
+export function choppedModel() {
+  const g = new THREE.Group();
+  g.add(put(cyl(0.14, 0.13, 0.03, 0xc9a06a, { rough: 0.7 }), 0, 0, 0));         // a board sliver
+  const cols = [0x5f9a3e, 0x74ab4c, 0xc8402c, 0xe0a63a];
+  for (let i = 0; i < 8; i++) { const a = i / 8 * Math.PI * 2; g.add(put(box(0.05, 0.05, 0.05, mat(cols[i % 4], { flat: true, rough: 0.7 })), Math.cos(a) * 0.05, 0.04, Math.sin(a) * 0.05)); }
+  return g;
+}
+
+// what the chef is holding, from the sim's `carrying`
+export function carriedModel(carrying) {
+  if (!carrying) return new THREE.Group();
+  if (carrying.kind === 'raw') return rawModel(carrying.dish);
+  if (carrying.kind === 'prep') return choppedModel();
+  return dishModel(carrying.dish);
+}
