@@ -119,6 +119,9 @@ export function buildChef() {
   const hatMat = mat(HAT, { flat: true, rough: 0.85 });
   const band = new THREE.Mesh(new THREE.CylinderGeometry(0.29, 0.25, 0.2, 10), hatMat);
   band.castShadow = true; band.position.set(0, 0.19, -0.02); head.add(band);
+  // a rolled cuff at the base — overhangs the hairline so the hat/hair seam is hidden
+  const cuff = new THREE.Mesh(new THREE.TorusGeometry(0.265, 0.04, 8, 14), hatMat);
+  cuff.castShadow = true; cuff.rotation.x = Math.PI / 2; cuff.position.set(0, 0.1, -0.02); head.add(cuff);
   const puff = new THREE.Mesh(new THREE.SphereGeometry(0.31, 10, 8), hatMat);
   puff.castShadow = true; puff.position.set(0, 0.36, -0.02); puff.scale.set(1.12, 0.82, 1.12);
   head.add(puff);
