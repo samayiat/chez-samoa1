@@ -113,11 +113,15 @@ export function buildChef() {
   // eyes
   head.add(put(box(0.05, 0.06, 0.03, mat(0x120a06)), -0.09, 0.02, 0.25));
   head.add(put(box(0.05, 0.06, 0.03, mat(0x120a06)), 0.09, 0.02, 0.25));
-  // toque — puffy squashed sphere + band
-  const puff = new THREE.Mesh(new THREE.SphereGeometry(0.27, 16, 12), mat(HAT, { rough: 0.85 }));
-  puff.castShadow = true; puff.position.y = 0.32; puff.scale.set(1.05, 0.9, 1.05);
+  // toque — a bigger, boxier chef's hat: a faceted drum band (wider at the top so
+  // the brim doesn't ride down over the face) under a large low-poly puff. Sized to
+  // sit over the hair + locs so they don't poke through.
+  const hatMat = mat(HAT, { flat: true, rough: 0.85 });
+  const band = new THREE.Mesh(new THREE.CylinderGeometry(0.29, 0.25, 0.2, 10), hatMat);
+  band.castShadow = true; band.position.set(0, 0.19, -0.02); head.add(band);
+  const puff = new THREE.Mesh(new THREE.SphereGeometry(0.31, 10, 8), hatMat);
+  puff.castShadow = true; puff.position.set(0, 0.36, -0.02); puff.scale.set(1.12, 0.82, 1.12);
   head.add(puff);
-  head.add(put(new THREE.Mesh(new THREE.CylinderGeometry(0.23, 0.23, 0.14, 16), mat(HAT, { rough: 0.8 })), 0, 0.15, 0));
 
   // arms — pink upper sleeve, bare brown forearm + fist, hinged at an elbow
   // (userData.elbow bends the forearm; userData.fist is the hand).
