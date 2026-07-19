@@ -20,6 +20,11 @@ const HAIR = 0x17110d;     // dark braided hair
 const TROUSER = 0x2a1f18;  // dark leggings under the skirt
 const HAT = 0xf1efe6;      // cream toque (#f0f0f0)
 
+// rounded low-poly primitives — a tapered limb (cyl) and a joint/cap (ball).
+// Soft, faceted forms so the body reads as a body, not a stack of blocks.
+const cyl = (rt, rb, h, material, seg = 8) => { const m = new THREE.Mesh(new THREE.CylinderGeometry(rt, rb, h, seg), material); m.castShadow = true; return m; };
+const ball = (r, material, sx = 1, sy = 1, sz = 1) => { const m = new THREE.Mesh(new THREE.SphereGeometry(r, 12, 10), material); m.scale.set(sx, sy, sz); m.castShadow = true; return m; };
+
 // combo moves: [armSide, dur, reach, weight, knock, lunge]
 const COMBO = [
   { side: 'R', dur: 0.24, reach: 1.7, w: 0.6, lunge: 0.35 }, // jab
@@ -32,30 +37,37 @@ export function buildChef() {
   const body = new THREE.Group();  // bob/squash pivot
   g.add(body);
 
-  // legs — thigh + shin, hinged at a knee (userData.knee bends the shin)
+  // legs — tapered thigh + shin, rounded hip/knee joints, a shoe with a toe.
+  // (userData.knee bends the shin — the rig hook the animation drives.)
   const trouser = mat(TROUSER, { flat: true, rough: 0.8 });
   const shoeMat = mat(0x1a1a20, { flat: true });
   function leg() {
-    const hip = new THREE.Group();                                  // hip pivot
-    hip.add(put(box(0.22, 0.27, 0.25, trouser), 0, -0.135, 0));      // thigh
-    const knee = new THREE.Group(); knee.position.y = -0.27; hip.add(knee);
-    knee.add(put(box(0.2, 0.26, 0.22, trouser), 0, -0.13, 0));       // shin
-    knee.add(put(box(0.26, 0.12, 0.34, shoeMat), 0, -0.27, 0.05));   // foot
+    const hip = new THREE.Group();                                   // hip pivot
+    hip.add(put(ball(0.12, trouser, 1, 0.9, 1), 0, 0, 0));           // hip joint
+    hip.add(put(cyl(0.12, 0.095, 0.28, trouser), 0, -0.15, 0));      // thigh (tapered)
+    const knee = new THREE.Group(); knee.position.y = -0.29; hip.add(knee);
+    knee.add(put(ball(0.09, trouser), 0, 0, 0));                     // knee cap
+    knee.add(put(cyl(0.09, 0.07, 0.26, trouser), 0, -0.14, 0));      // shin (tapered)
+    knee.add(put(box(0.15, 0.08, 0.24, shoeMat), 0, -0.29, 0.05));   // shoe sole
+    knee.add(put(ball(0.09, shoeMat, 1.0, 0.7, 1.15), 0, -0.29, 0.17)); // rounded toe
     hip.userData.knee = knee;
     return hip;
   }
   const legL = leg(); legL.position.set(-0.16, 0.5, 0); body.add(legL);
   const legR = leg(); legR.position.set(0.16, 0.5, 0); body.add(legR);
 
-  // torso — pink top under a tan apron
+  // torso — a soft elliptical column (chest a touch wider than the waist), her
+  // pink top with a tan apron panel, round shoulder caps, a neck and a collar.
   const topMat = mat(TOP, { flat: true, rough: 0.7 });
   const torso = new THREE.Group(); torso.position.y = 0.9; body.add(torso);
-  torso.add(put(box(0.6, 0.72, 0.42, topMat), 0, 0, 0));
-  // apron over the front, with a waist tie
-  torso.add(put(box(0.46, 0.66, 0.06, mat(APRON, { flat: true, rough: 0.8 })), 0, -0.08, 0.22));
-  torso.add(put(box(0.62, 0.08, 0.06, mat(0x6f4626, { flat: true })), 0, 0.02, 0.235)); // apron tie
-  // collar of the top
-  torso.add(put(box(0.5, 0.1, 0.3, topMat), 0, 0.4, 0.06));
+  const core = cyl(0.3, 0.26, 0.72, topMat, 12); core.scale.z = 0.66; torso.add(put(core, 0, 0, 0));
+  torso.add(put(ball(0.15, topMat, 1, 0.85, 0.9), -0.28, 0.3, 0));   // shoulder caps
+  torso.add(put(ball(0.15, topMat, 1, 0.85, 0.9), 0.28, 0.3, 0));
+  const apronMat = mat(APRON, { flat: true, rough: 0.8 });
+  torso.add(put(box(0.42, 0.6, 0.06, apronMat), 0, -0.06, 0.19));    // apron front panel
+  torso.add(put(box(0.5, 0.07, 0.07, mat(0x6f4626, { flat: true })), 0, 0.08, 0.2)); // waist tie
+  torso.add(put(cyl(0.1, 0.11, 0.14, mat(SKIN, { rough: 0.72 }), 10), 0, 0.44, 0.02)); // neck
+  torso.add(put(cyl(0.17, 0.19, 0.1, topMat, 12), 0, 0.37, 0.02));   // collar
 
   // head — dark braided hair framing a brown face, cream toque on top
   const head = new THREE.Group(); head.position.y = 1.42; body.add(head);
@@ -82,10 +94,12 @@ export function buildChef() {
   const skinMat = mat(SKIN, { flat: true, rough: 0.7 });
   function arm() {
     const sh = new THREE.Group();                                   // shoulder pivot
-    sh.add(put(box(0.16, 0.28, 0.16, topMat), 0, -0.14, 0));         // upper arm (sleeve)
-    const elbow = new THREE.Group(); elbow.position.y = -0.28; sh.add(elbow);
-    elbow.add(put(box(0.14, 0.26, 0.14, skinMat), 0, -0.13, 0));     // forearm (bare)
-    const fist = put(box(0.18, 0.18, 0.18, skinMat), 0, -0.3, 0);
+    sh.add(put(ball(0.1, topMat, 1, 0.95, 1), 0, 0, 0));            // shoulder round
+    sh.add(put(cyl(0.095, 0.075, 0.28, topMat), 0, -0.15, 0));      // upper arm (tapered sleeve)
+    const elbow = new THREE.Group(); elbow.position.y = -0.29; sh.add(elbow);
+    elbow.add(put(ball(0.075, skinMat), 0, 0, 0));                  // elbow
+    elbow.add(put(cyl(0.072, 0.058, 0.26, skinMat), 0, -0.14, 0));  // forearm (bare, tapered)
+    const fist = ball(0.09, skinMat, 1, 0.95, 1.05); fist.position.set(0, -0.3, 0.01); // mitt hand
     elbow.add(fist);
     sh.userData = { elbow, fist };
     return sh;
