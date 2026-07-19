@@ -74,13 +74,13 @@ export function buildChef() {
   const hairMat = mat(HAIR, { flat: true, rough: 0.9 });
   // rounded hair base (under the toque) so gaps between locs read as hair, not scalp
   const base = new THREE.Mesh(new THREE.SphereGeometry(0.245, 14, 12), hairMat);
-  base.castShadow = true; base.position.set(0, 0.02, -0.03); base.scale.set(1.15, 1.0, 1.05); head.add(base);
+  base.castShadow = true; base.position.set(0, 0.0, -0.03); base.scale.set(1.12, 0.9, 1.05); head.add(base);
   // a hidden hair backing behind the shirt — its only job is to block the top from
   // showing through the gaps between locs. Kept inside the loc envelope (narrower and
   // shorter than the loc fan) so the locs overhang it on every side and it never
   // reads as its own shape — you see locs, it just fills the space behind them.
-  const backfill = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.33, 0.7, 12), hairMat);
-  backfill.castShadow = true; backfill.position.set(0, -0.12, -0.26); backfill.scale.set(1, 1, 0.22); head.add(backfill);
+  const backfill = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.33, 0.52, 12), hairMat);
+  backfill.castShadow = true; backfill.position.set(0, -0.2, -0.26); backfill.scale.set(1, 1, 0.22); head.add(backfill);
   // face in front of the hair
   head.add(put(new THREE.Mesh(new THREE.SphereGeometry(0.235, 16, 12), mat(SKIN, { rough: 0.72 })), 0, 0, 0.06));
   // ~35 thin straight locs emerging from under the hat brim, each flaring DOWN-AND-
@@ -89,9 +89,9 @@ export function buildChef() {
   const UP = new THREE.Vector3(0, 1, 0);
   const R = 0.24, FRONT_GAP = 0.95;   // radians of open face around +Z
   const rings = [
-    { phi: 1.16, n: 16, len: 0.42 },
-    { phi: 1.40, n: 20, len: 0.54 },
-    { phi: 1.58, n: 22, len: 0.62 },
+    { phi: 1.40, n: 16, len: 0.42 },
+    { phi: 1.52, n: 20, len: 0.54 },
+    { phi: 1.62, n: 22, len: 0.62 },
   ];
   for (const ring of rings) {
     const hr = R * Math.sin(ring.phi), ry = R * Math.cos(ring.phi);
@@ -123,11 +123,12 @@ export function buildChef() {
   // the brim doesn't ride down over the face) under a large low-poly puff. Sized to
   // sit over the hair + locs so they don't poke through.
   const hatMat = mat(HAT, { flat: true, rough: 0.85 });
-  const band = new THREE.Mesh(new THREE.CylinderGeometry(0.29, 0.25, 0.2, 10), hatMat);
-  band.castShadow = true; band.position.set(0, 0.19, -0.02); head.add(band);
-  // a rolled cuff at the base — overhangs the hairline so the hat/hair seam is hidden
-  const cuff = new THREE.Mesh(new THREE.TorusGeometry(0.265, 0.04, 8, 14), hatMat);
-  cuff.castShadow = true; cuff.rotation.x = Math.PI / 2; cuff.position.set(0, 0.1, -0.02); head.add(cuff);
+  const band = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.28, 0.24, 12), hatMat);
+  band.castShadow = true; band.position.set(0, 0.2, -0.02); head.add(band);
+  // a fat rolled cuff at the base — a wide brim that fully caps the hairline so no
+  // hair shows between the hat and the head (overhangs wider than the base hair)
+  const cuff = new THREE.Mesh(new THREE.TorusGeometry(0.29, 0.055, 8, 18), hatMat);
+  cuff.castShadow = true; cuff.rotation.x = Math.PI / 2; cuff.position.set(0, 0.09, -0.02); head.add(cuff);
   const puff = new THREE.Mesh(new THREE.SphereGeometry(0.31, 10, 8), hatMat);
   puff.castShadow = true; puff.position.set(0, 0.36, -0.02); puff.scale.set(1.12, 0.82, 1.12);
   head.add(puff);
