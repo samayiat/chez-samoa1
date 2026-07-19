@@ -75,6 +75,10 @@ export function buildChef() {
   // rounded hair base (under the toque) so gaps between locs read as hair, not scalp
   const base = new THREE.Mesh(new THREE.SphereGeometry(0.245, 14, 12), hairMat);
   base.castShadow = true; base.position.set(0, 0.02, -0.03); base.scale.set(1.15, 1.0, 1.05); head.add(base);
+  // a hair mass falling down the back (behind the shirt) so the gaps between locs
+  // never show the top through — the locs drape over this solid backing.
+  const backfill = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.42, 0.72, 12), hairMat);
+  backfill.castShadow = true; backfill.position.set(0, -0.14, -0.3); backfill.scale.set(1, 1, 0.26); head.add(backfill);
   // face in front of the hair
   head.add(put(new THREE.Mesh(new THREE.SphereGeometry(0.235, 16, 12), mat(SKIN, { rough: 0.72 })), 0, 0, 0.06));
   // ~35 thin straight locs emerging from under the hat brim, each flaring DOWN-AND-
@@ -83,9 +87,9 @@ export function buildChef() {
   const UP = new THREE.Vector3(0, 1, 0);
   const R = 0.24, FRONT_GAP = 0.95;   // radians of open face around +Z
   const rings = [
-    { phi: 1.16, n: 14, len: 0.42 },
-    { phi: 1.40, n: 16, len: 0.54 },
-    { phi: 1.58, n: 18, len: 0.62 },
+    { phi: 1.16, n: 16, len: 0.42 },
+    { phi: 1.40, n: 20, len: 0.54 },
+    { phi: 1.58, n: 22, len: 0.62 },
   ];
   for (const ring of rings) {
     const hr = R * Math.sin(ring.phi), ry = R * Math.cos(ring.phi);
@@ -101,8 +105,8 @@ export function buildChef() {
       const jit = Math.sin(i * 12.9 + ring.phi * 78.2);           // deterministic wobble
       const len = ring.len * (0.9 + 0.16 * (jit * 0.5 + 0.5));
       const root = new THREE.Vector3(rx, ry + 0.02, rz - 0.02);
-      const dir = new THREE.Vector3(rx * 0.5, 0, rz * 1.6 - 0.1).normalize()
-        .multiplyScalar(0.7 + 0.12 * jit).add(new THREE.Vector3(0, -1, 0)).normalize();
+      const dir = new THREE.Vector3(rx * 0.4, 0, rz * 1.6 - 0.1).normalize()
+        .multiplyScalar(0.62 + 0.12 * jit).add(new THREE.Vector3(0, -1, 0)).normalize();
       const loc = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.033, len, 5), hairMat);
       loc.castShadow = true;
       loc.quaternion.setFromUnitVectors(UP, dir);
