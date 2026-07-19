@@ -29,7 +29,7 @@ const H = {
 };
 
 let renderer, scene, camera, kitchen, customers, chef, cu, carry, composer, booted = false, lastT = 0;
-let state, walkPhase = 0, facing = Math.PI, dayT = 80, ended = 0;
+let state, walkPhase = 0, facing = Math.PI, dayT = 80, ended = 0, workBurst = 0;
 const stationDef = Object.fromEntries(STATIONS.map((s) => [s.id, s]));
 
 function boot() {
@@ -81,6 +81,11 @@ function tick(dt) {
   if (ended) return;
   const input = pollInput();
   stepSim(state, dt, input);
+  // action cues (grab/plate/cook/serve) -> a quick "prepping" flourish
+  if (state.sounds && state.sounds.length) {
+    for (const s of state.sounds) if (s === 'grab' || s === 'plate' || s === 'cook' || s === 'serve') workBurst = 1;
+    state.sounds.length = 0;
+  }
 
   // day clock + endings
   dayT -= dt;
@@ -100,13 +105,33 @@ function syncScene(dt, t) {
   const c = state.chef;
   const p = rpos(c.x, c.y);
   chef.position.set(p.x, 0, p.z);
+  workBurst = Math.max(0, workBurst - dt * 2.2);
   const spd = Math.hypot(c.vx, c.vy);
-  if (spd > 4) {
+  const moving = spd > 4;
+  const nearDef = state.nearStation ? stationDef[state.nearStation] : null;
+  const choppingHere = nearDef && nearDef.kind === 'prep' && state.stations[state.nearStation]?.chopping;
+  const working = !moving && (choppingHere || workBurst > 0.05);
+
+  if (moving) {
     facing = Math.atan2(c.vx, c.vy);
     walkPhase += dt * 10;
     cu.legL.rotation.x = Math.sin(walkPhase) * 0.6; cu.legR.rotation.x = -Math.sin(walkPhase) * 0.6;
     cu.armL.rotation.x = -Math.sin(walkPhase) * 0.4; cu.armR.rotation.x = Math.sin(walkPhase) * 0.4;
     cu.body.position.y = Math.abs(Math.sin(walkPhase)) * 0.06;
+  } else if (working) {
+    // turn to the counter and work the ingredients — hands prepping in front
+    if (nearDef) {
+      const sp = rpos(nearDef.x, nearDef.y);
+      let d = Math.atan2(sp.x - p.x, sp.z - p.z) - facing;
+      while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI;
+      facing += d * smooth(dt, 12);
+    }
+    const w = t * 12;
+    cu.armL.rotation.x = -1.2 + Math.sin(w) * 0.45;
+    cu.armR.rotation.x = -1.2 + Math.sin(w + Math.PI) * 0.45;
+    cu.legL.rotation.x = lerp(cu.legL.rotation.x, 0, smooth(dt, 10));
+    cu.legR.rotation.x = lerp(cu.legR.rotation.x, 0, smooth(dt, 10));
+    cu.body.position.y = Math.abs(Math.sin(w)) * 0.025;
   } else {
     cu.legL.rotation.x = lerp(cu.legL.rotation.x, 0, smooth(dt, 10));
     cu.legR.rotation.x = lerp(cu.legR.rotation.x, 0, smooth(dt, 10));
