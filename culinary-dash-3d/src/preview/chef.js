@@ -64,8 +64,8 @@ export function buildChef() {
   torso.add(put(ball(0.15, topMat, 1, 0.85, 0.9), -0.28, 0.3, 0));   // shoulder caps
   torso.add(put(ball(0.15, topMat, 1, 0.85, 0.9), 0.28, 0.3, 0));
   const apronMat = mat(APRON, { flat: true, rough: 0.8 });
-  torso.add(put(box(0.42, 0.6, 0.06, apronMat), 0, -0.06, 0.19));    // apron front panel
-  torso.add(put(box(0.5, 0.07, 0.07, mat(0x6f4626, { flat: true })), 0, 0.08, 0.2)); // waist tie
+  const apron = cyl(0.315, 0.29, 0.56, apronMat, 12); apron.scale.z = 0.66; apron.castShadow = true; torso.add(put(apron, 0, -0.07, 0));   // apron wraps all the way around
+  const tie = cyl(0.325, 0.325, 0.07, mat(0x6f4626, { flat: true }), 12); tie.scale.z = 0.66; torso.add(put(tie, 0, 0.09, 0));            // waist tie band around
   torso.add(put(cyl(0.1, 0.11, 0.14, mat(SKIN, { rough: 0.72 }), 10), 0, 0.44, 0.02)); // neck
   torso.add(put(cyl(0.17, 0.19, 0.1, topMat, 12), 0, 0.37, 0.02));   // collar
 
