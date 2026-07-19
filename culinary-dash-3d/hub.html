@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#0a0708" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='14' font-size='14'>🍳</text></svg>" />
+  <title>Chez Samoa — previews</title>
+  <style>
+    :root { color-scheme: dark; }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; min-height: 100%; }
+    body {
+      min-height: 100dvh; display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: clamp(20px, 5vh, 40px); padding: 28px 20px; text-align: center;
+      font-family: system-ui, -apple-system, sans-serif; color: #ffe9c7;
+      background: radial-gradient(120% 80% at 50% 0%, #241811 0%, #140d09 55%, #0a0708 100%);
+    }
+    header { display: flex; flex-direction: column; gap: 8px; }
+    .kicker { letter-spacing: .34em; font-size: 11px; font-weight: 700; color: #c79a6a; }
+    h1 { margin: 0; font-size: clamp(40px, 11vw, 88px); font-weight: 900; letter-spacing: .01em; line-height: .92;
+      background: linear-gradient(180deg, #ffe0a6, #e0553a); -webkit-background-clip: text; background-clip: text; color: transparent; }
+    .sub { margin: 0; max-width: 34rem; line-height: 1.5; font-size: 14px; color: #c9bda9; }
+    .sub b { color: #ffdca6; font-weight: 700; }
+
+    .cards { display: flex; flex-wrap: wrap; gap: 18px; justify-content: center; width: 100%; max-width: 760px; }
+    a.card {
+      flex: 1 1 300px; max-width: 360px; text-decoration: none; color: inherit;
+      border: 1px solid #3a2c1e; border-radius: 18px; padding: 26px 22px; text-align: left;
+      display: flex; flex-direction: column; gap: 10px; position: relative; overflow: hidden;
+      background: #1c140d; transition: transform .18s ease, border-color .18s ease, box-shadow .18s ease;
+    }
+    a.card:hover, a.card:focus-visible { transform: translateY(-4px); outline: none; }
+    a.card .icon { font-size: 40px; line-height: 1; }
+    a.card h2 { margin: 0; font-size: 22px; font-weight: 800; letter-spacing: .01em; }
+    a.card p { margin: 0; font-size: 13px; line-height: 1.5; color: #c1b39c; }
+    a.card .go { margin-top: 6px; font-weight: 800; font-size: 13px; letter-spacing: .04em; }
+    a.card::after { content: ""; position: absolute; inset: 0 0 auto 0; height: 4px; }
+
+    .kitchen { }
+    .kitchen::after { background: linear-gradient(90deg, #ffd98a, #f0a83a); }
+    .kitchen:hover { border-color: #6a4a24; box-shadow: 0 14px 40px rgba(240,150,58,.18); }
+    .kitchen .icon, .kitchen .go { color: #ffcf8a; }
+
+    .fight::after { background: linear-gradient(90deg, #ff8a3a, #d83a1a); }
+    .fight:hover { border-color: #6a2b1a; box-shadow: 0 14px 40px rgba(216,58,26,.2); }
+    .fight .icon, .fight .go { color: #ff8a5a; }
+
+    footer { font-size: 12px; color: #7d7264; max-width: 34rem; line-height: 1.5; }
+    footer code { color: #b79974; font-family: ui-monospace, monospace; }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="kicker">A GIFT · IN PROGRESS</div>
+    <h1>Chez Samoa</h1>
+    <p class="sub">Two halves of one game, same world and same chef: the warm <b>2.5&nbsp;D kitchen</b>
+       and the dark <b>3D boss fight</b>. Best on a phone in landscape.</p>
+  </header>
+
+  <div class="cards">
+    <a class="card kitchen" href="../kitchen/">
+      <div class="icon">🍳</div>
+      <h2>The Kitchen</h2>
+      <p>Walk the diner floor in 2.5D — a fixed diorama camera over the whole room. Tables, customers, the pass.</p>
+      <div class="go">Step onto the floor →</div>
+    </a>
+    <a class="card fight" href="../vince/">
+      <div class="icon">🔨</div>
+      <h2>The Fight — Vince</h2>
+      <p>Eviction night. Dodge the landlord's wrecking ball and punch on his openings. Move · Punch · Dodge.</p>
+      <div class="go">Face him →</div>
+    </a>
+  </div>
+
+  <footer>
+    The real game lives at <code>/chez-samoa1/</code>. These are previews of where it's headed.
+  </footer>
+</body>
+</html>

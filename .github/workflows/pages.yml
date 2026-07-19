@@ -51,6 +51,9 @@ jobs:
           # 2.5D kitchen look-proof at /kitchen/
           mkdir -p site/kitchen
           cp culinary-dash-3d/dist-kitchen/kitchen.html site/kitchen/index.html
+          # one hub that routes to both previews at /play/
+          mkdir -p site/play
+          cp culinary-dash-3d/hub.html site/play/index.html
       - uses: actions/upload-pages-artifact@v3
         with:
           path: site
