@@ -9,8 +9,10 @@ let shown = false;
 
 export function getTouch() { return stickState; }
 
-export function initTouch() {
+export function initTouch(opts = {}) {
   if (!('ontouchstart' in window) && !(navigator.maxTouchPoints > 0)) return;
+  const primaryLabel = opts.primaryLabel || 'PUNCH';
+  const showDodge = opts.dodge !== false;
 
   const root = document.createElement('div');
   root.style.cssText = 'position:fixed;inset:0;z-index:6;pointer-events:none;opacity:0;transition:opacity .3s;font-family:system-ui,sans-serif';
@@ -22,18 +24,22 @@ export function initTouch() {
   base.appendChild(knob);
 
   const btn = document.createElement('div');
-  btn.textContent = 'PUNCH';
-  btn.style.cssText = 'position:absolute;right:24px;bottom:40px;width:92px;height:92px;border-radius:50%;pointer-events:auto;'
-    + 'background:radial-gradient(circle at 50% 40%,#ffd98a,#f0a83a);color:#1a1018;font-weight:800;font-size:15px;letter-spacing:.03em;'
+  btn.textContent = primaryLabel;
+  btn.style.cssText = 'position:absolute;right:24px;bottom:40px;width:92px;height:92px;border-radius:50%;pointer-events:auto;text-align:center;padding:0 6px;'
+    + 'background:radial-gradient(circle at 50% 40%,#ffd98a,#f0a83a);color:#1a1018;font-weight:800;font-size:14px;letter-spacing:.02em;line-height:1.1;'
     + 'display:flex;align-items:center;justify-content:center;box-shadow:0 6px 18px rgba(240,168,58,.35);user-select:none;touch-action:none';
 
-  const dodge = document.createElement('div');
-  dodge.textContent = 'DODGE';
-  dodge.style.cssText = 'position:absolute;right:132px;bottom:34px;width:74px;height:74px;border-radius:50%;pointer-events:auto;'
-    + 'background:radial-gradient(circle at 50% 40%,#7fc7ff,#3f7fd0);color:#08131f;font-weight:800;font-size:13px;letter-spacing:.02em;'
-    + 'display:flex;align-items:center;justify-content:center;box-shadow:0 6px 18px rgba(63,127,208,.35);user-select:none;touch-action:none';
+  let dodge = null;
+  if (showDodge) {
+    dodge = document.createElement('div');
+    dodge.textContent = 'DODGE';
+    dodge.style.cssText = 'position:absolute;right:132px;bottom:34px;width:74px;height:74px;border-radius:50%;pointer-events:auto;'
+      + 'background:radial-gradient(circle at 50% 40%,#7fc7ff,#3f7fd0);color:#08131f;font-weight:800;font-size:13px;letter-spacing:.02em;'
+      + 'display:flex;align-items:center;justify-content:center;box-shadow:0 6px 18px rgba(63,127,208,.35);user-select:none;touch-action:none';
+  }
 
-  root.append(base, btn, dodge);
+  root.append(base, btn);
+  if (dodge) root.append(dodge);
   document.body.appendChild(root);
 
   function reveal() { if (!shown) { shown = true; root.style.opacity = '1'; } }
@@ -74,8 +80,10 @@ export function initTouch() {
   btn.addEventListener('pointerup', press('primary', false));
   btn.addEventListener('pointercancel', press('primary', false));
   btn.addEventListener('pointerleave', press('primary', false));
-  dodge.addEventListener('pointerdown', press('secondary', true));
-  dodge.addEventListener('pointerup', press('secondary', false));
-  dodge.addEventListener('pointercancel', press('secondary', false));
-  dodge.addEventListener('pointerleave', press('secondary', false));
+  if (dodge) {
+    dodge.addEventListener('pointerdown', press('secondary', true));
+    dodge.addEventListener('pointerup', press('secondary', false));
+    dodge.addEventListener('pointercancel', press('secondary', false));
+    dodge.addEventListener('pointerleave', press('secondary', false));
+  }
 }

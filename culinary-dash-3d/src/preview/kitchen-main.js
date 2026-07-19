@@ -1,6 +1,7 @@
-// 2.5D kitchen look-proof — the diner in the same 3D world as the boss fight, shot
-// from a FIXED diorama camera so the whole floor reads at once. Walk her around to
-// feel the legibility. Reuses the fight's chef model (Blender models come later).
+// 2.5D service loop — the tested service sim (sim/state.js) rendered in the warm
+// diner from a fixed diorama camera. Customers order, you walk to a station, cook
+// or assemble, carry the plate, and serve before patience runs out. Too many
+// walkouts and the mob comes back swinging — the tie into the 3D boss fight.
 import * as THREE from 'three';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
@@ -10,46 +11,59 @@ import { startLoop } from '../engine/loop.js';
 import { initInput, pollInput } from '../engine/input.js';
 import { initTouch } from '../engine/touch.js';
 import { PIXEL_CAP, RIM_LIGHT } from '../engine/quality.js';
+import { createState, stepSim } from '../sim/state.js';
+import { STATIONS, DISHES, COMBAT } from '../sim/data.js';
+import { rpos } from './kitchen-space.js';
 import { buildKitchen } from './kitchen-room.js';
+import { createCustomers, DISH_COLOR } from './kitchen-customers.js';
 import { buildChef } from './chef.js';
-import { lerp, smooth, clamp01 } from './util.js';
+import { lerp, smooth, clamp01, mat, box, put } from './util.js';
 
 const app = document.getElementById('app');
 const startEl = document.getElementById('start');
+const H = {
+  money: document.getElementById('money'), served: document.getElementById('served'),
+  day: document.getElementById('day'), danger: document.getElementById('danger'),
+  msg: document.getElementById('msg'), prompt: document.getElementById('prompt'),
+  end: document.getElementById('dayend'),
+};
 
-let renderer, scene, camera, kitchen, chef, cu, composer, booted = false, lastT = 0;
-let walkPhase = 0, facing = Math.PI;
-const pos = new THREE.Vector3(0, 0, -1.8);
+let renderer, scene, camera, kitchen, customers, chef, cu, carry, composer, booted = false, lastT = 0;
+let state, walkPhase = 0, facing = Math.PI, dayT = 80, ended = 0;
+const stationDef = Object.fromEntries(STATIONS.map((s) => [s.id, s]));
 
 function boot() {
   renderer = new THREE.WebGLRenderer({ antialias: RIM_LIGHT, powerPreference: 'high-performance' });
   renderer.setPixelRatio(Math.min(devicePixelRatio, PIXEL_CAP + 0.25));
   renderer.setSize(innerWidth, innerHeight);
-  renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-  renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.12;
+  renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.12;
   app.appendChild(renderer.domElement);
 
   scene = new THREE.Scene();
   scene.fog = new THREE.FogExp2(0x2a1e14, 0.012);
   {
     const c = document.createElement('canvas'); c.width = 2; c.height = 256;
-    const cx = c.getContext('2d');
-    const grd = cx.createLinearGradient(0, 0, 0, 256);
+    const cx = c.getContext('2d'); const grd = cx.createLinearGradient(0, 0, 0, 256);
     grd.addColorStop(0, '#3a2a1c'); grd.addColorStop(0.6, '#241811'); grd.addColorStop(1, '#160e09');
     cx.fillStyle = grd; cx.fillRect(0, 0, 2, 256);
     const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace; scene.background = tex;
   }
 
-  // FIXED diorama camera — angled down over the floor, framing the whole room.
   camera = new THREE.PerspectiveCamera(42, innerWidth / innerHeight, 0.1, 100);
-  camera.position.set(0.5, 8.6, 9.6);
-  camera.lookAt(0, 0.6, -1.6);
+  camera.position.set(0.3, 7.6, 8.4); camera.lookAt(0, 0.4, -0.6);
 
+  state = createState((Date_now_safe() & 0x7fffffff) || 12345);
   kitchen = buildKitchen(scene);
-  chef = buildChef(); scene.add(chef); chef.position.copy(pos);
-  cu = chef.userData;
+  customers = createCustomers(scene, kitchen.tables);
+  chef = buildChef(); scene.add(chef); cu = chef.userData;
+
+  // a plate the chef carries (shown when state.chef.carrying)
+  carry = new THREE.Group();
+  carry.add(put(new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, 0.04, 14), mat(0xf0e6cf, { rough: 0.4 })), 0, 0, 0));
+  const food = put(new THREE.Mesh(new THREE.SphereGeometry(0.11, 12, 8), mat(0xffffff, { rough: 0.6 })), 0, 0.08, 0);
+  carry.userData.food = food; carry.add(food);
+  carry.position.set(0, 1.02, 0.34); carry.visible = false; chef.add(carry);
 
   composer = new EffectComposer(renderer);
   composer.addPass(new RenderPass(scene, camera));
@@ -58,31 +72,37 @@ function boot() {
 
   lastT = performance.now() / 1000;
   startLoop({ tick, render });
-  window.__kitchen = { scene, chef, camera, THREE };
+  window.__kitchen = { state, stepSim, scene, chef, camera, THREE };
 }
-
-const SPEED = 4.4;
-// floor bounds: dining side + behind the pass, but not through walls
-function clampFloor(p) {
-  p.x = Math.max(-7, Math.min(7, p.x));
-  p.z = Math.max(-5.6, Math.min(4.6, p.z));
-  // don't walk through the solid pass counter band (z ≈ -3.4), except the gaps at the ends
-  if (p.z > -4 && p.z < -2.9 && Math.abs(p.x) < 5.4) p.z = p.z > -3.4 ? -2.9 : -4;
-}
+// createState wants a seed; avoid Date.now() being unavailable in some sandboxes
+function Date_now_safe() { try { return Date.now(); } catch (e) { return 12345; } }
 
 function tick(dt) {
+  if (ended) return;
   const input = pollInput();
-  // fixed camera: stick up = into the screen (toward the pass), right = +x
-  const mx = input.move.x * SPEED, mz = input.move.y * SPEED;
-  const moving = Math.hypot(mx, mz) > 0.4;
-  pos.x += mx * dt; pos.z += mz * dt;
-  clampFloor(pos);
-  chef.position.set(pos.x, 0, pos.z);
+  stepSim(state, dt, input);
 
-  if (moving) {
-    const want = Math.atan2(mx, mz);
-    let d = want - facing; while (d > Math.PI) d -= Math.PI * 2; while (d < -Math.PI) d += Math.PI * 2;
-    facing += d * smooth(dt, 16);
+  // day clock + endings
+  dayT -= dt;
+  if (state.phase === 'brawl' || state.badOrders >= COMBAT.BRAWL_TRIGGER) return endDay('mob');
+  if (dayT <= 0 && state.customers.length === 0) return endDay('done');
+}
+
+function render(alpha, now) {
+  const t = now / 1000; const rdt = Math.min(0.05, t - lastT); lastT = t;
+  if (state) syncScene(rdt, t);
+  kitchen && kitchen.update(rdt, t);
+  updateHud();
+  composer.render();
+}
+
+function syncScene(dt, t) {
+  const c = state.chef;
+  const p = rpos(c.x, c.y);
+  chef.position.set(p.x, 0, p.z);
+  const spd = Math.hypot(c.vx, c.vy);
+  if (spd > 4) {
+    facing = Math.atan2(c.vx, c.vy);
     walkPhase += dt * 10;
     cu.legL.rotation.x = Math.sin(walkPhase) * 0.6; cu.legR.rotation.x = -Math.sin(walkPhase) * 0.6;
     cu.armL.rotation.x = -Math.sin(walkPhase) * 0.4; cu.armR.rotation.x = Math.sin(walkPhase) * 0.4;
@@ -92,18 +112,76 @@ function tick(dt) {
     cu.legR.rotation.x = lerp(cu.legR.rotation.x, 0, smooth(dt, 10));
     cu.armL.rotation.x = lerp(cu.armL.rotation.x, 0, smooth(dt, 10));
     cu.armR.rotation.x = lerp(cu.armR.rotation.x, 0, smooth(dt, 10));
-    cu.body.position.y = lerp(cu.body.position.y, Math.sin(performance.now() / 1000 * 1.6) * 0.012, smooth(dt, 6));
+    cu.body.position.y = lerp(cu.body.position.y, 0, smooth(dt, 8));
   }
   chef.rotation.y = facing;
+
+  // carried plate
+  if (c.carrying) {
+    carry.visible = true;
+    const raw = c.carrying.kind === 'raw';
+    carry.userData.food.material.color.setHex(raw ? 0x3a4f7a : (DISH_COLOR[c.carrying.dish] ?? 0xdddddd));
+    carry.position.y = 1.02 + Math.sin(t * 3) * 0.02;
+  } else carry.visible = false;
+
+  // stations: cooking bars + ready + near-highlight
+  for (const s of STATIONS) {
+    const ref = kitchen.stations[s.id];
+    ref.setNear(state.nearStation === s.id);
+    if (s.kind === 'timing') {
+      const st = state.stations[s.id];
+      const cooking = st && st.cooking;
+      let frac = 0, phase = 'raw';
+      if (cooking) {
+        frac = clamp01(st.t / s.cook);
+        phase = st.t < s.cook ? 'raw' : st.t < s.cook + s.green ? 'perfect' : 'burnt';
+      }
+      ref.setCook(cooking, frac, phase);
+      ref.setPlated(cooking && phase !== 'raw');
+    }
+  }
+
+  customers.sync(state, dt, t);
 }
 
-function render(alpha, now) {
-  const t = now / 1000; const rdt = Math.min(0.05, t - lastT); lastT = t;
-  kitchen.update(rdt, t);
-  composer.render();
+// ---------- HUD ----------
+function updateHud() {
+  if (!state) return;
+  H.money.textContent = '$' + state.money;
+  H.served.textContent = '★ ' + state.served;
+  H.day.textContent = Math.max(0, Math.ceil(dayT)) + 's';
+  // walkout danger pips (out of the trigger)
+  const bad = state.badOrders, max = COMBAT.BRAWL_TRIGGER;
+  H.danger.innerHTML = '';
+  for (let i = 0; i < max; i++) { const d = document.createElement('span'); d.className = 'pip' + (i < bad ? ' on' : ''); H.danger.appendChild(d); }
+  H.msg.textContent = state.msg || '';
+  H.msg.style.opacity = state.msg ? '1' : '0';
+  // action prompt
+  let hint = '';
+  const c = state.chef;
+  if (c.carrying && c.carrying.cooked) hint = 'carry to the table & serve';
+  else if (state.nearStation) {
+    const s = stationDef[state.nearStation];
+    hint = s.kind === 'source' ? 'grab raw lobster' : s.kind === 'assemble' ? 'plate ' + (DISHES[s.dish]?.label || 'drink') : (s.verb || 'cook');
+  }
+  H.prompt.textContent = hint ? '▲ ' + hint : '';
+  H.prompt.style.opacity = hint ? '1' : '0';
 }
 
-// ---------- start / lifecycle (WebGL-safe, like the fight) ----------
+function endDay(kind) {
+  if (ended) return; ended = kind === 'mob' ? -1 : 1;
+  const win = kind === 'done';
+  H.end.querySelector('h2').textContent = win ? 'Day complete' : 'The mob is at the door';
+  H.end.querySelector('p').innerHTML = win
+    ? `You served <b>${state.served}</b> and banked <b>$${state.money}</b>.`
+    : `Too many walkouts. Vince came to collect — <b>step into the fight?</b>`;
+  const link = H.end.querySelector('a');
+  link.style.display = win ? 'none' : 'inline-block';
+  link.href = '../vince/';
+  H.end.classList.add('show');
+}
+
+// ---------- start / lifecycle (WebGL-safe) ----------
 function begin() {
   if (booted || (startEl && startEl.classList.contains('gone'))) return;
   try { boot(); booted = true; }
@@ -111,10 +189,9 @@ function begin() {
     const note = document.getElementById('glnote') || document.createElement('p');
     note.id = 'glnote'; note.style.cssText = 'color:#e0a06a;max-width:30rem;margin-top:6px;font-size:13px';
     note.textContent = "This 3D preview needs WebGL, which isn't available in this view. Open it in your phone's browser (Chrome or Safari).";
-    if (startEl && !document.getElementById('glnote')) startEl.appendChild(note);
-    return;
+    if (startEl && !document.getElementById('glnote')) startEl.appendChild(note); return;
   }
-  initInput(window); initTouch();
+  initInput(window); initTouch({ primaryLabel: 'ACTION', dodge: false });
   const touch = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
   if (touch) { const el = document.documentElement; try { (el.requestFullscreen || el.webkitRequestFullscreen)?.call(el); } catch (e) {} try { screen.orientation?.lock?.('landscape').catch(() => {}); } catch (e) {} }
   startEl.classList.add('gone'); setTimeout(() => startEl && startEl.remove(), 400);

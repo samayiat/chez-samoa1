@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
   <meta name="theme-color" content="#241811" />
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='14' font-size='14'>🍳</text></svg>" />
-  <title>Chez Samoa — the floor (2.5D kitchen preview)</title>
+  <title>Chez Samoa — the floor (2.5D service loop)</title>
   <style>
     :root { color-scheme: dark; }
     * { box-sizing: border-box; }
@@ -13,11 +13,23 @@
     #app { position: fixed; inset: 0; }
     canvas { display: block; width: 100%; height: 100%; touch-action: none; }
 
-    #title { position: fixed; top: 12px; left: 0; right: 0; text-align: center; pointer-events: none;
-      font-weight: 800; letter-spacing: .14em; font-size: 13px; color: #ffdca6; text-shadow: 0 2px 5px #000; }
-    #title small { display: block; font-weight: 600; letter-spacing: .22em; font-size: 10px; color: #c79a6a; margin-top: 3px; }
-    #hint { position: fixed; bottom: 12px; left: 0; right: 0; text-align: center; pointer-events: none;
-      font-size: 11px; color: #b79974; }
+    /* top HUD */
+    #hud { position: fixed; top: 10px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 16px;
+      padding: 8px 16px; border-radius: 12px; background: rgba(30,20,13,.66); border: 1px solid #3a2c1e; pointer-events: none;
+      color: #ffe9c7; font-weight: 800; font-size: 15px; letter-spacing: .02em; text-shadow: 0 1px 2px #000; white-space: nowrap; }
+    #hud #money { color: #ffd76a; }
+    #hud #served { color: #ffdca6; }
+    #hud .lbl { font-weight: 600; font-size: 10px; letter-spacing: .16em; color: #b79974; margin-right: 2px; }
+    #hud #day { color: #ffe9c7; font-variant-numeric: tabular-nums; }
+    #danger { display: inline-flex; gap: 4px; }
+    #danger .pip { width: 10px; height: 10px; border-radius: 50%; background: #4a3a2a; box-shadow: inset 0 0 0 1px #6a5238; }
+    #danger .pip.on { background: #e0553a; box-shadow: 0 0 7px rgba(224,85,58,.7); }
+
+    #msg { position: fixed; top: 58px; left: 0; right: 0; text-align: center; pointer-events: none;
+      color: #ffdca6; font-weight: 700; font-size: 14px; text-shadow: 0 2px 4px #000; opacity: 0; transition: opacity .2s; }
+    #prompt { position: fixed; bottom: 74px; left: 0; right: 0; text-align: center; pointer-events: none;
+      color: #ffe0a6; font-weight: 800; font-size: 15px; letter-spacing: .02em; text-shadow: 0 2px 5px #000; opacity: 0; transition: opacity .15s; }
+    #hint { position: fixed; bottom: 12px; left: 0; right: 0; text-align: center; pointer-events: none; font-size: 11px; color: #a98f6c; }
     #hint b { color: #e7cfa4; }
 
     #rotate { position: fixed; inset: 0; z-index: 30; display: none; flex-direction: column; align-items: center; justify-content: center; gap: 14px;
@@ -27,6 +39,18 @@
     @keyframes tip { 0%, 55%, 100% { transform: rotate(0); } 78% { transform: rotate(-90deg); } }
     @media (orientation: portrait) { #rotate { display: flex; } }
 
+    /* day-end overlay */
+    #dayend { position: fixed; inset: 0; z-index: 20; display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 12px; text-align: center; padding: 24px; opacity: 0; pointer-events: none; transition: opacity .5s ease;
+      background: radial-gradient(120% 90% at 50% 45%, rgba(40,28,20,.55), rgba(11,7,5,.9)); }
+    #dayend.show { opacity: 1; pointer-events: auto; }
+    #dayend h2 { margin: 0; font-size: clamp(32px, 8vw, 66px); font-weight: 900;
+      background: linear-gradient(180deg, #ffe0a6, #e0553a); -webkit-background-clip: text; background-clip: text; color: transparent; }
+    #dayend p { margin: 0; color: #d3bf98; font-size: 15px; } #dayend p b { color: #ffdca6; }
+    #dayend a { margin-top: 8px; text-decoration: none; color: #1a1018; font-weight: 800; letter-spacing: .04em; font-size: 15px;
+      border-radius: 10px; padding: 13px 26px; background: linear-gradient(180deg, #ff8a3a, #d83a1a); box-shadow: 0 8px 24px rgba(216,58,26,.32); }
+    #dayend .again { margin-top: 4px; font-size: 12px; color: #8a7a64; }
+
     #start { position: fixed; inset: 0; z-index: 10; display: flex; flex-direction: column; align-items: center; justify-content: center;
       gap: 14px; text-align: center; padding: 24px; transition: opacity .4s ease;
       background: radial-gradient(120% 90% at 50% 20%, #3a2a1c 0%, #241811 60%, #160e09 100%); color: #ffe9c7; }
@@ -34,7 +58,7 @@
     #start .kicker { letter-spacing: .32em; font-size: 11px; color: #c79a6a; font-weight: 700; }
     #start h1 { margin: 0; font-size: clamp(36px, 9vw, 80px); font-weight: 900; letter-spacing: .01em; line-height: .95;
       background: linear-gradient(180deg, #ffe0a6, #e08a3a); -webkit-background-clip: text; background-clip: text; color: transparent; }
-    #start p { margin: 0; max-width: 32rem; line-height: 1.5; color: #d3bf98; font-size: 14px; }
+    #start p { margin: 0; max-width: 33rem; line-height: 1.5; color: #d3bf98; font-size: 14px; }
     #start .keys { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; margin-top: 2px; }
     #start .keys span { font: 600 12px/1 ui-monospace, monospace; color: #ffe9c7; border: 1px solid #5a4632; border-radius: 7px; padding: 8px 11px; background: #2a1e14; }
     #start button { margin-top: 8px; cursor: pointer; color: #241811; font-weight: 800; letter-spacing: .04em; font-size: 15px;
@@ -46,22 +70,31 @@
   <div id="app"></div>
   <div id="rotate"><div class="icon">📱</div><p>Rotate your device to landscape</p></div>
 
-  <div id="title">CHEZ SAMOA<small>THE FLOOR · 2.5D KITCHEN PREVIEW</small></div>
-  <div id="hint"><b>Move</b> WASD / arrows / stick &nbsp;·&nbsp; walk the floor</div>
+  <div id="hud">
+    <span id="money">$0</span>
+    <span id="served">★ 0</span>
+    <span><span class="lbl">DAY</span><span id="day">80s</span></span>
+    <span id="danger"></span>
+  </div>
+  <div id="msg"></div>
+  <div id="prompt"></div>
+  <div id="hint"><b>Move</b> WASD / stick &nbsp;·&nbsp; <b>Action</b> E / the ACTION button — cook at a station, then carry &amp; serve</div>
+
+  <div id="dayend"><h2>—</h2><p>—</p><a href="../vince/">Face him →</a><div class="again">tap to close</div></div>
 
   <div id="start">
-    <div class="kicker">2.5D KITCHEN</div>
+    <div class="kicker">2.5D SERVICE LOOP</div>
     <h1>Chez Samoa</h1>
-    <p>The diner, rendered in the <strong>same 3D world as the boss fight</strong> but bright,
-       cozy, and shot from a fixed diorama camera so the whole floor reads at once.
-       Walk her around to feel the view. Same chef, same world — the cut into a fight
-       is just this room going dark.</p>
+    <p>Run the floor. Customers sit and order; walk to the right station to <strong>cook or plate</strong>
+       the dish (lobster starts raw at the ice box), then carry it over and <strong>serve before their
+       patience runs out</strong>. Faster serves tip more. Let too many walk out and the mob comes
+       back <strong>swinging</strong>.</p>
     <div class="keys">
       <span>WASD / Arrows — move</span>
-      <span>Left stick — move</span>
+      <span>E / Space — cook &amp; serve</span>
     </div>
-    <button id="startBtn" type="button">Step onto the floor</button>
-    <p class="note">Best in landscape · works with touch, keyboard, or a gamepad</p>
+    <button id="startBtn" type="button">Open the kitchen</button>
+    <p class="note">Best in landscape · touch, keyboard, or gamepad</p>
   </div>
 
   <script type="module" src="/src/preview/kitchen-main.js"></script>
