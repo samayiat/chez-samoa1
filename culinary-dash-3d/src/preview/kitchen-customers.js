@@ -31,6 +31,26 @@ export function createCustomers(scene, tables) {
     head.add(put(new THREE.Mesh(new THREE.SphereGeometry(0.26, 14, 10), mat(hair, { flat: true, rough: 0.9 })), 0, 0, -0.02));
     head.add(put(new THREE.Mesh(new THREE.SphereGeometry(0.22, 14, 10), mat(skin, { rough: 0.7 })), 0, 0, 0.05));
 
+    // seated legs — thigh forward, shin down at the knee
+    const trouser = mat(0x2e2e38, { flat: true, rough: 0.85 });
+    const sleeveMat = mat(top, { flat: true, rough: 0.7 });
+    const skinMat = mat(skin, { rough: 0.7 });
+    for (const sx of [-0.14, 0.14]) {
+      const hip = new THREE.Group(); hip.position.set(sx, 0.5, 0.1); hip.rotation.x = -1.35; m.add(hip);
+      hip.add(put(box(0.2, 0.34, 0.22, trouser), 0, -0.17, 0));                                // thigh (forward)
+      const knee = new THREE.Group(); knee.position.y = -0.34; knee.rotation.x = 1.5; hip.add(knee);
+      knee.add(put(box(0.18, 0.34, 0.2, trouser), 0, -0.17, 0));                               // shin (down)
+      knee.add(put(box(0.22, 0.1, 0.28, mat(0x1a1a20, { flat: true })), 0, -0.36, 0.05));      // foot
+    }
+    // resting arms — forearms come forward onto the table at the elbow
+    for (const sx of [-0.3, 0.3]) {
+      const sh = new THREE.Group(); sh.position.set(sx, 1.0, 0.03); sh.rotation.x = -0.55; m.add(sh);
+      sh.add(put(box(0.13, 0.3, 0.13, sleeveMat), 0, -0.15, 0));                               // upper arm
+      const elbow = new THREE.Group(); elbow.position.y = -0.3; elbow.rotation.x = 1.15; sh.add(elbow);
+      elbow.add(put(box(0.12, 0.28, 0.12, skinMat), 0, -0.14, 0));                             // forearm
+      elbow.add(put(box(0.14, 0.1, 0.15, skinMat), 0, -0.3, 0));                               // hand
+    }
+
     // order bubble with a dish-colored icon
     const bubble = new THREE.Group(); bubble.position.set(0, 2.0, 0.1); m.add(bubble);
     const bub = put(new THREE.Mesh(new THREE.SphereGeometry(0.2, 14, 10), mat(0xf4eee2, { rough: 0.7 })), 0, 0, 0);

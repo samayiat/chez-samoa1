@@ -21,13 +21,16 @@ export function buildVince() {
   lean.position.y = 0;
   g.add(lean);
 
-  // legs — planted wide, heavy
+  // legs — planted wide and heavy, thigh + shin with a slight bent-knee stance
   const trouser = mat(SUIT_DK, { flat: true, rough: 0.85 });
-  lean.add(put(box(0.62, 1.15, 0.68, trouser), -0.5, 0.58, 0));
-  lean.add(put(box(0.62, 1.15, 0.68, trouser), 0.5, 0.58, 0));
   const shoe = mat(0x0d0e12, { flat: true, rough: 0.6 });
-  lean.add(put(box(0.72, 0.28, 0.95, shoe), -0.5, 0.14, 0.12));
-  lean.add(put(box(0.72, 0.28, 0.95, shoe), 0.5, 0.14, 0.12));
+  for (const sx of [-0.5, 0.5]) {
+    const hip = new THREE.Group(); hip.position.set(sx, 1.15, 0); hip.rotation.x = 0.12; lean.add(hip);
+    hip.add(put(box(0.62, 0.56, 0.66, trouser), 0, -0.28, 0));                 // thigh
+    const knee = new THREE.Group(); knee.position.y = -0.56; knee.rotation.x = -0.22; hip.add(knee);
+    knee.add(put(box(0.58, 0.54, 0.64, trouser), 0, -0.27, 0));                // shin
+    knee.add(put(box(0.72, 0.28, 0.95, shoe), 0, -0.5, 0.12));                 // shoe
+  }
 
   // torso — a tapered slab, broad up top. breathes.
   const suit = mat(SUIT, { flat: true, rough: 0.78 });
@@ -77,26 +80,29 @@ export function buildVince() {
   hat.add(brim);
   hat.add(put(box(0.3, 0.14, 0.02, mat(0x1a1a1f)), 0, 0.18, 0.5)); // hazard badge slot
 
-  // LEFT arm (his left) — free fist, guards / gestures
+  // LEFT arm (his left) — free fist, upper arm + forearm hinged at an elbow
   const armL = new THREE.Group();
   armL.position.set(-1.12, 2.45, 0);
-  belly.add(armL); // note: parented to belly so lean+breathe carry it
-  armL.add(put(box(0.42, 1.15, 0.46, suit), 0, -0.5, 0));
-  armL.add(put(box(0.5, 0.4, 0.5, mat(SKIN, { flat: true })), 0, -1.15, 0.05)); // fist
+  belly.add(armL); // parented to belly so lean+breathe carry it
+  armL.add(put(box(0.42, 0.62, 0.46, suit), 0, -0.31, 0));                                  // upper arm
+  const armLElbow = new THREE.Group(); armLElbow.position.y = -0.62; armLElbow.rotation.x = 0.4; armL.add(armLElbow);
+  armLElbow.add(put(box(0.4, 0.58, 0.44, suit), 0, -0.29, 0));                              // forearm
+  armLElbow.add(put(box(0.5, 0.4, 0.5, mat(SKIN, { flat: true })), 0, -0.62, 0.05));        // fist
 
-  // RIGHT arm — holds the chain. Upper arm fixed; chain+ball hang from a pivot.
+  // RIGHT arm — upper arm + forearm at an elbow; the chain hangs from his grip hand.
   const armR = new THREE.Group();
   armR.position.set(1.12, 2.45, 0);
   belly.add(armR);
-  armR.add(put(box(0.42, 1.15, 0.46, suit), 0, -0.5, 0));
-  const gripHand = put(box(0.52, 0.42, 0.52, mat(SKIN, { flat: true })), 0, -1.12, 0.08);
-  armR.add(gripHand);
+  armR.add(put(box(0.42, 0.62, 0.46, suit), 0, -0.31, 0));                                  // upper arm
+  const armRElbow = new THREE.Group(); armRElbow.position.y = -0.62; armRElbow.rotation.x = 0.32; armR.add(armRElbow);
+  armRElbow.add(put(box(0.4, 0.58, 0.44, suit), 0, -0.29, 0));                              // forearm
+  armRElbow.add(put(box(0.52, 0.42, 0.52, mat(SKIN, { flat: true })), 0, -0.6, 0.08));      // grip hand
 
-  // wrecking ball assembly — swings from the grip, can be hauled up for a slam.
-  // Sits forward of the body and lit brighter so it reads as the signature weapon.
+  // wrecking ball assembly — hangs from the grip hand (on the forearm), hauled up
+  // for a slam. Lit brighter so it reads as the signature weapon.
   const ballPivot = new THREE.Group();
-  ballPivot.position.set(-0.15, -1.1, 0.55);
-  armR.add(ballPivot);
+  ballPivot.position.set(-0.15, -0.58, 0.5);
+  armRElbow.add(ballPivot);
   const chainMat = mat(0x6b7078, { metal: 0.85, rough: 0.45, flat: true, emissive: 0x0a0a0c, emi: 1 });
   const chain = put(box(0.13, 1.5, 0.13, chainMat), 0, -0.75, 0);
   ballPivot.add(chain);
