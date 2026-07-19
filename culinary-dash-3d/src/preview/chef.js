@@ -69,27 +69,45 @@ export function buildChef() {
   torso.add(put(cyl(0.1, 0.11, 0.14, mat(SKIN, { rough: 0.72 }), 10), 0, 0.44, 0.02)); // neck
   torso.add(put(cyl(0.17, 0.19, 0.1, topMat, 12), 0, 0.37, 0.02));   // collar
 
-  // head — a brown face inside a wide, voluminous crown of natural hair, framed
-  // by fuller beaded braids. Built from overlapping faceted puffs so the hair has
-  // volume and an expressive silhouette (wider than the head), not a smooth cap.
+  // head — a brown face rounded out by a full head of thin, straight dreadlocks.
   const head = new THREE.Group(); head.position.y = 1.42; body.add(head);
   const hairMat = mat(HAIR, { flat: true, rough: 0.9 });
-  const hairPuff = (r, x, y, z, sx = 1, sy = 1, sz = 1) => { const m = new THREE.Mesh(new THREE.SphereGeometry(r, 12, 10), hairMat); m.scale.set(sx, sy, sz); m.castShadow = true; head.add(put(m, x, y, z)); return m; };
-  // wide crown behind the face + clustered volume puffs (top, sides, back)
-  hairPuff(0.28, 0, 0.03, -0.1, 1.42, 1.1, 0.9);      // main crown — wide, set back
-  hairPuff(0.2, 0, 0.0, -0.16);                        // back volume
-  hairPuff(0.16, 0, 0.14, -0.13);                      // upper-back puff (under the toque)
-  hairPuff(0.16, -0.24, 0.12, -0.06); hairPuff(0.16, 0.24, 0.12, -0.06);   // upper-side volume
-  hairPuff(0.17, -0.28, 0.0, -0.04); hairPuff(0.17, 0.28, 0.0, -0.04);     // cheek-framing sides
-  // face in front of the crown
-  head.add(put(new THREE.Mesh(new THREE.SphereGeometry(0.235, 16, 12), mat(SKIN, { rough: 0.72 })), 0, 0, 0.05));
-  // two fuller braids down the sides, widening outward as they fall, ending in a bead
-  const beadMat = mat(0x7a4f2a, { flat: true, rough: 0.6 });
-  for (const s of [-1, 1]) {
-    hairPuff(0.085, s * 0.29, -0.15, 0.02, 1, 1.25, 1);
-    hairPuff(0.078, s * 0.32, -0.29, 0.04, 1, 1.25, 1);
-    hairPuff(0.07, s * 0.35, -0.42, 0.06, 1, 1.2, 1);
-    head.add(put(new THREE.Mesh(new THREE.SphereGeometry(0.055, 10, 8), beadMat), s * 0.36, -0.52, 0.07)); // cuff/bead
+  // rounded hair base (under the toque) so gaps between locs read as hair, not scalp
+  const base = new THREE.Mesh(new THREE.SphereGeometry(0.245, 14, 12), hairMat);
+  base.castShadow = true; base.position.set(0, 0.02, -0.03); base.scale.set(1.15, 1.0, 1.05); head.add(base);
+  // face in front of the hair
+  head.add(put(new THREE.Mesh(new THREE.SphereGeometry(0.235, 16, 12), mat(SKIN, { rough: 0.72 })), 0, 0, 0.06));
+  // ~35 thin straight locs emerging from under the hat brim, each flaring DOWN-AND-
+  // OUTWARD so its tip falls clear of the shoulders — the outward splay is what keeps
+  // the hair off the body (no clip). Front arc left open for the face.
+  const UP = new THREE.Vector3(0, 1, 0);
+  const R = 0.24, FRONT_GAP = 0.95;   // radians of open face around +Z
+  const rings = [
+    { phi: 1.16, n: 14, len: 0.42 },
+    { phi: 1.40, n: 16, len: 0.54 },
+    { phi: 1.58, n: 18, len: 0.62 },
+  ];
+  for (const ring of rings) {
+    const hr = R * Math.sin(ring.phi), ry = R * Math.cos(ring.phi);
+    for (let i = 0; i < ring.n; i++) {
+      const th = (i / ring.n) * Math.PI * 2;
+      const rx = hr * Math.sin(th), rz = hr * Math.cos(th);       // th=0 -> +Z (front)
+      if (Math.abs(Math.atan2(rx, rz)) < FRONT_GAP) continue;     // keep the face open
+      // Every loc falls down and BACK (a constant −Z pull), with a little outward
+      // spread for volume. The shoulders are thin front-to-back, so sweeping the
+      // hair behind them is what keeps it clear of the body — no horizontal splay,
+      // no clipping. Reads as a natural swept-back loc style.
+      const jit = Math.sin(i * 12.9 + ring.phi * 78.2);           // deterministic wobble
+      const len = ring.len * (0.9 + 0.16 * (jit * 0.5 + 0.5));
+      const root = new THREE.Vector3(rx, ry + 0.02, rz - 0.02);
+      const dir = new THREE.Vector3(rx * 0.6, 0, rz - 0.55).normalize()
+        .multiplyScalar(0.72 + 0.12 * jit).add(new THREE.Vector3(0, -1, 0)).normalize();
+      const loc = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.024, len, 5), hairMat);
+      loc.castShadow = true;
+      loc.quaternion.setFromUnitVectors(UP, dir);
+      loc.position.copy(root).add(dir.clone().multiplyScalar(len / 2));
+      head.add(loc);
+    }
   }
   // eyes
   head.add(put(box(0.05, 0.06, 0.03, mat(0x120a06)), -0.09, 0.02, 0.25));
