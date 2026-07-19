@@ -112,14 +112,20 @@ function syncScene(dt, t) {
   const choppingHere = nearDef && nearDef.kind === 'prep' && state.stations[state.nearStation]?.chopping;
   const working = !moving && (choppingHere || workBurst > 0.05);
 
+  const kL = cu.legL.userData.knee, kR = cu.legR.userData.knee;
+  const eL = cu.armL.userData.elbow, eR = cu.armR.userData.elbow;
   if (moving) {
     facing = Math.atan2(c.vx, c.vy);
     walkPhase += dt * 10;
     cu.legL.rotation.x = Math.sin(walkPhase) * 0.6; cu.legR.rotation.x = -Math.sin(walkPhase) * 0.6;
+    kL.rotation.x = 0.15 + Math.max(0, -Math.sin(walkPhase)) * 0.7;                    // knees bend on the back swing
+    kR.rotation.x = 0.15 + Math.max(0, Math.sin(walkPhase)) * 0.7;
     cu.armL.rotation.x = -Math.sin(walkPhase) * 0.4; cu.armR.rotation.x = Math.sin(walkPhase) * 0.4;
+    eL.rotation.x = 0.4; eR.rotation.x = 0.4;                                          // arms swing with a relaxed bend
     cu.body.position.y = Math.abs(Math.sin(walkPhase)) * 0.06;
   } else if (working) {
-    // turn to the counter and work the ingredients — hands prepping in front
+    // turn to the counter and work the ingredients — upper arms forward, forearms
+    // bent up and moving over the counter (the elbows do the work now)
     if (nearDef) {
       const sp = rpos(nearDef.x, nearDef.y);
       let d = Math.atan2(sp.x - p.x, sp.z - p.z) - facing;
@@ -127,16 +133,20 @@ function syncScene(dt, t) {
       facing += d * smooth(dt, 12);
     }
     const w = t * 12;
-    cu.armL.rotation.x = -1.2 + Math.sin(w) * 0.45;
-    cu.armR.rotation.x = -1.2 + Math.sin(w + Math.PI) * 0.45;
+    cu.armL.rotation.x = -0.95; cu.armR.rotation.x = -0.95;
+    eL.rotation.x = 1.35 + Math.sin(w) * 0.4;
+    eR.rotation.x = 1.35 + Math.sin(w + Math.PI) * 0.4;
     cu.legL.rotation.x = lerp(cu.legL.rotation.x, 0, smooth(dt, 10));
     cu.legR.rotation.x = lerp(cu.legR.rotation.x, 0, smooth(dt, 10));
+    kL.rotation.x = lerp(kL.rotation.x, 0.1, smooth(dt, 10)); kR.rotation.x = lerp(kR.rotation.x, 0.1, smooth(dt, 10));
     cu.body.position.y = Math.abs(Math.sin(w)) * 0.025;
   } else {
     cu.legL.rotation.x = lerp(cu.legL.rotation.x, 0, smooth(dt, 10));
     cu.legR.rotation.x = lerp(cu.legR.rotation.x, 0, smooth(dt, 10));
+    kL.rotation.x = lerp(kL.rotation.x, 0.08, smooth(dt, 10)); kR.rotation.x = lerp(kR.rotation.x, 0.08, smooth(dt, 10));
     cu.armL.rotation.x = lerp(cu.armL.rotation.x, 0, smooth(dt, 10));
     cu.armR.rotation.x = lerp(cu.armR.rotation.x, 0, smooth(dt, 10));
+    eL.rotation.x = lerp(eL.rotation.x, 0.28, smooth(dt, 10)); eR.rotation.x = lerp(eR.rotation.x, 0.28, smooth(dt, 10));
     cu.body.position.y = lerp(cu.body.position.y, 0, smooth(dt, 8));
   }
   chef.rotation.y = facing;

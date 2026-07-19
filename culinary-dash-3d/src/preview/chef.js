@@ -32,14 +32,20 @@ export function buildChef() {
   const body = new THREE.Group();  // bob/squash pivot
   g.add(body);
 
-  // legs
+  // legs — thigh + shin, hinged at a knee (userData.knee bends the shin)
   const trouser = mat(TROUSER, { flat: true, rough: 0.8 });
-  const legL = new THREE.Group(); legL.position.set(-0.16, 0.5, 0); body.add(legL);
-  legL.add(put(box(0.22, 0.52, 0.26, trouser), 0, -0.26, 0));
-  legL.add(put(box(0.26, 0.12, 0.34, mat(0x1a1a20, { flat: true })), 0, -0.5, 0.05));
-  const legR = new THREE.Group(); legR.position.set(0.16, 0.5, 0); body.add(legR);
-  legR.add(put(box(0.22, 0.52, 0.26, trouser), 0, -0.26, 0));
-  legR.add(put(box(0.26, 0.12, 0.34, mat(0x1a1a20, { flat: true })), 0, -0.5, 0.05));
+  const shoeMat = mat(0x1a1a20, { flat: true });
+  function leg() {
+    const hip = new THREE.Group();                                  // hip pivot
+    hip.add(put(box(0.22, 0.27, 0.25, trouser), 0, -0.135, 0));      // thigh
+    const knee = new THREE.Group(); knee.position.y = -0.27; hip.add(knee);
+    knee.add(put(box(0.2, 0.26, 0.22, trouser), 0, -0.13, 0));       // shin
+    knee.add(put(box(0.26, 0.12, 0.34, shoeMat), 0, -0.27, 0.05));   // foot
+    hip.userData.knee = knee;
+    return hip;
+  }
+  const legL = leg(); legL.position.set(-0.16, 0.5, 0); body.add(legL);
+  const legR = leg(); legR.position.set(0.16, 0.5, 0); body.add(legR);
 
   // torso — pink top under a tan apron
   const topMat = mat(TOP, { flat: true, rough: 0.7 });
@@ -71,15 +77,18 @@ export function buildChef() {
   head.add(puff);
   head.add(put(new THREE.Mesh(new THREE.CylinderGeometry(0.23, 0.23, 0.14, 16), mat(HAT, { rough: 0.8 })), 0, 0.15, 0));
 
-  // arms — pink sleeves, brown fists; thrust forward on a punch
+  // arms — pink upper sleeve, bare brown forearm + fist, hinged at an elbow
+  // (userData.elbow bends the forearm; userData.fist is the hand).
+  const skinMat = mat(SKIN, { flat: true, rough: 0.7 });
   function arm() {
-    const grp = new THREE.Group();
-    const upper = put(box(0.16, 0.5, 0.16, topMat), 0, -0.25, 0);
-    grp.add(upper);
-    const fist = put(box(0.2, 0.2, 0.2, mat(SKIN, { flat: true, rough: 0.7 })), 0, -0.52, 0);
-    grp.add(fist);
-    grp.userData.fist = fist;
-    return grp;
+    const sh = new THREE.Group();                                   // shoulder pivot
+    sh.add(put(box(0.16, 0.28, 0.16, topMat), 0, -0.14, 0));         // upper arm (sleeve)
+    const elbow = new THREE.Group(); elbow.position.y = -0.28; sh.add(elbow);
+    elbow.add(put(box(0.14, 0.26, 0.14, skinMat), 0, -0.13, 0));     // forearm (bare)
+    const fist = put(box(0.18, 0.18, 0.18, skinMat), 0, -0.3, 0);
+    elbow.add(fist);
+    sh.userData = { elbow, fist };
+    return sh;
   }
   const armL = arm(); armL.position.set(-0.34, 1.16, 0); body.add(armL);
   const armR = arm(); armR.position.set(0.34, 1.16, 0); body.add(armR);
@@ -204,9 +213,12 @@ export function createChef(scene) {
       const other = c.move.side === 'R' ? armL : armR;
       // thrust: swing from down (0) to forward (-PI/2 past for overshoot) then back
       const out = k < 0.42 ? easeOutBack(k / 0.42) : easeOut(1 - (k - 0.42) / 0.58);
-      arm.rotation.x = lerp(0, -1.9, out);
-      arm.scale.y = 1 + out * (c.move.reach - 1) * 0.8;   // stretch = reach
-      other.rotation.x = lerp(other.rotation.x, 0.35, smooth(dt, 12)); // guard
+      // shoulder thrusts forward while the elbow snaps from bent to straight — the
+      // extension IS the strike (replaces the old scale-stretch).
+      arm.rotation.x = lerp(0.3, -1.7, out);
+      arm.userData.elbow.rotation.x = lerp(1.5, 0.05, out);
+      other.rotation.x = lerp(other.rotation.x, -0.35, smooth(dt, 12));                          // guard up
+      other.userData.elbow.rotation.x = lerp(other.userData.elbow.rotation.x, 1.3, smooth(dt, 12));
       // squash body at the peak
       c.squash = Math.sin(clamp01(k / 0.5) * Math.PI) * 0.12;
       // trail
@@ -224,8 +236,8 @@ export function createChef(scene) {
     } else {
       armR.rotation.x = lerp(armR.rotation.x, moving ? Math.sin(c.walkPhase) * 0.5 : 0, smooth(dt, 10));
       armL.rotation.x = lerp(armL.rotation.x, moving ? -Math.sin(c.walkPhase) * 0.5 : 0, smooth(dt, 10));
-      armR.scale.y = lerp(armR.scale.y, 1, smooth(dt, 12));
-      armL.scale.y = lerp(armL.scale.y, 1, smooth(dt, 12));
+      armR.userData.elbow.rotation.x = lerp(armR.userData.elbow.rotation.x, 0.35, smooth(dt, 10)); // relaxed bend
+      armL.userData.elbow.rotation.x = lerp(armL.userData.elbow.rotation.x, 0.35, smooth(dt, 10));
       u.trail.visible = false; u.trailMat.opacity = 0;
       c.squash = lerp(c.squash, 0, smooth(dt, 12));
     }
@@ -236,10 +248,14 @@ export function createChef(scene) {
       c.walkPhase += dt * 11;
       u.legL.rotation.x = Math.sin(c.walkPhase) * 0.6;
       u.legR.rotation.x = -Math.sin(c.walkPhase) * 0.6;
+      u.legL.userData.knee.rotation.x = 0.15 + Math.max(0, -Math.sin(c.walkPhase)) * 0.7;   // knee bends on the back swing
+      u.legR.userData.knee.rotation.x = 0.15 + Math.max(0, Math.sin(c.walkPhase)) * 0.7;
       u.body.position.y = Math.abs(Math.sin(c.walkPhase)) * 0.06;
     } else {
       u.legL.rotation.x = lerp(u.legL.rotation.x, 0, smooth(dt, 10));
       u.legR.rotation.x = lerp(u.legR.rotation.x, 0, smooth(dt, 10));
+      u.legL.userData.knee.rotation.x = lerp(u.legL.userData.knee.rotation.x, 0.08, smooth(dt, 10));
+      u.legR.userData.knee.rotation.x = lerp(u.legR.userData.knee.rotation.x, 0.08, smooth(dt, 10));
       u.body.position.y = lerp(u.body.position.y, Math.sin(c.step += dt * 2) * 0.015, smooth(dt, 8));
     }
     // dash stretch / squash
