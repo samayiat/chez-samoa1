@@ -43,9 +43,9 @@ function lobster(color) {
   // two front claws — a jointed arm (upper + forearm) reaching well out front to a
   // big OPEN pincer, the two nippers splayed apart like a lobster mid-grab.
   for (const s of [-1, 1]) {
-    const arm = new THREE.Group(); arm.position.set(s * 0.09, 0.045, -0.16); arm.rotation.y = s * 0.42; g.add(arm);
+    const arm = new THREE.Group(); arm.position.set(s * 0.09, 0.045, -0.16); arm.rotation.y = s * -0.5; g.add(arm);   // splay OUT, not across the body
     const upper = put(cyl(0.02, 0.026, 0.15, color, { seg: 6, flat: true, rough: 0.4 }), 0, 0, -0.09); upper.rotation.x = Math.PI / 2; arm.add(upper);
-    const fore = new THREE.Group(); fore.position.set(0, 0, -0.17); fore.rotation.y = s * -0.25; arm.add(fore);   // elbow: bend the reach forward
+    const fore = new THREE.Group(); fore.position.set(0, 0, -0.17); fore.rotation.y = s * 0.2; arm.add(fore);   // elbow: bring the pincer back to forward-facing
     const f2 = put(cyl(0.022, 0.028, 0.14, color, { seg: 6, flat: true, rough: 0.4 }), 0, 0, -0.08); f2.rotation.x = Math.PI / 2; fore.add(f2);
     const claw = new THREE.Group(); claw.position.set(0, 0, -0.17); fore.add(claw);
     const knuckle = put(ico(0.055, color, m), 0, 0, 0.01); knuckle.scale.set(0.9, 0.8, 1.1); knuckle.castShadow = true; claw.add(knuckle);
