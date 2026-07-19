@@ -75,10 +75,12 @@ export function buildChef() {
   // rounded hair base (under the toque) so gaps between locs read as hair, not scalp
   const base = new THREE.Mesh(new THREE.SphereGeometry(0.245, 14, 12), hairMat);
   base.castShadow = true; base.position.set(0, 0.02, -0.03); base.scale.set(1.15, 1.0, 1.05); head.add(base);
-  // a hair mass falling down the back (behind the shirt) so the gaps between locs
-  // never show the top through — the locs drape over this solid backing.
-  const backfill = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.42, 0.72, 12), hairMat);
-  backfill.castShadow = true; backfill.position.set(0, -0.14, -0.3); backfill.scale.set(1, 1, 0.26); head.add(backfill);
+  // a hidden hair backing behind the shirt — its only job is to block the top from
+  // showing through the gaps between locs. Kept inside the loc envelope (narrower and
+  // shorter than the loc fan) so the locs overhang it on every side and it never
+  // reads as its own shape — you see locs, it just fills the space behind them.
+  const backfill = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.33, 0.7, 12), hairMat);
+  backfill.castShadow = true; backfill.position.set(0, -0.12, -0.26); backfill.scale.set(1, 1, 0.22); head.add(backfill);
   // face in front of the hair
   head.add(put(new THREE.Mesh(new THREE.SphereGeometry(0.235, 16, 12), mat(SKIN, { rough: 0.72 })), 0, 0, 0.06));
   // ~35 thin straight locs emerging from under the hat brim, each flaring DOWN-AND-
