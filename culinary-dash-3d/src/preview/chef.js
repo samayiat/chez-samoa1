@@ -93,16 +93,17 @@ export function buildChef() {
       const th = (i / ring.n) * Math.PI * 2;
       const rx = hr * Math.sin(th), rz = hr * Math.cos(th);       // th=0 -> +Z (front)
       if (Math.abs(Math.atan2(rx, rz)) < FRONT_GAP) continue;     // keep the face open
-      // Every loc falls down and BACK (a constant −Z pull), with a little outward
-      // spread for volume. The shoulders are thin front-to-back, so sweeping the
-      // hair behind them is what keeps it clear of the body — no horizontal splay,
-      // no clipping. Reads as a natural swept-back loc style.
+      // The fall direction follows each loc's root front/back: temple locs (rooted
+      // toward +Z) drape FORWARD, over the front of the shoulders, while the rest
+      // sweep back — both with an outward spread. The shoulders are thin front-to-
+      // back, so a loc leaning either way clears them; only a straight-down loc
+      // would land on top, which the −0.1 back bias avoids for the over-ear ones.
       const jit = Math.sin(i * 12.9 + ring.phi * 78.2);           // deterministic wobble
       const len = ring.len * (0.9 + 0.16 * (jit * 0.5 + 0.5));
       const root = new THREE.Vector3(rx, ry + 0.02, rz - 0.02);
-      const dir = new THREE.Vector3(rx * 0.6, 0, rz - 0.55).normalize()
-        .multiplyScalar(0.72 + 0.12 * jit).add(new THREE.Vector3(0, -1, 0)).normalize();
-      const loc = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.024, len, 5), hairMat);
+      const dir = new THREE.Vector3(rx * 0.5, 0, rz * 1.6 - 0.1).normalize()
+        .multiplyScalar(0.7 + 0.12 * jit).add(new THREE.Vector3(0, -1, 0)).normalize();
+      const loc = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.033, len, 5), hairMat);
       loc.castShadow = true;
       loc.quaternion.setFromUnitVectors(UP, dir);
       loc.position.copy(root).add(dir.clone().multiplyScalar(len / 2));
