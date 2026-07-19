@@ -25,11 +25,12 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - name: Build the 3D Vince preview (self-contained single file)
+      - name: Build the 3D previews (self-contained single files)
         run: |
           cd culinary-dash-3d
           npm ci
           npx vite build --config vite.vince.config.js
+          npx vite build --config vite.kitchen.config.js
       - name: Prepare site
         run: |
           mkdir site
@@ -47,6 +48,9 @@ jobs:
           # 3D "Eviction Night" Vince boss-fight preview at /vince/
           mkdir -p site/vince
           cp culinary-dash-3d/dist-vince/vince.html site/vince/index.html
+          # 2.5D kitchen look-proof at /kitchen/
+          mkdir -p site/kitchen
+          cp culinary-dash-3d/dist-kitchen/kitchen.html site/kitchen/index.html
       - uses: actions/upload-pages-artifact@v3
         with:
           path: site

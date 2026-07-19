@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <meta name="theme-color" content="#241811" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='14' font-size='14'>🍳</text></svg>" />
+  <title>Chez Samoa — the floor (2.5D kitchen preview)</title>
+  <style>
+    :root { color-scheme: dark; }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; background: #160e09; overflow: hidden; font-family: system-ui, sans-serif; }
+    #app { position: fixed; inset: 0; }
+    canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+
+    #title { position: fixed; top: 12px; left: 0; right: 0; text-align: center; pointer-events: none;
+      font-weight: 800; letter-spacing: .14em; font-size: 13px; color: #ffdca6; text-shadow: 0 2px 5px #000; }
+    #title small { display: block; font-weight: 600; letter-spacing: .22em; font-size: 10px; color: #c79a6a; margin-top: 3px; }
+    #hint { position: fixed; bottom: 12px; left: 0; right: 0; text-align: center; pointer-events: none;
+      font-size: 11px; color: #b79974; }
+    #hint b { color: #e7cfa4; }
+
+    #rotate { position: fixed; inset: 0; z-index: 30; display: none; flex-direction: column; align-items: center; justify-content: center; gap: 14px;
+      background: radial-gradient(120% 90% at 50% 40%, #2a1e14, #160e09 75%); color: #ffe9c7; text-align: center; padding: 24px; }
+    #rotate .icon { font-size: 56px; animation: tip 2.2s ease-in-out infinite; }
+    #rotate p { margin: 0; font-size: 15px; color: #c9bda9; }
+    @keyframes tip { 0%, 55%, 100% { transform: rotate(0); } 78% { transform: rotate(-90deg); } }
+    @media (orientation: portrait) { #rotate { display: flex; } }
+
+    #start { position: fixed; inset: 0; z-index: 10; display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 14px; text-align: center; padding: 24px; transition: opacity .4s ease;
+      background: radial-gradient(120% 90% at 50% 20%, #3a2a1c 0%, #241811 60%, #160e09 100%); color: #ffe9c7; }
+    #start.gone { opacity: 0; pointer-events: none; }
+    #start .kicker { letter-spacing: .32em; font-size: 11px; color: #c79a6a; font-weight: 700; }
+    #start h1 { margin: 0; font-size: clamp(36px, 9vw, 80px); font-weight: 900; letter-spacing: .01em; line-height: .95;
+      background: linear-gradient(180deg, #ffe0a6, #e08a3a); -webkit-background-clip: text; background-clip: text; color: transparent; }
+    #start p { margin: 0; max-width: 32rem; line-height: 1.5; color: #d3bf98; font-size: 14px; }
+    #start .keys { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; margin-top: 2px; }
+    #start .keys span { font: 600 12px/1 ui-monospace, monospace; color: #ffe9c7; border: 1px solid #5a4632; border-radius: 7px; padding: 8px 11px; background: #2a1e14; }
+    #start button { margin-top: 8px; cursor: pointer; color: #241811; font-weight: 800; letter-spacing: .04em; font-size: 15px;
+      border: 0; border-radius: 10px; padding: 14px 30px; background: linear-gradient(180deg, #ffe0a6, #f0a83a); box-shadow: 0 8px 26px rgba(240,150,58,.34); }
+    #start .note { font-size: 12px; color: #8a7a64; }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+  <div id="rotate"><div class="icon">📱</div><p>Rotate your device to landscape</p></div>
+
+  <div id="title">CHEZ SAMOA<small>THE FLOOR · 2.5D KITCHEN PREVIEW</small></div>
+  <div id="hint"><b>Move</b> WASD / arrows / stick &nbsp;·&nbsp; walk the floor</div>
+
+  <div id="start">
+    <div class="kicker">2.5D KITCHEN</div>
+    <h1>Chez Samoa</h1>
+    <p>The diner, rendered in the <strong>same 3D world as the boss fight</strong> but bright,
+       cozy, and shot from a fixed diorama camera so the whole floor reads at once.
+       Walk her around to feel the view. Same chef, same world — the cut into a fight
+       is just this room going dark.</p>
+    <div class="keys">
+      <span>WASD / Arrows — move</span>
+      <span>Left stick — move</span>
+    </div>
+    <button id="startBtn" type="button">Step onto the floor</button>
+    <p class="note">Best in landscape · works with touch, keyboard, or a gamepad</p>
+  </div>
+
+  <script type="module" src="/src/preview/kitchen-main.js"></script>
+</body>
+</html>

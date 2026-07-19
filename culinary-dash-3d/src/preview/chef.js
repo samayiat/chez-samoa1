@@ -27,7 +27,7 @@ const COMBO = [
   { side: 'R', dur: 0.38, reach: 2.1, w: 1.9, lunge: 0.7 },  // roundhouse
 ];
 
-function buildChef() {
+export function buildChef() {
   const g = new THREE.Group();     // origin at feet, front = +Z
   const body = new THREE.Group();  // bob/squash pivot
   g.add(body);
