@@ -99,6 +99,42 @@ function localePanorama() {
   };
 }
 
+// Generative tropical plants — potted foliage grown from a seed, so every pot is
+// its own plant. Three growth habits (broad leaves / arching fronds / upright
+// spikes), leaf counts, lengths and bends all seeded; greens picked from the same
+// family as the locale outside the windows, in terracotta pots.
+function pottedPlant(seed, s = 1) {
+  let st = (seed >>> 0) || 1;
+  const rnd = () => ((st = (st * 1664525 + 1013904223) >>> 0) / 4294967296);
+  const p = new THREE.Group();
+  const GREENS = [0x3f7a3a, 0x4f8f46, 0x2e6b34, 0x63a04f];
+  const pot = new THREE.Mesh(new THREE.CylinderGeometry(0.3 * s, 0.23 * s, 0.4 * s, 10), mat(0xa4593a, { flat: true, rough: 0.8 }));
+  pot.position.y = 0.2 * s; pot.castShadow = true; p.add(pot);
+  p.add(put(new THREE.Mesh(new THREE.CylinderGeometry(0.33 * s, 0.31 * s, 0.09 * s, 10), mat(0xb26443, { flat: true, rough: 0.8 })), 0, 0.4 * s, 0));   // rim
+  p.add(put(new THREE.Mesh(new THREE.CylinderGeometry(0.27 * s, 0.27 * s, 0.05 * s, 10), mat(0x2e2018, { rough: 1 })), 0, 0.42 * s, 0));               // soil
+  const fol = new THREE.Group(); fol.position.y = 0.44 * s; p.add(fol);
+  const habit = Math.floor(rnd() * 3);          // 0 broad leaves, 1 arching fronds, 2 upright spikes
+  const n = 5 + Math.floor(rnd() * 4);
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * Math.PI * 2 + rnd() * 0.8;
+    const lm = mat(GREENS[Math.floor(rnd() * GREENS.length)], { flat: true, rough: 0.85 });
+    lm.side = THREE.DoubleSide;
+    const len = s * (habit === 2 ? 0.85 + rnd() * 0.45 : 0.55 + rnd() * 0.4);
+    const wid = s * (habit === 0 ? 0.26 + rnd() * 0.12 : habit === 1 ? 0.13 + rnd() * 0.06 : 0.06 + rnd() * 0.04);
+    const bend = habit === 1 ? 0.5 + rnd() * 0.35 : habit === 0 ? 0.24 + rnd() * 0.18 : 0.06 + rnd() * 0.1;
+    // a curved, tapered blade — same construction as the locale's palm fronds
+    const sh = new THREE.Shape();
+    sh.moveTo(0, 0);
+    sh.quadraticCurveTo(bend * len * 0.6, len * 0.55, bend * len, len);        // spine out to the tip
+    sh.quadraticCurveTo(bend * len * 0.55 + wid, len * 0.5, wid * 0.7, 0);     // back edge, widest near the base
+    sh.closePath();
+    const leaf = new THREE.Mesh(new THREE.ShapeGeometry(sh), lm);
+    leaf.castShadow = true; leaf.rotation.y = a;                               // fan around the pot
+    fol.add(leaf);
+  }
+  return { group: p, fol };
+}
+
 export function buildKitchen(scene) {
   const g = new THREE.Group(); scene.add(g);
   const steamers = [];
@@ -140,6 +176,14 @@ export function buildKitchen(scene) {
   const counter = put(box(18, 1.2, 0.7, mat(WOOD, { rough: 0.8 })), 0, 0.6, -3.5);
   counter.castShadow = true; counter.receiveShadow = true; g.add(counter);
   g.add(put(box(18.2, 0.12, 0.85, mat(CREAM, { rough: 0.5 })), 0, 1.25, -3.5));
+
+  // generative plants echoing the locale — big pots in the front corners, medium
+  // ones by the counter ends, small ones up on the countertop
+  const plants = [];
+  const plantAt = (x, y, z, seed, s) => { const pl = pottedPlant(seed, s); pl.group.position.set(x, y, z); g.add(pl.group); plants.push(pl); };
+  plantAt(-8.5, 0, 2.4, 11, 1.3); plantAt(8.5, 0, 2.4, 27, 1.2);
+  plantAt(-8.55, 0, -2.5, 39, 0.9); plantAt(8.55, 0, -2.5, 53, 0.95);
+  plantAt(-8.5, 1.3, -3.5, 68, 0.45); plantAt(8.5, 1.3, -3.5, 81, 0.5);
 
   // ---- stations at the sim's positions ----
   const stations = {};
@@ -187,6 +231,7 @@ export function buildKitchen(scene) {
       for (const s of steamers) s.update(dt, t);
       for (let i = 0; i < lamps.length; i++) lamps[i].rotation.z = Math.sin(t * 0.7 + i) * 0.02;
       for (const id in stations) stations[id].tickAnim(dt, t);
+      for (let i = 0; i < plants.length; i++) plants[i].fol.rotation.z = Math.sin(t * 0.6 + i * 2.4) * 0.03;   // a light breeze in the leaves
       locale.update(dt, t, day);
     },
   };
