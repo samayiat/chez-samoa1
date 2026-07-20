@@ -123,31 +123,25 @@ export function buildChef(opts = {}) {
     const puff = new THREE.Mesh(new THREE.SphereGeometry(0.31, 10, 8), hatMat);
     puff.castShadow = true; puff.position.set(0, 0.36, -0.02); puff.scale.set(1.12, 0.82, 1.12); head.add(puff);
   } else {
-    // MALE — short-hair cap: sits high, tapered so it stops above the ears (not a bob)
-    const cap = new THREE.Mesh(new THREE.SphereGeometry(0.25, 14, 12), hairMat);
-    cap.castShadow = true; cap.scale.set(1.04, 0.78, 1.0); cap.position.set(0, 0.06, -0.03); head.add(cap);
-    head.add(put(ball(0.16, hairMat, 1, 0.6, 0.9), 0, 0.02, -0.16));   // fuller short hair at the back
+    // MALE — a big round AFRO built from a domed cluster of faceted puffs (so it has
+    // texture, not a smooth ball), framing the face, with a toque perched on top.
+    const afro = (r, x, y, z) => head.add(put(ball(r, hairMat, 1, 1, 1), x, y, z));
+    afro(0.31, 0, 0.12, -0.04);                                    // main dome
+    afro(0.2, -0.24, 0.06, -0.02); afro(0.2, 0.24, 0.06, -0.02);   // side volume (over the ears)
+    afro(0.19, 0, 0.32, -0.03);                                    // crown
+    afro(0.19, -0.16, 0.26, 0.05); afro(0.19, 0.16, 0.26, 0.05);   // upper-front bumps
+    afro(0.18, -0.18, 0.24, -0.18); afro(0.18, 0.18, 0.24, -0.18); // upper-back bumps
+    afro(0.19, 0, 0.1, -0.2);                                      // back volume
+    afro(0.15, -0.18, -0.06, 0.02); afro(0.15, 0.18, -0.06, 0.02); // cheek framing
 
-    // a BUSHY PONYTAIL sprouting directly from the top-center of the head: a wound
-    // hair tie, a volume puff at the base, then a fountain of thick fronds fanning up
-    // and out — the fronds read as the bushy tail, a small top puff just rounds it.
-    const gather = new THREE.Vector3(0, 0.27, -0.02);
-    const tie = cyl(0.055, 0.05, 0.06, hairMat, 8); tie.position.copy(gather); head.add(tie);
-    head.add(put(new THREE.Mesh(new THREE.SphereGeometry(0.11, 10, 8), hairMat), gather.x, gather.y + 0.06, gather.z));   // base bush
-    const FR = 16;
-    for (let i = 0; i < FR; i++) {
-      const a = (i / FR) * Math.PI * 2;
-      const jit = Math.sin(i * 12.9 + 3.1);
-      const spread = 0.5 + 0.32 * (jit * 0.5 + 0.5);
-      const dir = new THREE.Vector3(Math.cos(a) * spread, 1, Math.sin(a) * spread - 0.12).normalize();  // up, fan out, slight back
-      const len = 0.3 + 0.16 * (jit * 0.5 + 0.5);
-      const frond = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.026, len, 5), hairMat);          // fat tip = bushy
-      frond.castShadow = true;
-      frond.quaternion.setFromUnitVectors(UP, dir);
-      frond.position.copy(gather).add(dir.clone().multiplyScalar(len / 2 + 0.05));
-      head.add(frond);
-    }
-    head.add(put(new THREE.Mesh(new THREE.SphereGeometry(0.12, 10, 8), hairMat), gather.x, gather.y + 0.22, gather.z - 0.02));  // round the top
+    // toque perched on top of the afro (raised so it sits ON the hair, not sunk in)
+    const hatMat = mat(HAT, { flat: true, rough: 0.85 });
+    const band = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.25, 0.2, 12), hatMat);
+    band.castShadow = true; band.position.set(0, 0.46, -0.03); head.add(band);
+    const cuff = new THREE.Mesh(new THREE.TorusGeometry(0.26, 0.05, 8, 18), hatMat);
+    cuff.castShadow = true; cuff.rotation.x = Math.PI / 2; cuff.position.set(0, 0.37, -0.03); head.add(cuff);
+    const puff = new THREE.Mesh(new THREE.SphereGeometry(0.29, 10, 8), hatMat);
+    puff.castShadow = true; puff.position.set(0, 0.6, -0.03); puff.scale.set(1.12, 0.82, 1.12); head.add(puff);
   }
   // eyes (shared)
   head.add(put(box(0.05, 0.06, 0.03, mat(0x120a06)), -0.09, 0.02, 0.25));
