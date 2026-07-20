@@ -28,11 +28,33 @@ function localeView(w, h) {
   quad(w * 0.05, h * 0.42, 0xcdeef0, w * 0.2, HZ - h * 0.2, 0.005);        // sun glint on the water
   const palm = (px, s, flip) => {
     const p = new THREE.Group(); p.position.set(px, -h * 0.5, 0.01); p.scale.x = flip ? -1 : 1; v.add(p);
-    const trunk = new THREE.Mesh(new THREE.PlaneGeometry(s * 0.075, s), flat(0x33422c)); trunk.position.set(-s * 0.03, s * 0.5, 0); trunk.rotation.z = -0.16; p.add(trunk);
-    const top = -s * 0.08;                                          // trunk top x
-    for (const a of [0.45, 1.0, 1.571, 2.14, 2.69]) {               // fronds fan UP into a canopy
-      const f = new THREE.Mesh(new THREE.PlaneGeometry(s * 0.5, s * 0.12), flat(0x2b3a26));
-      f.position.set(top + Math.cos(a) * s * 0.24, s + Math.sin(a) * s * 0.22, 0.001); f.rotation.z = a; p.add(f);
+    // gently curved, tapered trunk (a shape, not a rectangle)
+    const ts = new THREE.Shape();
+    ts.moveTo(-s * 0.045, 0); ts.quadraticCurveTo(-s * 0.1, s * 0.55, -s * 0.1, s);
+    ts.lineTo(-s * 0.045, s); ts.quadraticCurveTo(-s * 0.055, s * 0.5, s * 0.045, 0); ts.closePath();
+    const trunk = new THREE.Mesh(new THREE.ShapeGeometry(ts), flat(0x33422c)); p.add(trunk);
+    // fronds — curved blades arching out of the crown and drooping at the tip,
+    // tapered to a point (a shape per frond, mirrored for the left side)
+    const crown = { x: -s * 0.075, y: s };
+    const frond = (len, lift, droop, dir) => {
+      const f = new THREE.Shape();
+      f.moveTo(0, 0);
+      f.quadraticCurveTo(len * 0.45, lift, len, lift - droop);                    // upper edge out to the tip
+      f.quadraticCurveTo(len * 0.5, lift - len * 0.16, 0, -len * 0.1);           // lower edge back, fatter near the crown
+      f.closePath();
+      const m = new THREE.Mesh(new THREE.ShapeGeometry(f), flat(0x2b3a26));
+      m.position.set(crown.x, crown.y, 0.001); m.scale.x = dir; p.add(m);
+    };
+    frond(s * 0.62, s * 0.3, s * 0.42, 1);     // right: high arch, deep droop
+    frond(s * 0.56, s * 0.14, s * 0.4, 1);     // right: lower, droopier
+    frond(s * 0.6, s * 0.3, s * 0.42, -1);     // left: mirrored pair
+    frond(s * 0.52, s * 0.12, s * 0.38, -1);
+    frond(s * 0.34, s * 0.42, s * 0.24, 1);    // short top tuft either side
+    frond(s * 0.3, s * 0.4, s * 0.2, -1);
+    // coconuts at the crown
+    for (const [cx, cy] of [[-0.02, -0.02], [0.045, 0.005], [-0.085, 0.01]]) {
+      const nut = new THREE.Mesh(new THREE.CircleGeometry(s * 0.045, 10), flat(0x4a3a22));
+      nut.position.set(crown.x + cx * s, crown.y + cy * s, 0.002); p.add(nut);
     }
   };
   palm(-w * 0.3, h * 0.62, false);
