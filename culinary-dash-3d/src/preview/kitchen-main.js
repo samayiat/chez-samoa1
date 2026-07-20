@@ -3,6 +3,7 @@
 // or assemble, carry the plate, and serve before patience runs out. Too many
 // walkouts and the mob comes back swinging — the tie into the 3D boss fight.
 import * as THREE from 'three';
+import { vw, vh } from '../engine/orient.js';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
@@ -36,7 +37,7 @@ const stationDef = Object.fromEntries(STATIONS.map((s) => [s.id, s]));
 function boot() {
   renderer = new THREE.WebGLRenderer({ antialias: RIM_LIGHT, powerPreference: 'high-performance' });
   renderer.setPixelRatio(Math.min(devicePixelRatio, PIXEL_CAP + 0.25));
-  renderer.setSize(innerWidth, innerHeight);
+  renderer.setSize(vw(), vh());
   renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.15;
   app.appendChild(renderer.domElement);
@@ -51,7 +52,7 @@ function boot() {
     const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace; scene.background = tex;
   }
 
-  camera = new THREE.PerspectiveCamera(46, innerWidth / innerHeight, 0.1, 100);
+  camera = new THREE.PerspectiveCamera(46, vw() / vh(), 0.1, 100);
   camera.position.set(0.4, 9.6, 10.9); camera.lookAt(0, 0.5, -0.1);
 
   state = createState((Date_now_safe() & 0x7fffffff) || 12345);
@@ -66,7 +67,7 @@ function boot() {
 
   composer = new EffectComposer(renderer);
   composer.addPass(new RenderPass(scene, camera));
-  composer.addPass(new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.58, 0.5, 0.85));
+  composer.addPass(new UnrealBloomPass(new THREE.Vector2(vw(), vh()), 0.58, 0.5, 0.85));
   composer.addPass(new OutputPass());
 
   lastT = performance.now() / 1000;
@@ -253,4 +254,4 @@ function begin() {
 }
 document.getElementById('startBtn')?.addEventListener('click', begin);
 addEventListener('keydown', (e) => { if (!booted && (e.code === 'Enter' || e.code === 'Space')) begin(); });
-addEventListener('resize', () => { if (!renderer) return; camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); composer.setSize(innerWidth, innerHeight); });
+addEventListener('resize', () => { if (!renderer) return; camera.aspect = vw() / vh(); camera.updateProjectionMatrix(); renderer.setSize(vw(), vh()); composer.setSize(vw(), vh()); });

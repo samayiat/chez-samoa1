@@ -7,6 +7,7 @@
 //  - a viewer without WebGL (an inline preview sandbox, some in-app webviews) gets a
 //    clear message to open it in a real browser instead of a dead button.
 import * as THREE from 'three';
+import { vw, vh } from '../engine/orient.js';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
@@ -245,7 +246,7 @@ function showBanner(title, sub) {
 function boot() {
   renderer = new THREE.WebGLRenderer({ antialias: RIM_LIGHT, powerPreference: 'high-performance' });
   renderer.setPixelRatio(Math.min(devicePixelRatio, PIXEL_CAP + 0.25));
-  renderer.setSize(innerWidth, innerHeight);
+  renderer.setSize(vw(), vh());
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -264,7 +265,7 @@ function boot() {
     scene.background = tex;
   }
 
-  camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 0.1, 100);
+  camera = new THREE.PerspectiveCamera(50, vw() / vh(), 0.1, 100);
   camera.position.set(0, 6, 10);
 
   arena = buildArena(scene, renderer);
@@ -274,7 +275,7 @@ function boot() {
 
   composer = new EffectComposer(renderer);
   composer.addPass(new RenderPass(scene, camera));
-  composer.addPass(new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.7, 0.5, 0.82));
+  composer.addPass(new UnrealBloomPass(new THREE.Vector2(vw(), vh()), 0.7, 0.5, 0.82));
   composer.addPass(new OutputPass());
 
   lastT = performance.now() / 1000;
@@ -339,8 +340,8 @@ if (EMBED) {
 
 addEventListener('resize', () => {
   if (!renderer) return;
-  camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
-  renderer.setSize(innerWidth, innerHeight); composer.setSize(innerWidth, innerHeight);
+  camera.aspect = vw() / vh(); camera.updateProjectionMatrix();
+  renderer.setSize(vw(), vh()); composer.setSize(vw(), vh());
 });
 
 // tap / key to rematch once the fight has ended — standalone only; embedded, the

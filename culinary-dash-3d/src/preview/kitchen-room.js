@@ -25,8 +25,11 @@ const TEAL = 0x2f6e66, BRASS = 0xb8912f, STEEL = 0x8a9098;
 function localeWorld() {
   const v = new THREE.Group();
   const flat = (col, side) => new THREE.MeshBasicMaterial({ color: col, side, fog: false });
+  // backdrop arcs cover just the BACK half (the only windowed side) — half the
+  // geometry of a full ring, still wide enough for any turned camera that can
+  // actually see out
   const band = (r, y0, y1, col) => {
-    const m = new THREE.Mesh(new THREE.CylinderGeometry(r, r, y1 - y0, 28, 1, true), flat(col, THREE.BackSide));
+    const m = new THREE.Mesh(new THREE.CylinderGeometry(r, r, y1 - y0, 16, 1, true, Math.PI / 2, Math.PI), flat(col, THREE.BackSide));
     m.position.y = (y0 + y1) / 2; v.add(m); return m;
   };
   // The visible horizon through the windows is the ocean disc's far RIM (the
@@ -47,8 +50,8 @@ function localeWorld() {
   ocean.rotation.x = -Math.PI / 2; ocean.position.y = -0.45; v.add(ocean);
   // far sea shelf — a lower annulus from the disc rim out to the cyclorama, so
   // looking down over the horizon rim shows deep water, never a void
-  const seaFar = new THREE.Mesh(new THREE.RingGeometry(11.8, 24.2, 40), flat(0x35839b));
-  seaFar.rotation.x = -Math.PI / 2; seaFar.position.y = -5.62; v.add(seaFar);
+  const seaFar = new THREE.Mesh(new THREE.RingGeometry(11.8, 24.2, 24, 1, 0, Math.PI), flat(0x35839b));
+  seaFar.rotation.x = -Math.PI / 2; seaFar.position.y = -5.62; v.add(seaFar);   // back half only, like the arcs
   // wave strips lying ON the water, drifting sideways
   const waves = [];
   [[-6.5, 0.22, 0x59acc0], [-8.5, 0.3, 0x2f7b90], [-10.5, 0.38, 0x59acc0]].forEach(([z, w, col]) => {

@@ -4,6 +4,8 @@
 // players never see it. Uses Pointer Events, so the stick and button can be held
 // at the same time (distinct pointerIds).
 
+import { mapPoint, mapVec } from './orient.js';
+
 const stickState = { x: 0, y: 0, primary: false, secondary: false };
 let shown = false;
 
@@ -53,16 +55,19 @@ export function initTouch(opts = {}) {
     if (e.target === btn || e.target === dodge) return;   // the buttons handle themselves
     if (moveId !== null) return;                // one movement pointer at a time
     moveId = e.pointerId; ox = e.clientX; oy = e.clientY;
+    // position + drag both map through orient.js so the stick works identically
+    // when the page is CSS-rotated into forced landscape on a portrait device
+    const pt = mapPoint(ox, oy);
     base.style.display = 'block';
-    base.style.left = ox + 'px'; base.style.top = oy + 'px';
+    base.style.left = pt.x + 'px'; base.style.top = pt.y + 'px';
     knob.style.transform = 'translate(-50%,-50%)';
   });
   window.addEventListener('pointermove', (e) => {
     if (e.pointerId !== moveId) return;
-    let dx = e.clientX - ox, dy = e.clientY - oy;
-    const d = Math.hypot(dx, dy) || 1;
+    const dv = mapVec(e.clientX - ox, e.clientY - oy);
+    const d = Math.hypot(dv.x, dv.y) || 1;
     const cl = Math.min(d, RADIUS);
-    const nx = (dx / d), ny = (dy / d);
+    const nx = (dv.x / d), ny = (dv.y / d);
     stickState.x = nx * (cl / RADIUS);
     stickState.y = ny * (cl / RADIUS);
     knob.style.transform = `translate(calc(-50% + ${nx * cl}px), calc(-50% + ${ny * cl}px))`;

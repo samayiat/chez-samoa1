@@ -67,22 +67,16 @@
       border: 0; border-radius: 10px; padding: 14px 30px; background: linear-gradient(180deg, #ffd98a, #f0883a); box-shadow: 0 8px 26px rgba(240,120,58,.34); }
     #start .note { font-size: 12px; color: #7d7286; }
 
-    /* force landscape: cover everything and ask the player to rotate in portrait */
-    #rotate {
-      position: fixed; inset: 0; z-index: 30; display: none;
-      flex-direction: column; align-items: center; justify-content: center; gap: 14px;
-      background: radial-gradient(120% 90% at 50% 40%, #16101f, #050407 75%);
-      color: #ffe9c7; text-align: center; padding: 24px;
+    /* forced landscape: in portrait the whole page rotates 90° instead of asking
+       the player to turn the device (sizing/input mapped in engine/orient.js) */
+    @media (orientation: portrait) {
+      body { position: fixed; top: 0; left: 0; width: 100vh; height: 100vw;
+        transform: rotate(90deg) translate(0, -100%); transform-origin: top left; }
     }
-    #rotate .icon { font-size: 56px; animation: tip 2.2s ease-in-out infinite; transform-origin: 50% 50%; }
-    #rotate p { margin: 0; font-size: 15px; letter-spacing: .03em; color: #c9bda9; }
-    @keyframes tip { 0%, 55%, 100% { transform: rotate(0deg); } 78% { transform: rotate(-90deg); } }
-    @media (orientation: portrait) { #rotate { display: flex; } }
   </style>
 </head>
 <body>
   <div id="app"></div>
-  <div id="rotate"><div class="icon">📱</div><p>Rotate your device to landscape</p></div>
   <div id="danger"></div>
   <div id="hurt"></div>
 
