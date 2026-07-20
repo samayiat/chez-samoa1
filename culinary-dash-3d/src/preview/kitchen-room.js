@@ -67,14 +67,18 @@ export function buildKitchen(scene) {
   });
 
   // ---- lighting: bright warm + soft shadows ----
-  scene.add(new THREE.HemisphereLight(0xfff0d8, 0x4a3a2a, 0.72));
-  const key = new THREE.DirectionalLight(0xfff0d0, 1.6);
+  // Dramatic diner light (matches the boss arena's character): a LOWER ambient so the
+  // strong warm KEY does the modelling instead of a flat wash, plus a cold RIM from
+  // behind for silhouette separation. Warm key + cool rim is what makes figures pop.
+  scene.add(new THREE.HemisphereLight(0xffe9cf, 0x3a2c1e, 0.5));
+  const key = new THREE.DirectionalLight(0xfff0d0, 2.1);
   key.position.set(5, 11, 6); key.castShadow = true;
   key.shadow.mapSize.set(RIM_LIGHT ? 2048 : 1024, RIM_LIGHT ? 2048 : 1024);
   key.shadow.camera.near = 1; key.shadow.camera.far = 40;
   const S = 11; key.shadow.camera.left = -S; key.shadow.camera.right = S; key.shadow.camera.top = S; key.shadow.camera.bottom = -S;
   key.shadow.bias = -0.0008; key.shadow.normalBias = 0.02; scene.add(key, key.target);
-  if (RIM_LIGHT) { const fill = new THREE.DirectionalLight(0xffe0b0, 0.38); fill.position.set(-6, 5, 8); scene.add(fill); }
+  const fill = new THREE.DirectionalLight(0xffe0b0, 0.32); fill.position.set(-4, 5, 9); scene.add(fill);   // gentle warm fill from camera side
+  if (RIM_LIGHT) { const rim = new THREE.DirectionalLight(0x6d84ff, 0.95); rim.position.set(-6, 7, -9); scene.add(rim); }   // cold back rim → edge separation
 
   return {
     stations, tables,

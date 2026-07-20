@@ -38,7 +38,7 @@ function boot() {
   renderer.setPixelRatio(Math.min(devicePixelRatio, PIXEL_CAP + 0.25));
   renderer.setSize(innerWidth, innerHeight);
   renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-  renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.12;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.15;
   app.appendChild(renderer.domElement);
 
   scene = new THREE.Scene();
@@ -66,7 +66,7 @@ function boot() {
 
   composer = new EffectComposer(renderer);
   composer.addPass(new RenderPass(scene, camera));
-  composer.addPass(new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.38, 0.5, 0.9));
+  composer.addPass(new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.58, 0.5, 0.85));
   composer.addPass(new OutputPass());
 
   lastT = performance.now() / 1000;
