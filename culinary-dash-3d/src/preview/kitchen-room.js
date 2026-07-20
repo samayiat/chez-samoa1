@@ -359,25 +359,98 @@ function buildStation(g, x, z, def, steamers) {
   let steam = null, glow = null;
   const label = new THREE.Group(); label.position.set(0, 1.9, 0); s.add(label);
 
+  // a wooden produce crate with contents — shared by the fryer (chicken) and
+  // the cutting board (vegetables)
+  const crate = (fill) => {
+    const cr = new THREE.Group();
+    cr.add(put(box(0.72, 0.36, 0.55, mat(0x8a6234, { rough: 0.85 })), 0, 0.55, 0));
+    cr.add(put(box(0.76, 0.06, 0.59, mat(0x6a4526, { rough: 0.85 })), 0, 0.72, 0));      // rim
+    cr.add(put(box(0.76, 0.06, 0.59, mat(0x6a4526, { rough: 0.85 })), 0, 0.42, 0));
+    fill(cr);
+    return cr;
+  };
+
   if (def.kind === 'timing') {
-    if (def.id === 'pot') { s.add(put(new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.36, 0.42, 18), mat(0x30343a, { metal: 0.6, rough: 0.4 })), 0, 1.55, 0)); }
-    else { s.add(put(box(1.1, 0.24, 0.6, mat(0xcaa23a, { metal: 0.4, rough: 0.4, emissive: 0x3a2a08, emi: 0.35 })), 0, 1.42, 0)); }
+    if (def.id === 'pot') {
+      // THE STOVE — black cooktop, two burner grates, knobs, and a big stock pot
+      s.add(put(box(1.5, 0.1, 0.92, mat(0x22262c, { metal: 0.4, rough: 0.5 })), 0, 1.4, 0));                 // cooktop
+      for (const bx of [-0.38, 0.38]) {
+        s.add(put(new THREE.Mesh(new THREE.CylinderGeometry(0.26, 0.26, 0.04, 16), mat(0x111418, { rough: 0.7 })), bx, 1.46, 0.05));  // burner
+        const grate = new THREE.Mesh(new THREE.TorusGeometry(0.2, 0.022, 6, 14), mat(0x3a4048, { metal: 0.5, rough: 0.5 }));
+        grate.rotation.x = Math.PI / 2; grate.position.set(bx, 1.49, 0.05); s.add(grate);
+      }
+      for (let k = 0; k < 4; k++) { const kn = put(new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.06, 0.07, 8), mat(0xd8dde2, { metal: 0.6, rough: 0.35 })), -0.45 + k * 0.3, 1.02, 0.48); kn.rotation.x = Math.PI / 2; s.add(kn); }   // knobs
+      const pot = new THREE.Group(); pot.position.set(-0.38, 1.5, 0.05); s.add(pot);
+      pot.add(put(new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.27, 0.36, 18), mat(0x8a9098, { metal: 0.65, rough: 0.35 })), 0, 0.18, 0));  // stock pot
+      const rim = put(new THREE.Mesh(new THREE.TorusGeometry(0.3, 0.02, 6, 18), mat(0x6a7078, { metal: 0.6, rough: 0.4 })), 0, 0.37, 0); rim.rotation.x = Math.PI / 2; pot.add(rim);
+      for (const hx of [-1, 1]) pot.add(put(box(0.06, 0.05, 0.14, mat(0x30343a, { metal: 0.5 })), hx * 0.33, 0.28, 0));               // handles
+      pot.add(put(new THREE.Mesh(new THREE.CylinderGeometry(0.26, 0.26, 0.03, 18), mat(0x2a6a86, { rough: 0.4, emissive: 0x0a2a3a, emi: 0.4 })), 0, 0.365, 0));  // water
+    } else {
+      // THE FRYER — stainless vat of golden oil with two wire baskets, and the
+      // chicken crate sitting right beside it
+      s.add(put(box(1.3, 0.16, 0.7, mat(0xb0b6bc, { metal: 0.55, rough: 0.35 })), 0, 1.42, 0));               // vat rim
+      s.add(put(box(1.1, 0.1, 0.52, mat(0xcaa23a, { metal: 0.3, rough: 0.4, emissive: 0x3a2a08, emi: 0.4 })), 0, 1.46, 0));  // oil
+      for (const bx of [-0.28, 0.28]) {
+        const basket = new THREE.Group(); basket.position.set(bx, 1.5, 0); s.add(basket);
+        basket.add(put(box(0.34, 0.14, 0.34, mat(0x3a4048, { metal: 0.5, rough: 0.6 })), 0, 0, 0));           // basket
+        const hd = put(box(0.05, 0.05, 0.34, mat(0x1a1a20, { rough: 0.6 })), 0, 0.08, 0.3); hd.rotation.x = 0.5; basket.add(hd);  // handle
+      }
+      const chix = crate((cr) => {
+        for (let i = 0; i < 4; i++) cr.add(put(new THREE.Mesh(new THREE.SphereGeometry(0.11, 8, 6), mat(0xe8b49a, { rough: 0.75 })), -0.2 + (i % 2) * 0.36 + (i > 1 ? 0.06 : -0.03), 0.76, i > 1 ? 0.12 : -0.1));
+      });
+      chix.position.set(-1.15, 0, 0.15); s.add(chix);                                                          // chicken by the fryer
+    }
     glow = new THREE.PointLight(0xff7a30, 0, 2.4, 2); glow.position.set(0, 1.4, 0); s.add(glow);
     steam = makeSteam(s, 0, 1.9, 0); steam.setRate(0); steamers.push(steam);
   } else if (def.kind === 'source') {
     body.material = mat(0x9fbfd0, { metal: 0.2, rough: 0.4 }); // icy box
     s.add(put(box(1.5, 0.5, 0.9, mat(0xbfe0ef, { rough: 0.3, emissive: 0x143244, emi: 0.3 })), 0, 1.0, 0.02));
   } else if (def.kind === 'prep') {
-    s.add(put(box(1.1, 0.08, 0.6, mat(0xc9a06a, { rough: 0.6 })), 0, 1.42, 0));            // cutting board
-    s.add(put(box(0.3, 0.14, 0.3, mat(0x6a9a4a, { rough: 0.7 })), -0.22, 1.5, 0.04));      // veg
-    s.add(put(box(0.05, 0.03, 0.34, mat(0xd8dde2, { metal: 0.6, rough: 0.3 })), 0.24, 1.5, -0.02)); // knife blade
-    s.add(put(box(0.06, 0.07, 0.16, mat(0x3a2a1a)), 0.24, 1.5, 0.2));                       // knife handle
+    // cutting board with the knife, and the VEGETABLES right next to it — some
+    // spread on the counter, the rest in a crate beside the station
+    s.add(put(box(1.1, 0.08, 0.6, mat(0xc9a06a, { rough: 0.6 })), -0.15, 1.42, 0));                            // cutting board
+    s.add(put(box(0.28, 0.13, 0.28, mat(0x6a9a4a, { rough: 0.7 })), -0.35, 1.5, 0.04));                        // lettuce on the board
+    s.add(put(box(0.05, 0.03, 0.34, mat(0xd8dde2, { metal: 0.6, rough: 0.3 })), 0.1, 1.5, -0.02));             // knife blade
+    s.add(put(box(0.06, 0.07, 0.16, mat(0x3a2a1a)), 0.1, 1.5, 0.2));                                           // knife handle
+    s.add(put(new THREE.Mesh(new THREE.SphereGeometry(0.09, 8, 6), mat(0xc23a2a, { rough: 0.7 })), 0.55, 1.48, 0.1));   // tomatoes on the counter
+    s.add(put(new THREE.Mesh(new THREE.SphereGeometry(0.08, 8, 6), mat(0xc23a2a, { rough: 0.7 })), 0.62, 1.46, -0.14));
+    const veg = crate((cr) => {
+      cr.add(put(new THREE.Mesh(new THREE.SphereGeometry(0.13, 8, 6), mat(0x6a9a4a, { rough: 0.75 })), -0.18, 0.76, -0.05));  // lettuce heads
+      cr.add(put(new THREE.Mesh(new THREE.SphereGeometry(0.12, 8, 6), mat(0x5a8a3e, { rough: 0.75 })), 0.12, 0.76, 0.1));
+      cr.add(put(new THREE.Mesh(new THREE.SphereGeometry(0.09, 8, 6), mat(0xc23a2a, { rough: 0.7 })), 0.2, 0.74, -0.12));     // tomato
+      const car = put(new THREE.Mesh(new THREE.ConeGeometry(0.05, 0.26, 7), mat(0xe0862a, { rough: 0.7 })), -0.05, 0.76, 0.16);
+      car.rotation.z = 1.35; cr.add(car);                                                                       // carrot
+    });
+    veg.position.set(1.15, 0, 0.1); s.add(veg);                                                                 // the veg by the board
   } else if (def.id === 'salad') {
     s.add(put(box(1.4, 0.08, 0.7, mat(CREAM, { rough: 0.5 })), 0, 1.4, 0));
     s.add(put(box(0.36, 0.1, 0.28, mat(0x6a9a4a, { rough: 0.7 })), -0.3, 1.48, 0.06));
     s.add(put(new THREE.Mesh(new THREE.SphereGeometry(0.1, 8, 6), mat(0xc23a2a, { rough: 0.7 })), 0.3, 1.5, 0));
   } else if (def.id === 'bar') {
-    for (let i = 0; i < 4; i++) s.add(put(new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.09, 0.42, 10), mat([0x2f6e66, 0xb8912f, 0x8a2f3f, 0x3a5f8a][i], { metal: 0.3, rough: 0.4 })), -0.45 + i * 0.3, 1.6, 0));
+    // THE BAR — dark polished front, brass foot rail, a lit back-shelf of
+    // bottles, glasses, and the cocktail shaker on the counter
+    body.material = mat(0x4a2f1c, { rough: 0.55 });
+    s.add(put(box(1.7, 0.1, 1.0, mat(0x6e4526, { rough: 0.35, metal: 0.15 })), 0, 1.38, 0));                    // polished top
+    s.add(put(box(1.6, 0.06, 0.08, mat(BRASS, { metal: 0.7, rough: 0.35 })), 0, 0.25, 0.5));                    // foot rail
+    // back shelf riser with a bottle row, softly backlit
+    s.add(put(box(1.6, 0.08, 0.34, mat(0x3a2415, { rough: 0.6 })), 0, 2.0, -0.32));
+    for (const px of [-0.72, 0.72]) s.add(put(box(0.07, 0.62, 0.07, mat(0x3a2415, { rough: 0.6 })), px, 1.7, -0.32));
+    s.add(put(box(1.5, 0.5, 0.05, mat(0xffdca6, { emissive: 0xcf9a4a, emi: 0.55, rough: 0.8 })), 0, 1.74, -0.44));  // glow panel
+    const BOTTLES = [0x2f6e66, 0xb8912f, 0x8a2f3f, 0x3a5f8a, 0x6a8a3a, 0x8a5f2f];
+    BOTTLES.forEach((col, i) => {
+      const h = 0.34 + (i % 3) * 0.07;
+      const b = put(new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.07, h, 10), mat(col, { metal: 0.3, rough: 0.35 })), -0.62 + i * 0.25, 2.04 + h / 2, -0.32);
+      s.add(b);
+      s.add(put(new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.1, 8), mat(col, { metal: 0.3, rough: 0.35 })), -0.62 + i * 0.25, 2.04 + h + 0.04, -0.32));  // neck
+    });
+    // on the counter: two glasses + the shaker
+    for (const gx of [0.45, 0.62]) {
+      const gl = put(new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.05, 0.16, 10), mat(0xdfeef2, { rough: 0.1, metal: 0.1, transparent: true, opacity: 0.45 })), gx, 1.51, 0.18);
+      s.add(gl);
+    }
+    const shk = new THREE.Group(); shk.position.set(-0.5, 1.43, 0.2); s.add(shk);
+    shk.add(put(new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.11, 0.22, 12), mat(0xd8dde2, { metal: 0.75, rough: 0.25 })), 0, 0.11, 0));
+    shk.add(put(new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.09, 0.1, 12), mat(0xd8dde2, { metal: 0.75, rough: 0.25 })), 0, 0.27, 0));
   } else if (def.kind === 'pass') {
     // the pass — a warm wooden counter with brass heat lamps; dishes wait here
     body.material = mat(WOOD, { rough: 0.7 });
