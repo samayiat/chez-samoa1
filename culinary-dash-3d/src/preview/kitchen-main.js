@@ -54,7 +54,7 @@ function boot() {
   }
 
   camera = new THREE.PerspectiveCamera(46, vw() / vh(), 0.1, 100);
-  camera.position.set(0.4, 9.6, 10.9); camera.lookAt(0, 0.5, -0.1);
+  camera.position.set(0.5, 13.6, 15.4); camera.lookAt(0, 0.4, -0.4);   // pulled back for the 1.5x floor
 
   state = createState((Date_now_safe() & 0x7fffffff) || 12345);
   kitchen = buildKitchen(scene);
@@ -119,7 +119,7 @@ function syncScene(dt, t) {
   const eL = cu.armL.userData.elbow, eR = cu.armR.userData.elbow;
   if (moving) {
     facing = Math.atan2(c.vx, c.vy);
-    walkPhase += dt * 10;
+    walkPhase += dt * 13;   // doubled speed -> quicker cadence
     cu.legL.rotation.x = Math.sin(walkPhase) * 0.6; cu.legR.rotation.x = -Math.sin(walkPhase) * 0.6;
     kL.rotation.x = 0.15 + Math.max(0, -Math.sin(walkPhase)) * 0.7;                    // knees bend on the back swing
     kR.rotation.x = 0.15 + Math.max(0, Math.sin(walkPhase)) * 0.7;

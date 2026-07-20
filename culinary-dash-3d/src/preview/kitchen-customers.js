@@ -14,8 +14,8 @@ export const DISH_COLOR = {
   'whiskey-sour': 0xc8913a, 'gin-sour': 0xbfd6e0,
 };
 const hash = (s) => { let h = 0; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0; return Math.abs(h); };
-const DOOR = { x: 8.9, z: 2.4 };          // where the entry door opens (kitchen-room)
-const ENTER_T = 1.1;                      // seconds to walk from the door to the seat
+const DOOR = { x: 13.3, z: 3.2 };         // where the entry door opens (kitchen-room)
+const WALK_SPEED = 2.0;                   // units/sec — an actual walking pace, not a fly-in
 
 export function createCustomers(scene, tables) {
   const group = new THREE.Group(); scene.add(group);
@@ -111,12 +111,15 @@ export function createCustomers(scene, tables) {
       // walking in from the door: travel to the seat with a little step-bounce,
       // facing along the walk, then settle into the chair facing the camera
       if (e.enter < 1) {
-        e.enter = Math.min(1, e.enter + dt / ENTER_T);
-        const k = e.enter * e.enter * (3 - 2 * e.enter);
+        // constant WALKING speed door -> seat; step-bounce keyed to distance
+        // travelled so the footfalls stay even however long the walk is
+        const distT = Math.hypot(e.seatPos.x - DOOR.x, e.seatPos.z - DOOR.z);
+        e.enter = Math.min(1, e.enter + (dt * WALK_SPEED) / Math.max(0.001, distT));
+        const k = e.enter;
         const x = lerp(DOOR.x, e.seatPos.x, k), z = lerp(DOOR.z, e.seatPos.z, k);
-        e.mesh.position.set(x, Math.abs(Math.sin(e.enter * Math.PI * 5)) * 0.07, z);
+        e.mesh.position.set(x, Math.abs(Math.sin(k * distT * 3.4)) * 0.05, z);
         const face = Math.atan2(e.seatPos.x - DOOR.x, e.seatPos.z - DOOR.z);
-        e.mesh.rotation.y = e.enter < 0.85 ? face : lerp(face, 0, (e.enter - 0.85) / 0.15);
+        e.mesh.rotation.y = e.enter < 0.92 ? face : lerp(face, 0, (e.enter - 0.92) / 0.08);
         e.bubble.visible = false; e.menu.visible = false;
         continue;
       }

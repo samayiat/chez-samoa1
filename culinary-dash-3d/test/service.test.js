@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { createState, stepSim } from '../src/sim/state.js';
 import { STEP } from '../src/engine/loop.js';
-import { STATIONS, TABLES } from '../src/sim/data.js';
+import { STATIONS, TABLES, WORLD } from '../src/sim/data.js';
 
 const NO = { move: { x: 0, y: 0 }, primary: false, primaryDown: false, secondary: false, secondaryDown: false };
 const PRESS = { ...NO, primary: true, primaryDown: true };
@@ -33,7 +33,7 @@ describe('service loop', () => {
   it('advances time and keeps the chef still with no input', () => {
     idle(s, 1);
     expect(s.t).toBeGreaterThan(0.9);
-    expect(s.chef.x).toBe(200);             // room centre (WORLD.w/2)
+    expect(s.chef.x).toBe(WORLD.w / 2);     // room centre
   });
 
   it('chops veg, assembles a salad, and serves it for money', () => {

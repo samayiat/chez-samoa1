@@ -11,8 +11,8 @@ const PALETTES = {
 };
 // floor spots clear of tables, stations, plants and the chef's main lanes
 const SPOTS = [
-  { x: -4.3, z: 4.9 }, { x: 2.6, z: 5.2 }, { x: 7.6, z: -1.7 },
-  { x: -7.9, z: -1.0 }, { x: 5.3, z: 4.8 }, { x: -6.4, z: 1.3 },
+  { x: -6.2, z: 6.9 }, { x: 3.8, z: 7.3 }, { x: 11.2, z: -2.4 },
+  { x: -11.4, z: -1.6 }, { x: 7.6, z: 6.8 }, { x: -9.2, z: 1.9 },
 ];
 const SPEED = 1.35, GAP = 2.2;
 

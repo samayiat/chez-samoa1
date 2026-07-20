@@ -9,8 +9,9 @@
 
 export const PX = 10;
 // 2.5D lifts the old 320x180 ceiling — the diner floor can breathe now, with room
-// for a real prep line (chopping) and more tables.
-export const WORLD = { w: 400, h: 240 };
+// for a real prep line (chopping) and more tables. Grown 1.5x again so the floor
+// has actual walking space between the line, the pass, and the tables.
+export const WORLD = { w: 600, h: 360 };
 
 export const to3 = (x2, y2) => ({ x: (x2 - WORLD.w / 2) / PX, z: (y2 - WORLD.h / 2) / PX });
 export const len2 = (x2) => x2 / PX; // scalar length px -> units
@@ -34,31 +35,31 @@ export const MENU = Object.keys(DISHES);
 // Stations run along the back counter (y=52). The prep line: cutboard (chop) sits
 // beside the salad bar; the ice box sits beside the pot (raw lobster -> boil).
 export const STATIONS = [
-  { id: 'fryer',    x: 64,  y: 52, kind: 'timing',   dish: 'karaage', verb: 'fry',  cook: 2.6, green: 1.6 },
-  { id: 'cutboard', x: 128, y: 52, kind: 'prep',     dish: 'salad',   verb: 'chop', cut: 1.4 },
-  { id: 'salad',    x: 184, y: 52, kind: 'assemble', dish: 'salad' },
-  { id: 'icebox',   x: 248, y: 52, kind: 'source',   starts: 'lobster' },
-  { id: 'pot',      x: 300, y: 52, kind: 'timing',   dish: 'lobster', verb: 'boil', cook: 3.4, green: 1.9 },
-  { id: 'bar',      x: 352, y: 52, kind: 'assemble', dishes: ['whiskey-sour', 'gin-sour'] },
-  // the pass: a counter mid-floor where carried items can be set down + picked up
-  { id: 'pass',     x: 200, y: 96, kind: 'pass', slots: 3 },
+  { id: 'fryer',    x: 95,  y: 60, kind: 'timing',   dish: 'karaage', verb: 'fry',  cook: 2.6, green: 1.6 },
+  { id: 'cutboard', x: 190, y: 60, kind: 'prep',     dish: 'salad',   verb: 'chop', cut: 1.4 },
+  { id: 'salad',    x: 280, y: 60, kind: 'assemble', dish: 'salad' },
+  { id: 'icebox',   x: 375, y: 60, kind: 'source',   starts: 'lobster' },
+  { id: 'pot',      x: 465, y: 60, kind: 'timing',   dish: 'lobster', verb: 'boil', cook: 3.4, green: 1.9 },
+  { id: 'bar',      x: 545, y: 60, kind: 'assemble', dishes: ['whiskey-sour', 'gin-sour'] },
+  // the pass: a counter between the line and the floor (the 2D layout's divider)
+  { id: 'pass',     x: 300, y: 150, kind: 'pass', slots: 3 },
 ];
 
-// Dining tables — a roomier six-top floor now that 2.5D lifts the size limit.
+// Dining tables — spread across the floor with real walking space between them.
 export const TABLES = [
-  { id: 't0', x: 96,  y: 160 },
-  { id: 't1', x: 180, y: 182 },
-  { id: 't2', x: 264, y: 160 },
-  { id: 't3', x: 330, y: 156 },
-  { id: 't4', x: 136, y: 206 },
-  { id: 't5', x: 256, y: 206 },
+  { id: 't0', x: 120, y: 240 },
+  { id: 't1', x: 265, y: 268 },
+  { id: 't2', x: 410, y: 240 },
+  { id: 't3', x: 520, y: 232 },
+  { id: 't4', x: 185, y: 316 },
+  { id: 't5', x: 380, y: 320 },
 ];
 export const TABLE_R = 8;   // solid radius, px (src line 578)
 
 // --- Chef movement ---------------------------------------------------------
 export const CHEF = {
   r: 6,               // collision radius, px
-  speed: 78,          // px/s walk (the 2D game wants "brisk"; roadmap #2)
+  speed: 156,         // px/s — doubled: the bigger floor needs a chef who MOVES
 };
 
 // --- Service timing (ported: src lines 1348-1354) --------------------------

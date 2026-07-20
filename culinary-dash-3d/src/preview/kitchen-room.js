@@ -33,20 +33,20 @@ function localeWorld() {
     const m = new THREE.Mesh(new THREE.PlaneGeometry(w2, y1 - y0), flat(col));
     m.position.set(0, (y0 + y1) / 2, z); v.add(m); return m;
   };
-  const sky = wallQuad(90, -4.4, 14, 0x8fc9e8, -26);                  // sky, up past any aspect's view
-  const haze = wallQuad(90, -5.6, -4.4, 0xbfe3ea, -25.9);             // pale band at the horizon hand-off
-  const sea = wallQuad(90, -14, -5.6, 0x35839b, -25.9);               // distant sea below the horizon line
+  const sky = wallQuad(90, -4.9, 14, 0x8fc9e8, -26);                  // sky, up past any aspect's view
+  const haze = wallQuad(90, -6.1, -4.9, 0xbfe3ea, -25.9);             // pale band at the horizon hand-off
+  const sea = wallQuad(90, -14, -6.1, 0x35839b, -25.9);               // distant sea below the horizon line
   // the sun — a billboard in front of the flat; sinking below the far-sea shelf's
   // level hides it behind that shelf (the camera looks down over it)
   const sun = new THREE.Sprite(new THREE.SpriteMaterial({ color: 0xfff2cf, fog: false }));
-  sun.position.set(4, -3.2, -25.5); sun.scale.setScalar(2.4); v.add(sun);
+  sun.position.set(4, -4.2, -25.5); sun.scale.setScalar(2.4); v.add(sun);
   // island — a real mound ON the water (left window's view)
   const isl = new THREE.Mesh(new THREE.SphereGeometry(3, 18, 10), flat(0x86ad8c));
   isl.position.set(-7, -0.5, -9.5); isl.scale.set(1, 0.35, 0.6); v.add(isl);
   // the REAL ocean the diner floats on — a wide rectangle whose far edge is a
   // straight line parallel to the wall (this WAS the curved rim)
-  const ocean = new THREE.Mesh(new THREE.PlaneGeometry(90, 21), flat(0x3f97ad));
-  ocean.rotation.x = -Math.PI / 2; ocean.position.set(0, -0.45, -4.5); v.add(ocean);   // z -15 .. +6 (under the room too)
+  const ocean = new THREE.Mesh(new THREE.PlaneGeometry(90, 27), flat(0x3f97ad));
+  ocean.rotation.x = -Math.PI / 2; ocean.position.set(0, -0.45, -1.5); v.add(ocean);   // z -15 .. +12 (under the room too)
   // far sea shelf — a lower rectangle from the ocean's far edge out to the flat,
   // so looking down over the horizon shows deep water, never a void
   const seaFar = new THREE.Mesh(new THREE.PlaneGeometry(90, 11), flat(0x35839b));
@@ -89,7 +89,7 @@ function localeWorld() {
     [waves[1].material, C(0x5fb0c4), C(0x3f7a94)],
     [waves[2].material, C(0x2f7088), C(0x27556e)],
   ];
-  const SUN_TOP = -3.2, SUN_SET = -6.9;                               // sinks behind the sea shell by close
+  const SUN_TOP = -4.2, SUN_SET = -7.6;                               // sinks behind the sea shell by close
   // palms standing outside the windows — TWO crossed cards each, so they hold up
   // when the camera looks from the side instead of vanishing edge-on
   const palms = [];
@@ -124,8 +124,8 @@ function localeWorld() {
     const c1 = palmCard(s); p.add(c1);
     const c2 = palmCard(s); c2.rotation.y = Math.PI / 2; p.add(c2);
   };
-  palm(-7.5, -5.3, 3.4, false);   // outside the left window
-  palm(7.3, -5.4, 3.1, true);     // outside the right window
+  palm(-10.4, -7.8, 3.6, false);   // outside the left window
+  palm(10.2, -7.9, 3.3, true);     // outside the right window
   return {
     group: v,
     update(dt, t, day = 0) {
@@ -234,41 +234,41 @@ export function buildKitchen(scene) {
   const steamers = [];
 
   // floor + planks (roomier now that 2.5D lifts the size limit)
-  const floor = new THREE.Mesh(new THREE.BoxGeometry(19, 0.4, 12), mat(FLOOR, { rough: 0.85 }));
-  floor.position.set(0, -0.2, 0.5); floor.receiveShadow = true; g.add(floor);
-  for (let i = -9; i <= 9; i++) g.add(put(box(0.04, 0.01, 12, mat(0x5f3f22, { rough: 1 })), i * 1.05, 0.011, 0.5));
+  const floor = new THREE.Mesh(new THREE.BoxGeometry(28, 0.4, 17), mat(FLOOR, { rough: 0.85 }));
+  floor.position.set(0, -0.2, 0.6); floor.receiveShadow = true; g.add(floor);
+  for (let i = -13; i <= 13; i++) g.add(put(box(0.04, 0.01, 17, mat(0x5f3f22, { rough: 1 })), i * 1.05, 0.011, 0.6));
 
   // walls — the back wall has three real openings cut into it (bottom strip, top
   // strip, and piers between the windows) so all windows see one shared outside
   const wallMat = mat(WALL, { rough: 0.95 });
-  g.add(put(box(19, 2.25, 0.4, wallMat), 0, 0.725, -4.2));    // below the sills
-  g.add(put(box(19, 0.95, 0.4, wallMat), 0, 5.125, -4.2));    // above the windows
-  g.add(put(box(1.4, 2.8, 0.4, wallMat), -8.8, 3.25, -4.2));  // piers between openings
-  g.add(put(box(1.8, 2.8, 0.4, wallMat), -3.0, 3.25, -4.2));
-  g.add(put(box(1.8, 2.8, 0.4, wallMat), 3.0, 3.25, -4.2));
-  g.add(put(box(1.4, 2.8, 0.4, wallMat), 8.8, 3.25, -4.2));
-  g.add(put(box(0.4, 6, 12, wallMat), -9.4, 2.6, 0.5));
-  g.add(put(box(0.4, 6, 12, wallMat), 9.4, 2.6, 0.5));
-  g.add(put(box(19, 1.0, 0.5, mat(TEAL, { rough: 0.7 })), 0, 0.3, -4.15));
-  g.add(put(box(19, 0.12, 0.55, mat(BRASS, { metal: 0.6, rough: 0.4 })), 0, 0.85, -4.13));
+  g.add(put(box(28, 2.25, 0.4, wallMat), 0, 0.725, -6.4));    // below the sills
+  g.add(put(box(28, 0.95, 0.4, wallMat), 0, 5.125, -6.4));    // above the windows
+  g.add(put(box(2.3, 2.8, 0.4, wallMat), -12.85, 3.25, -6.4)); // piers between openings
+  g.add(put(box(2.1, 2.8, 0.4, wallMat), -4.25, 3.25, -6.4));
+  g.add(put(box(2.1, 2.8, 0.4, wallMat), 4.25, 3.25, -6.4));
+  g.add(put(box(2.3, 2.8, 0.4, wallMat), 12.85, 3.25, -6.4));
+  g.add(put(box(0.4, 6, 17, wallMat), -13.8, 2.6, 0.6));
+  g.add(put(box(0.4, 6, 17, wallMat), 13.8, 2.6, 0.6));
+  g.add(put(box(28, 1.0, 0.5, mat(TEAL, { rough: 0.7 })), 0, 0.3, -6.35));
+  g.add(put(box(28, 0.12, 0.55, mat(BRASS, { metal: 0.6, rough: 0.4 })), 0, 0.85, -6.33));
 
   // the shared tropical panorama behind the wall, seen through every opening
   const locale = localeWorld(); g.add(locale.group);
 
   // window frames over the openings
   const addWindow = (x, w, h) => {
-    const win = new THREE.Group(); win.position.set(x, 3.25, -4.0); g.add(win);
+    const win = new THREE.Group(); win.position.set(x, 3.25, -6.2); g.add(win);
     win.add(put(box(w + 0.3, 0.18, 0.24, mat(WOOD)), 0, h / 2, 0.08));            // top rail
     win.add(put(box(w + 0.3, 0.18, 0.24, mat(WOOD)), 0, -h / 2, 0.08));           // sill
     win.add(put(box(0.13, h, 0.24, mat(WOOD)), 0, 0, 0.08));                      // center mullion
     win.add(put(box(0.16, h, 0.24, mat(WOOD)), -w / 2, 0, 0.08));                 // side frames
     win.add(put(box(0.16, h, 0.24, mat(WOOD)), w / 2, 0, 0.08));
   };
-  addWindow(-6, 4.2, 2.8); addWindow(0, 4.2, 2.8); addWindow(6, 4.2, 2.8);
+  addWindow(-8.5, 6.4, 2.8); addWindow(0, 6.4, 2.8); addWindow(8.5, 6.4, 2.8);
 
   // the entry door on the right wall — where customers come in
   {
-    const door = new THREE.Group(); door.position.set(9.18, 0, 2.4); door.rotation.y = -Math.PI / 2; g.add(door);
+    const door = new THREE.Group(); door.position.set(13.58, 0, 3.2); door.rotation.y = -Math.PI / 2; g.add(door);
     door.add(put(box(1.7, 3.1, 0.22, mat(WOOD, { rough: 0.75 })), 0, 1.55, 0));                  // frame
     door.add(put(box(1.36, 2.8, 0.14, mat(TEAL, { rough: 0.6 })), 0, 1.4, 0.08));                // door panel
     const ring = new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.34, 0.04, 18), mat(BRASS, { metal: 0.6, rough: 0.4 }));
@@ -280,21 +280,21 @@ export function buildKitchen(scene) {
   }
 
   // back counter running behind the stations
-  const counter = put(box(18, 1.2, 0.7, mat(WOOD, { rough: 0.8 })), 0, 0.6, -3.5);
+  const counter = put(box(26, 1.2, 0.7, mat(WOOD, { rough: 0.8 })), 0, 0.6, -5.6);
   counter.castShadow = true; counter.receiveShadow = true; g.add(counter);
-  g.add(put(box(18.2, 0.12, 0.85, mat(CREAM, { rough: 0.5 })), 0, 1.25, -3.5));
+  g.add(put(box(26.2, 0.12, 0.85, mat(CREAM, { rough: 0.5 })), 0, 1.25, -5.6));
 
   // generative plants echoing the locale — big pots in the front corners, medium
   // ones by the counter ends, small ones up on the countertop
   const plants = [];
   const plantAt = (x, y, z, seed, s) => { const pl = pottedPlant(seed, s); pl.group.position.set(x, y, z); g.add(pl.group); plants.push(pl); };
-  plantAt(-8.5, 0, 2.4, 11, 1.3);   // (right side keeps the doorway clear)
-  plantAt(-8.55, 0, -2.5, 39, 0.9); plantAt(8.55, 0, -2.5, 53, 0.95);
-  plantAt(-8.5, 1.3, -3.5, 68, 0.45); plantAt(8.5, 1.3, -3.5, 81, 0.5);
+  plantAt(-12.9, 0, 3.6, 11, 1.3);   // (right side keeps the doorway clear)
+  plantAt(-12.9, 0, -3.8, 39, 0.9); plantAt(12.9, 0, -3.8, 53, 0.95);
+  plantAt(-12.4, 1.3, -5.6, 68, 0.45); plantAt(12.4, 1.3, -5.6, 81, 0.5);
   // and proper indoor trees along the side walls
   const treeAt = (x, z, seed, s) => { const tr = pottedTree(seed, s); tr.group.position.set(x, 0, z); g.add(tr.group); plants.push(tr); };
-  treeAt(-8.5, 0.4, 101, 1.15); treeAt(8.5, 0.4, 117, 1.05);
-  treeAt(-8.45, 4.2, 133, 1.25); treeAt(8.45, 4.2, 149, 1.2);
+  treeAt(-12.9, 0.2, 101, 1.15); treeAt(12.9, 0.6, 117, 1.05);
+  treeAt(-12.8, 6.2, 133, 1.25); treeAt(12.8, 6.4, 149, 1.2);
 
   // ---- stations at the sim's positions ----
   const stations = {};
@@ -313,8 +313,8 @@ export function buildKitchen(scene) {
 
   // ---- warm hanging lamps ----
   const lamps = [];
-  [-5.5, -1.8, 1.8, 5.5].forEach((x) => {
-    const lg = new THREE.Group(); lg.position.set(x, 4.3, 0.4); g.add(lg);
+  [-9, -3, 3, 9].forEach((x) => {
+    const lg = new THREE.Group(); lg.position.set(x, 4.3, 0.8); g.add(lg);
     lg.add(put(box(0.05, 1.3, 0.05, mat(0x2a2a2a)), 0, 0.65, 0));
     const shade = new THREE.Mesh(new THREE.ConeGeometry(0.52, 0.46, 16, 1, true), mat(BRASS, { metal: 0.5, rough: 0.5, emissive: 0x3a2a10, emi: 0.4 }));
     shade.rotation.x = Math.PI; lg.add(shade);
@@ -331,7 +331,7 @@ export function buildKitchen(scene) {
   key.position.set(5, 11, 6); key.castShadow = true;
   key.shadow.mapSize.set(RIM_LIGHT ? 2048 : 1024, RIM_LIGHT ? 2048 : 1024);
   key.shadow.camera.near = 1; key.shadow.camera.far = 40;
-  const S = 11; key.shadow.camera.left = -S; key.shadow.camera.right = S; key.shadow.camera.top = S; key.shadow.camera.bottom = -S;
+  const S = 16; key.shadow.camera.left = -S; key.shadow.camera.right = S; key.shadow.camera.top = S; key.shadow.camera.bottom = -S;
   key.shadow.bias = -0.0008; key.shadow.normalBias = 0.02; scene.add(key, key.target);
   const fill = new THREE.DirectionalLight(0xffe0b0, 0.32); fill.position.set(-4, 5, 9); scene.add(fill);   // gentle warm fill from camera side
   if (RIM_LIGHT) { const rim = new THREE.DirectionalLight(0x6d84ff, 0.95); rim.position.set(-6, 7, -9); scene.add(rim); }   // cold back rim → edge separation
