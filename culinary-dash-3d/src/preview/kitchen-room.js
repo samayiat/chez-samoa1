@@ -22,18 +22,32 @@ function localePanorama() {
   const flat = (col) => new THREE.MeshBasicMaterial({ color: col });
   const quad = (qw, qh, col, x, y, z) => { const m = new THREE.Mesh(new THREE.PlaneGeometry(qw, qh), flat(col)); m.position.set(x, y, z); v.add(m); return m; };
   const HZ = -0.15;                                              // horizon (local y)
-  quad(W, H, 0x8fc9e8, 0, 0, 0);                                 // sky
-  quad(W, 0.5, 0xbfe3ea, 0, HZ + 0.25, 0.001);                   // pale haze at the horizon
+  const sky = quad(W, H, 0x8fc9e8, 0, 0, 0);                     // sky
+  const haze = quad(W, 0.5, 0xbfe3ea, 0, HZ + 0.25, 0.001);      // pale haze at the horizon
   const sun = new THREE.Mesh(new THREE.CircleGeometry(0.34, 20), flat(0xfff2cf)); sun.position.set(1.3, 1.05, 0.002); v.add(sun);   // the ONE sun (center window)
   const isl = new THREE.Mesh(new THREE.CircleGeometry(1.15, 18, 0, Math.PI), flat(0x86ad8c)); isl.position.set(-5.6, HZ, 0.003); isl.scale.set(1, 0.4, 1); v.add(isl);   // island (left window)
-  quad(W, HZ + H / 2, 0x3f97ad, 0, (HZ - H / 2) / 2, 0.004);     // ocean up to the horizon
-  quad(0.9, HZ + H / 2, 0xcdeef0, 1.3, (HZ - H / 2) / 2, 0.0045); // sun glint on the water
+  const ocean = quad(W, HZ + H / 2, 0x3f97ad, 0, (HZ - H / 2) / 2, 0.004);     // ocean up to the horizon (in FRONT of the sun, so it sinks behind the water)
+  const glint = quad(0.9, HZ + H / 2, 0xcdeef0, 1.3, (HZ - H / 2) / 2, 0.0045); // sun glint on the water
   // wave bands — long light/dark strips that update() drifts sideways
   const waves = [
     quad(W + 2, 0.09, 0x59acc0, 0, HZ - 0.28, 0.005),
     quad(W + 2, 0.12, 0x357f95, 0, HZ - 0.8, 0.005),
     quad(W + 2, 0.15, 0x59acc0, 0, HZ - 1.45, 0.005),
   ];
+  // sunset grade — each material lerps noon -> dusk as the day runs out
+  const C = (h) => new THREE.Color(h);
+  const grade = [
+    [sky.material, C(0x8fc9e8), C(0xe8935a)],
+    [haze.material, C(0xbfe3ea), C(0xffc08a)],
+    [sun.material, C(0xfff2cf), C(0xff9e4a)],
+    [ocean.material, C(0x3f97ad), C(0x2f6480)],
+    [glint.material, C(0xcdeef0), C(0xffd9a0)],
+    [isl.material, C(0x86ad8c), C(0x5e7a66)],
+    [waves[0].material, C(0x59acc0), C(0x3f7a94)],
+    [waves[1].material, C(0x357f95), C(0x27556e)],
+    [waves[2].material, C(0x59acc0), C(0x3f7a94)],
+  ];
+  const SUN_TOP = 1.05, SUN_SET = HZ - 0.24;                     // half-sunk into the sea by close
   const palms = [];
   const palm = (px, s, flip) => {
     const p = new THREE.Group(); p.position.set(px, -H / 2 + 0.05, 0.01); p.scale.x = flip ? -1 : 1; v.add(p); palms.push(p);
@@ -69,11 +83,18 @@ function localePanorama() {
   palm(7.3, 2.4, true);     // right window
   return {
     group: v,
-    update(dt, t) {
+    update(dt, t, day = 0) {
       for (let i = 0; i < waves.length; i++) waves[i].position.x = Math.sin(t * (0.22 + i * 0.09) + i * 2.1) * 0.5;   // bands slide at offset rates
       for (let i = 0; i < palms.length; i++) palms[i].rotation.z = Math.sin(t * 0.5 + i * 1.7) * 0.02;                 // breeze in the fronds
       v.position.y = BASE_Y + Math.sin(t * 0.42) * 0.06;          // the world bobs against the frames...
       v.rotation.z = Math.sin(t * 0.27 + 1) * 0.007;              // ...and rolls a touch — we're afloat
+      // the sun sets as the day runs out: noon for the first third, then it slides
+      // down and half-sinks behind the water while the whole view grades warm
+      let k = Math.min(1, Math.max(0, (day - 0.3) / 0.65));
+      k = k * k * (3 - 2 * k);                                    // smoothstep
+      for (const [m, a, b] of grade) m.color.copy(a).lerp(b, k);
+      sun.position.y = SUN_TOP + (SUN_SET - SUN_TOP) * k;
+      sun.scale.setScalar(1 + 0.4 * k);                           // the low sun looms bigger
     },
   };
 }
@@ -162,11 +183,11 @@ export function buildKitchen(scene) {
 
   return {
     stations, tables,
-    update(dt, t) {
+    update(dt, t, day) {
       for (const s of steamers) s.update(dt, t);
       for (let i = 0; i < lamps.length; i++) lamps[i].rotation.z = Math.sin(t * 0.7 + i) * 0.02;
       for (const id in stations) stations[id].tickAnim(dt, t);
-      locale.update(dt, t);
+      locale.update(dt, t, day);
     },
   };
 }

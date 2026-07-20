@@ -71,7 +71,7 @@ function boot() {
 
   lastT = performance.now() / 1000;
   startLoop({ tick, render });
-  window.__kitchen = { state, stepSim, scene, chef, camera, THREE };
+  window.__kitchen = { state, stepSim, scene, chef, camera, THREE, setDay: (v) => { dayT = v; } };
 }
 // createState wants a seed; avoid Date.now() being unavailable in some sandboxes
 function Date_now_safe() { try { return Date.now(); } catch (e) { return 12345; } }
@@ -95,7 +95,7 @@ function tick(dt) {
 function render(alpha, now) {
   const t = now / 1000; const rdt = Math.min(0.05, t - lastT); lastT = t;
   if (state) syncScene(rdt, t);
-  kitchen && kitchen.update(rdt, t);
+  kitchen && kitchen.update(rdt, t, 1 - Math.max(0, dayT) / 80);   // third arg: day progress 0..1 (drives the sunset)
   updateHud();
   composer.render();
 }
