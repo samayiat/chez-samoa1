@@ -11,6 +11,35 @@ import { rpos } from './kitchen-space.js';
 const FLOOR = 0x8a5a34, WALL = 0xcaa47a, WOOD = 0x6e4526, CREAM = 0xe7d8b8;
 const TEAL = 0x2f6e66, BRASS = 0xb8912f, STEEL = 0x8a9098;
 
+// The locale outside the windows — a warm tropical view (sky, sun, an island on
+// the horizon, ocean, and palm silhouettes), built from FLAT-COLOURED GEOMETRY
+// rather than a texture. That keeps it on-style with the rest of the (textureless)
+// art and, unlike a textured plane at a grazing angle, it never moirés.
+function localeView(w, h) {
+  const v = new THREE.Group();
+  const flat = (col) => new THREE.MeshBasicMaterial({ color: col });
+  const quad = (qw, qh, col, x, y, z) => { const m = new THREE.Mesh(new THREE.PlaneGeometry(qw, qh), flat(col)); m.position.set(x, y, z); v.add(m); return m; };
+  const HZ = -h * 0.06;                                          // horizon line (y)
+  quad(w, h, 0x8fc9e8, 0, 0, 0);                                 // sky
+  quad(w, h * 0.14, 0xbfe3ea, 0, HZ + h * 0.07, 0.001);          // pale haze at the horizon
+  const sun = new THREE.Mesh(new THREE.CircleGeometry(h * 0.09, 20), flat(0xfff2cf)); sun.position.set(w * 0.26, h * 0.26, 0.002); v.add(sun);
+  const isl = new THREE.Mesh(new THREE.CircleGeometry(h * 0.3, 18, 0, Math.PI), flat(0x86ad8c)); isl.position.set(-w * 0.18, HZ, 0.003); isl.scale.set(1, 0.42, 1); v.add(isl);
+  quad(w, h * 0.44 + h * 0.06, 0x3f97ad, 0, HZ - (h * 0.44) / 2, 0.004);   // ocean (up to the horizon)
+  quad(w * 0.05, h * 0.42, 0xcdeef0, w * 0.2, HZ - h * 0.2, 0.005);        // sun glint on the water
+  const palm = (px, s, flip) => {
+    const p = new THREE.Group(); p.position.set(px, -h * 0.5, 0.01); p.scale.x = flip ? -1 : 1; v.add(p);
+    const trunk = new THREE.Mesh(new THREE.PlaneGeometry(s * 0.075, s), flat(0x33422c)); trunk.position.set(-s * 0.03, s * 0.5, 0); trunk.rotation.z = -0.16; p.add(trunk);
+    const top = -s * 0.08;                                          // trunk top x
+    for (const a of [0.45, 1.0, 1.571, 2.14, 2.69]) {               // fronds fan UP into a canopy
+      const f = new THREE.Mesh(new THREE.PlaneGeometry(s * 0.5, s * 0.12), flat(0x2b3a26));
+      f.position.set(top + Math.cos(a) * s * 0.24, s + Math.sin(a) * s * 0.22, 0.001); f.rotation.z = a; p.add(f);
+    }
+  };
+  palm(-w * 0.3, h * 0.62, false);
+  palm(w * 0.34, h * 0.5, true);
+  return v;
+}
+
 export function buildKitchen(scene) {
   const g = new THREE.Group(); scene.add(g);
   const steamers = [];
@@ -28,12 +57,18 @@ export function buildKitchen(scene) {
   g.add(put(box(19, 1.0, 0.5, mat(TEAL, { rough: 0.7 })), 0, 0.3, -4.15));
   g.add(put(box(19, 0.12, 0.55, mat(BRASS, { metal: 0.6, rough: 0.4 })), 0, 0.85, -4.13));
 
-  // window (daylight)
-  const win = new THREE.Group(); win.position.set(-6.8, 3.1, -4.0); g.add(win);
-  win.add(put(box(3, 2.2, 0.1, mat(0xffe6b0, { emissive: 0xffdf9c, emi: 1.1 })), 0, 0, 0));
-  win.add(put(box(3.3, 0.16, 0.24, mat(WOOD)), 0, 1.1, 0.08));
-  win.add(put(box(3.3, 0.16, 0.24, mat(WOOD)), 0, -1.1, 0.08));
-  win.add(put(box(0.14, 2.2, 0.24, mat(WOOD)), 0, 0, 0.08));
+  // big windows looking out onto the locale (daylight) — the tropical view is a
+  // little flat-geometry diorama set in the opening, always bright like outside.
+  const addWindow = (x, w, h) => {
+    const win = new THREE.Group(); win.position.set(x, 3.25, -4.0); g.add(win);
+    const view = localeView(w, h); win.add(view);                                 // the outside view
+    win.add(put(box(w + 0.3, 0.18, 0.24, mat(WOOD)), 0, h / 2, 0.08));            // top rail
+    win.add(put(box(w + 0.3, 0.18, 0.24, mat(WOOD)), 0, -h / 2, 0.08));           // sill
+    win.add(put(box(0.13, h, 0.24, mat(WOOD)), 0, 0, 0.08));                      // center mullion
+    win.add(put(box(0.16, h, 0.24, mat(WOOD)), -w / 2, 0, 0.08));                 // side frames
+    win.add(put(box(0.16, h, 0.24, mat(WOOD)), w / 2, 0, 0.08));
+  };
+  addWindow(-6, 4.2, 2.8); addWindow(0, 4.2, 2.8); addWindow(6, 4.2, 2.8);
 
   // back counter running behind the stations
   const counter = put(box(18, 1.2, 0.7, mat(WOOD, { rough: 0.8 })), 0, 0.6, -3.5);
