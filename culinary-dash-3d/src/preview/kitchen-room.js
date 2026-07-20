@@ -135,6 +135,49 @@ function pottedPlant(seed, s = 1) {
   return { group: p, fol };
 }
 
+// A potted indoor tree — the tall sibling of pottedPlant: a big pot, a leaning
+// segmented trunk, and a crown of long arching fronds. Same seeded variation.
+function pottedTree(seed, s = 1) {
+  let st = (seed >>> 0) || 1;
+  const rnd = () => ((st = (st * 1664525 + 1013904223) >>> 0) / 4294967296);
+  const p = new THREE.Group();
+  const GREENS = [0x3f7a3a, 0x4f8f46, 0x2e6b34, 0x63a04f];
+  const pot = new THREE.Mesh(new THREE.CylinderGeometry(0.38 * s, 0.3 * s, 0.5 * s, 10), mat(0xa4593a, { flat: true, rough: 0.8 }));
+  pot.position.y = 0.25 * s; pot.castShadow = true; p.add(pot);
+  p.add(put(new THREE.Mesh(new THREE.CylinderGeometry(0.41 * s, 0.39 * s, 0.1 * s, 10), mat(0xb26443, { flat: true, rough: 0.8 })), 0, 0.5 * s, 0));
+  p.add(put(new THREE.Mesh(new THREE.CylinderGeometry(0.34 * s, 0.34 * s, 0.06 * s, 10), mat(0x2e2018, { rough: 1 })), 0, 0.53 * s, 0));
+  // leaning, segmented trunk — each segment tips a little further over
+  const trunkMat = mat(0x7a5a38, { flat: true, rough: 0.85 });
+  const lean = (rnd() - 0.5) * 0.3;
+  const segs = 3 + Math.floor(rnd() * 2), segH = 0.5 * s;
+  let parent = p, py = 0.5 * s;
+  for (let i = 0; i < segs; i++) {
+    const seg = new THREE.Group(); seg.position.y = py; seg.rotation.z = lean * (0.5 + rnd() * 0.9); parent.add(seg);
+    const r0 = (0.1 - i * 0.015) * s, r1 = (0.085 - i * 0.015) * s;
+    const trunk = new THREE.Mesh(new THREE.CylinderGeometry(r1, r0, segH, 8), trunkMat);
+    trunk.position.y = segH / 2; trunk.castShadow = true; seg.add(trunk);
+    parent = seg; py = segH;
+  }
+  // crown of long arching fronds at the top of the trunk
+  const fol = new THREE.Group(); fol.position.y = segH; parent.add(fol);
+  const n = 7 + Math.floor(rnd() * 3);
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * Math.PI * 2 + rnd() * 0.6;
+    const lm = mat(GREENS[Math.floor(rnd() * GREENS.length)], { flat: true, rough: 0.85 });
+    lm.side = THREE.DoubleSide;
+    const len = s * (0.85 + rnd() * 0.5), wid = s * (0.15 + rnd() * 0.06), bend = 0.7 + rnd() * 0.35;
+    const sh = new THREE.Shape();
+    sh.moveTo(0, 0);
+    sh.quadraticCurveTo(bend * len * 0.6, len * 0.55, bend * len, len * (1 - bend * 0.45));   // arcs hard outward
+    sh.quadraticCurveTo(bend * len * 0.55 + wid, len * 0.45, wid * 0.7, 0);
+    sh.closePath();
+    const leaf = new THREE.Mesh(new THREE.ShapeGeometry(sh), lm);
+    leaf.castShadow = true; leaf.rotation.y = a;
+    fol.add(leaf);
+  }
+  return { group: p, fol };
+}
+
 export function buildKitchen(scene) {
   const g = new THREE.Group(); scene.add(g);
   const steamers = [];
@@ -184,6 +227,10 @@ export function buildKitchen(scene) {
   plantAt(-8.5, 0, 2.4, 11, 1.3); plantAt(8.5, 0, 2.4, 27, 1.2);
   plantAt(-8.55, 0, -2.5, 39, 0.9); plantAt(8.55, 0, -2.5, 53, 0.95);
   plantAt(-8.5, 1.3, -3.5, 68, 0.45); plantAt(8.5, 1.3, -3.5, 81, 0.5);
+  // and proper indoor trees along the side walls
+  const treeAt = (x, z, seed, s) => { const tr = pottedTree(seed, s); tr.group.position.set(x, 0, z); g.add(tr.group); plants.push(tr); };
+  treeAt(-8.5, 0.4, 101, 1.15); treeAt(8.5, 0.4, 117, 1.05);
+  treeAt(-8.45, 4.2, 133, 1.25); treeAt(8.45, 4.2, 149, 1.2);
 
   // ---- stations at the sim's positions ----
   const stations = {};
