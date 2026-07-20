@@ -17,6 +17,7 @@ import { STATIONS, DISHES, COMBAT } from '../sim/data.js';
 import { rpos } from './kitchen-space.js';
 import { buildKitchen } from './kitchen-room.js';
 import { createCustomers, DISH_COLOR } from './kitchen-customers.js';
+import { createCats } from './kitchen-cats.js';
 import { buildChef } from './chef.js';
 import { carriedModel } from './food.js';
 import { lerp, smooth, clamp01, mat, box, put } from './util.js';
@@ -30,7 +31,7 @@ const H = {
   end: document.getElementById('dayend'),
 };
 
-let renderer, scene, camera, kitchen, customers, chef, cu, carry, composer, booted = false, lastT = 0;
+let renderer, scene, camera, kitchen, customers, cats, chef, cu, carry, composer, booted = false, lastT = 0;
 let state, walkPhase = 0, facing = Math.PI, dayT = 80, ended = 0, workBurst = 0, lastCarryKey = null;
 const stationDef = Object.fromEntries(STATIONS.map((s) => [s.id, s]));
 
@@ -58,6 +59,7 @@ function boot() {
   state = createState((Date_now_safe() & 0x7fffffff) || 12345);
   kitchen = buildKitchen(scene);
   customers = createCustomers(scene, kitchen.tables);
+  cats = createCats(scene);
   const male = /[?&]chef=male/.test(location.search);   // ?chef=male shows the male chef
   chef = buildChef({ male }); scene.add(chef); cu = chef.userData;
 
@@ -97,6 +99,7 @@ function render(alpha, now) {
   const t = now / 1000; const rdt = Math.min(0.05, t - lastT); lastT = t;
   if (state) syncScene(rdt, t);
   kitchen && kitchen.update(rdt, t, 1 - Math.max(0, dayT) / 80);   // third arg: day progress 0..1 (drives the sunset)
+  cats && cats.update(rdt, t);
   updateHud();
   composer.render();
 }
@@ -188,6 +191,8 @@ function syncScene(dt, t) {
       const done = chopping && st.t >= s.cut;
       ref.setCook(chopping, chopping ? clamp01(st.t / s.cut) : 0, done ? 'perfect' : 'raw');
       ref.setPlated(done);
+    } else if (s.kind === 'pass') {
+      ref.setSlots(state.stations[s.id]?.slots || []);
     }
   }
 

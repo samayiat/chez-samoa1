@@ -8,7 +8,7 @@
 // lives on the state.
 
 import {
-  DISHES, MENU, STATIONS, TABLES, PASS,
+  DISHES, MENU, STATIONS, TABLES,
   HEARTS_MAX, PATIENCE_DRAIN, SPEED_TIP_MAX, SPEED_TIP_WINDOW, ORDER_INTERVAL,
   COMBAT,
 } from './data.js';
@@ -25,6 +25,7 @@ export function initService(state) {
   for (const s of STATIONS) {
     if (s.kind === 'timing') state.stations[s.id] = { cooking: false, t: 0, plated: false, quality: null };
     else if (s.kind === 'prep') state.stations[s.id] = { chopping: false, t: 0 };
+    else if (s.kind === 'pass') state.stations[s.id] = { slots: [] };
   }
   state.msg = '';       // brief feedback line for the HUD
   state.msgT = 0;
@@ -48,7 +49,9 @@ function spawnCustomer(state) {
   state.customers.push({
     id: 'c' + Math.floor(range(state.rng, 1, 1e9)),
     table: table.id, x: table.x, y: table.y,
-    dish, hearts: HEARTS_MAX, orderAge: 0, state: 'waiting',
+    // they read the menu first — patience only starts draining once they order
+    dish, hearts: HEARTS_MAX, orderAge: 0, state: 'reading',
+    readT: range(state.rng, 2.2, 3.8),
     leaveT: 0,
   });
 }
@@ -78,6 +81,20 @@ function interact(state) {
   }
 
   if (!near) return;
+
+  // 1b) the pass: set a carried item down, or pick the last one back up
+  if (near.kind === 'pass') {
+    const st = state.stations[near.id];
+    if (chef.carrying) {
+      if (st.slots.length >= near.slots) { flash(state, 'the pass is full'); return; }
+      st.slots.push(chef.carrying); chef.carrying = null;
+      flash(state, 'set it down on the pass'); cue(state, 'plate');
+    } else if (st.slots.length) {
+      chef.carrying = st.slots.pop();
+      flash(state, 'picked up from the pass'); cue(state, 'grab');
+    }
+    return;
+  }
 
   // 2) source station (icebox): pick up the raw ingredient to carry
   if (near.kind === 'source') {
@@ -191,7 +208,10 @@ export function updateService(state, dt, input) {
 
   // patience + departures
   for (const c of state.customers) {
-    if (c.state === 'waiting') {
+    if (c.state === 'reading') {
+      c.readT -= dt;
+      if (c.readT <= 0) { c.state = 'waiting'; cue(state, 'order'); }
+    } else if (c.state === 'waiting') {
       c.orderAge += dt;
       c.hearts -= PATIENCE_DRAIN * dt;
       if (c.hearts <= 0) {
@@ -204,7 +224,7 @@ export function updateService(state, dt, input) {
       c.leaveT -= dt;
     }
   }
-  state.customers = state.customers.filter((c) => !(c.state !== 'waiting' && c.leaveT <= 0));
+  state.customers = state.customers.filter((c) => !((c.state === 'served' || c.state === 'leaving') && c.leaveT <= 0));
 
   if (input.primaryDown) interact(state);
 

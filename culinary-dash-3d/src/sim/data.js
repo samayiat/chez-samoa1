@@ -40,10 +40,9 @@ export const STATIONS = [
   { id: 'icebox',   x: 248, y: 52, kind: 'source',   starts: 'lobster' },
   { id: 'pot',      x: 300, y: 52, kind: 'timing',   dish: 'lobster', verb: 'boil', cook: 3.4, green: 1.9 },
   { id: 'bar',      x: 352, y: 52, kind: 'assemble', dishes: ['whiskey-sour', 'gin-sour'] },
+  // the pass: a counter mid-floor where carried items can be set down + picked up
+  { id: 'pass',     x: 200, y: 96, kind: 'pass', slots: 3 },
 ];
-
-// The pass: where plated dishes wait to be served.
-export const PASS = { x: 200, y: 120 };
 
 // Dining tables — a roomier six-top floor now that 2.5D lifts the size limit.
 export const TABLES = [

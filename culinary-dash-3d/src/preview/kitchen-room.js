@@ -7,6 +7,7 @@ import { mat, box, put, lerp, clamp01 } from './util.js';
 import { RIM_LIGHT } from '../engine/quality.js';
 import { STATIONS, TABLES } from '../sim/data.js';
 import { rpos } from './kitchen-space.js';
+import { carriedModel } from './food.js';
 
 const FLOOR = 0x8a5a34, WALL = 0xcaa47a, WOOD = 0x6e4526, CREAM = 0xe7d8b8;
 const TEAL = 0x2f6e66, BRASS = 0xb8912f, STEEL = 0x8a9098;
@@ -265,6 +266,19 @@ export function buildKitchen(scene) {
   };
   addWindow(-6, 4.2, 2.8); addWindow(0, 4.2, 2.8); addWindow(6, 4.2, 2.8);
 
+  // the entry door on the right wall — where customers come in
+  {
+    const door = new THREE.Group(); door.position.set(9.18, 0, 2.4); door.rotation.y = -Math.PI / 2; g.add(door);
+    door.add(put(box(1.7, 3.1, 0.22, mat(WOOD, { rough: 0.75 })), 0, 1.55, 0));                  // frame
+    door.add(put(box(1.36, 2.8, 0.14, mat(TEAL, { rough: 0.6 })), 0, 1.4, 0.08));                // door panel
+    const ring = new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.34, 0.04, 18), mat(BRASS, { metal: 0.6, rough: 0.4 }));
+    ring.rotation.x = Math.PI / 2; ring.position.set(0, 1.9, 0.12); door.add(ring);              // brass rim
+    const port = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.28, 0.06, 18), mat(0xbfe0ef, { rough: 0.3, emissive: 0x2a4a5a, emi: 0.4 }));
+    port.rotation.x = Math.PI / 2; port.position.set(0, 1.9, 0.13); door.add(port);              // porthole window
+    door.add(put(box(0.08, 0.3, 0.08, mat(BRASS, { metal: 0.6, rough: 0.4 })), -0.52, 1.35, 0.16)); // handle
+    door.add(put(box(1.9, 0.12, 0.7, mat(0x6a4526, { rough: 0.8 })), 0, 0.03, 0.2));             // threshold mat
+  }
+
   // back counter running behind the stations
   const counter = put(box(18, 1.2, 0.7, mat(WOOD, { rough: 0.8 })), 0, 0.6, -3.5);
   counter.castShadow = true; counter.receiveShadow = true; g.add(counter);
@@ -274,7 +288,7 @@ export function buildKitchen(scene) {
   // ones by the counter ends, small ones up on the countertop
   const plants = [];
   const plantAt = (x, y, z, seed, s) => { const pl = pottedPlant(seed, s); pl.group.position.set(x, y, z); g.add(pl.group); plants.push(pl); };
-  plantAt(-8.5, 0, 2.4, 11, 1.3); plantAt(8.5, 0, 2.4, 27, 1.2);
+  plantAt(-8.5, 0, 2.4, 11, 1.3);   // (right side keeps the doorway clear)
   plantAt(-8.55, 0, -2.5, 39, 0.9); plantAt(8.55, 0, -2.5, 53, 0.95);
   plantAt(-8.5, 1.3, -3.5, 68, 0.45); plantAt(8.5, 1.3, -3.5, 81, 0.5);
   // and proper indoor trees along the side walls
@@ -364,7 +378,21 @@ function buildStation(g, x, z, def, steamers) {
     s.add(put(new THREE.Mesh(new THREE.SphereGeometry(0.1, 8, 6), mat(0xc23a2a, { rough: 0.7 })), 0.3, 1.5, 0));
   } else if (def.id === 'bar') {
     for (let i = 0; i < 4; i++) s.add(put(new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.09, 0.42, 10), mat([0x2f6e66, 0xb8912f, 0x8a2f3f, 0x3a5f8a][i], { metal: 0.3, rough: 0.4 })), -0.45 + i * 0.3, 1.6, 0));
+  } else if (def.kind === 'pass') {
+    // the pass — a warm wooden counter with brass heat lamps; dishes wait here
+    body.material = mat(WOOD, { rough: 0.7 });
+    body.scale.set(1.2, 0.85, 1); body.position.y = 0.55;
+    s.add(put(box(1.9, 0.09, 1.0, mat(CREAM, { rough: 0.5 })), 0, 1.18, 0));
+    for (const lx of [-0.55, 0.55]) {
+      s.add(put(box(0.05, 0.9, 0.05, mat(BRASS, { metal: 0.6, rough: 0.4 })), lx, 1.65, -0.4));
+      const sh = new THREE.Mesh(new THREE.ConeGeometry(0.2, 0.18, 12, 1, true), mat(BRASS, { metal: 0.5, rough: 0.5, emissive: 0x3a2a10, emi: 0.5 }));
+      sh.position.set(lx, 2.06, -0.15); sh.rotation.x = 0.5; s.add(sh);
+      s.add(put(new THREE.Mesh(new THREE.SphereGeometry(0.07, 10, 6), mat(0xfff0c8, { emissive: 0xffcf8a, emi: 2 })), lx, 2.0, -0.1));
+    }
   }
+  // slot anchors on the pass top — setSlots() parks the waiting dish models here
+  const slotGroup = new THREE.Group(); slotGroup.position.y = 1.24; s.add(slotGroup);
+  let lastSlotsKey = null;
 
   // floating indicator: a bar that fills while cooking (green window = green,
   // overcooked = red), or a "ready" dish once plated.
@@ -389,6 +417,18 @@ function buildStation(g, x, z, def, steamers) {
     },
     setPlated(on) { ready.visible = on; },
     setNear(on) { nearT = on ? 1 : 0; },
+    // items waiting on the pass — rebuilt only when the set changes
+    setSlots(items) {
+      const key = items.map((it) => it.kind + ':' + it.dish).join('|');
+      if (key === lastSlotsKey) return;
+      lastSlotsKey = key;
+      slotGroup.clear();
+      items.forEach((it, i) => {
+        const m = carriedModel(it); m.scale.setScalar(0.8);
+        m.position.x = (i - (items.length - 1) / 2) * 0.62;
+        slotGroup.add(m);
+      });
+    },
     tickAnim(dt, t) {
       if (glow) glow.intensity = lerp(glow.intensity, glowT * 2.2, 1 - Math.exp(-8 * dt));
       ring.visible = nearT > 0.02;

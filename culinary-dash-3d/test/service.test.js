@@ -87,6 +87,46 @@ describe('service loop', () => {
     expect(s.chef.carrying).toBe(null);
   });
 
+  it('sets a dish down on the pass and picks it back up', () => {
+    teleport(s, 'icebox');
+    press(s);                               // grab raw lobster
+    expect(s.chef.carrying?.kind).toBe('raw');
+    teleport(s, 'pass');
+    press(s);                               // set it down
+    expect(s.chef.carrying).toBe(null);
+    expect(s.stations.pass.slots.length).toBe(1);
+    press(s);                               // pick it back up
+    expect(s.chef.carrying?.kind).toBe('raw');
+    expect(s.stations.pass.slots.length).toBe(0);
+  });
+
+  it('refuses a fourth item when the pass is full', () => {
+    teleport(s, 'pass');
+    for (let i = 0; i < 3; i++) {
+      s.chef.carrying = { kind: 'dish', dish: 'karaage', cooked: true, quality: 'perfect' };
+      press(s);
+    }
+    expect(s.stations.pass.slots.length).toBe(3);
+    s.chef.carrying = { kind: 'dish', dish: 'salad', cooked: true, quality: 'perfect' };
+    press(s);                               // full -> refused, still carrying
+    expect(s.stations.pass.slots.length).toBe(3);
+    expect(s.chef.carrying?.dish).toBe('salad');
+  });
+
+  it('customers read the menu first — patience only drains once they order', () => {
+    s.nextSpawn = 0.01;
+    idle(s, 0.1);                           // spawn
+    expect(s.customers.length).toBe(1);
+    const c = s.customers[0];
+    expect(c.state).toBe('reading');
+    idle(s, 1.0);                           // still reading (readT >= 2.2)
+    expect(c.state).toBe('reading');
+    expect(c.hearts).toBe(3);               // no patience drain while deciding
+    idle(s, 4.0);                           // past any readT
+    expect(c.state).toBe('waiting');
+    expect(c.hearts).toBeLessThan(3);       // now the clock runs
+  });
+
   it('counts a walkout as a bad order when patience runs out', () => {
     seat(s, 'salad');
     const before = s.badOrders;

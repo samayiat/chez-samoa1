@@ -14,6 +14,8 @@ export const DISH_COLOR = {
   'whiskey-sour': 0xc8913a, 'gin-sour': 0xbfd6e0,
 };
 const hash = (s) => { let h = 0; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0; return Math.abs(h); };
+const DOOR = { x: 8.9, z: 2.4 };          // where the entry door opens (kitchen-room)
+const ENTER_T = 1.1;                      // seconds to walk from the door to the seat
 
 export function createCustomers(scene, tables) {
   const group = new THREE.Group(); scene.add(group);
@@ -24,7 +26,8 @@ export function createCustomers(scene, tables) {
     const skin = SKINS[seed % SKINS.length], top = TOPS[(seed * 3) % TOPS.length], hair = HAIRS[seed % HAIRS.length];
     const tpos = tables[c.table] || { x: 0, z: 0 };
     const m = new THREE.Group();
-    m.position.set(tpos.x, 0, tpos.z - 0.85);   // back chair, facing the camera
+    const seatPos = { x: tpos.x, z: tpos.z - 0.85 };            // back chair, facing the camera
+    m.position.set(DOOR.x, 0, DOOR.z);                          // they come in through the door
     group.add(m);
 
     // Diners share the chef's form vocabulary — tapered cylinder limbs, rounded
@@ -74,6 +77,13 @@ export function createCustomers(scene, tables) {
       elbow.add(put(ball(0.065, skinMat), 0, -0.27, 0));                   // hand
     }
 
+    // the menu — a little card held up in front while they decide what to order
+    const menu = new THREE.Group(); menu.position.set(0, 1.02, 0.5); menu.rotation.x = -0.45; m.add(menu);
+    menu.add(put(box(0.4, 0.52, 0.02, mat(0xf4eee2, { rough: 0.7 })), 0, 0, 0));               // card
+    menu.add(put(box(0.3, 0.07, 0.022, mat(0xc23a2a, { rough: 0.6 })), 0, 0.17, 0.005));       // title strip
+    for (let li = 0; li < 3; li++) menu.add(put(box(0.28, 0.028, 0.022, mat(0x6b5a48, { rough: 0.8 })), 0, 0.05 - li * 0.09, 0.005));  // menu lines
+    menu.visible = false;
+
     // order icon — the 2D game's pixel sprite for the dish, a static billboard
     const bubble = new THREE.Group(); bubble.position.set(0, 2.2, 0.1); m.add(bubble);
     const icon = new THREE.Sprite(dishSpriteMaterial(c.dish)); icon.scale.set(0.95, 0.95, 1); bubble.add(icon);
@@ -82,7 +92,7 @@ export function createCustomers(scene, tables) {
     const barBg = put(box(0.54, 0.07, 0.03, mat(0x201811, { rough: 0.9 })), 0, -0.6, 0); bubble.add(barBg);
     const bar = put(box(0.52, 0.05, 0.05, mat(0x8be27a)), 0, -0.6, 0.02); bubble.add(bar);
 
-    return { mesh: m, torso, head, bubble, bar, seed, servedT: 0 };
+    return { mesh: m, torso, head, bubble, bar, menu, seed, servedT: 0, seatPos, enter: 0 };
   }
 
   function sync(state, dt, t) {
@@ -98,6 +108,20 @@ export function createCustomers(scene, tables) {
       e.bar.scale.x = Math.max(0.03, h);
       e.bar.position.x = -0.24 * (1 - h);
       e.bar.material.color.setHSL(0.33 * h, 0.85, 0.5);   // green -> red
+      // walking in from the door: travel to the seat with a little step-bounce,
+      // facing along the walk, then settle into the chair facing the camera
+      if (e.enter < 1) {
+        e.enter = Math.min(1, e.enter + dt / ENTER_T);
+        const k = e.enter * e.enter * (3 - 2 * e.enter);
+        const x = lerp(DOOR.x, e.seatPos.x, k), z = lerp(DOOR.z, e.seatPos.z, k);
+        e.mesh.position.set(x, Math.abs(Math.sin(e.enter * Math.PI * 5)) * 0.07, z);
+        const face = Math.atan2(e.seatPos.x - DOOR.x, e.seatPos.z - DOOR.z);
+        e.mesh.rotation.y = e.enter < 0.85 ? face : lerp(face, 0, (e.enter - 0.85) / 0.15);
+        e.bubble.visible = false; e.menu.visible = false;
+        continue;
+      }
+      e.mesh.rotation.y = 0;
+      e.menu.visible = c.state === 'reading';             // deciding what to have
       e.bubble.visible = waiting;   // static icon — no bob
       // leaving: slump + a red flash; served: a happy little bounce
       if (c.state === 'served') { e.servedT += dt; e.mesh.position.y = Math.abs(Math.sin(e.servedT * 12)) * 0.12; e.torso.material.emissive.setRGB(0, 0.15, 0); }
