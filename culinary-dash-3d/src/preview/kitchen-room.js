@@ -37,11 +37,11 @@ function localePanorama() {
   // sunset grade — each material lerps noon -> dusk as the day runs out
   const C = (h) => new THREE.Color(h);
   const grade = [
-    [sky.material, C(0x8fc9e8), C(0xe8935a)],
-    [haze.material, C(0xbfe3ea), C(0xffc08a)],
-    [sun.material, C(0xfff2cf), C(0xff9e4a)],
-    [ocean.material, C(0x3f97ad), C(0x2f6480)],
-    [glint.material, C(0xcdeef0), C(0xffd9a0)],
+    [sky.material, C(0x8fc9e8), C(0xef8a70)],   // late day goes pinkish orange
+    [haze.material, C(0xbfe3ea), C(0xffb39c)],
+    [sun.material, C(0xfff2cf), C(0xff9260)],
+    [ocean.material, C(0x3f97ad), C(0x3d5f88)], // deep with a violet cast under the pink sky
+    [glint.material, C(0xcdeef0), C(0xffbfa4)],
     [isl.material, C(0x86ad8c), C(0x5e7a66)],
     [waves[0].material, C(0x59acc0), C(0x3f7a94)],
     [waves[1].material, C(0x357f95), C(0x27556e)],
