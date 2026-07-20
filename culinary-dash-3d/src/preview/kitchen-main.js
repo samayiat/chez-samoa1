@@ -57,7 +57,8 @@ function boot() {
   state = createState((Date_now_safe() & 0x7fffffff) || 12345);
   kitchen = buildKitchen(scene);
   customers = createCustomers(scene, kitchen.tables);
-  chef = buildChef(); scene.add(chef); cu = chef.userData;
+  const male = /[?&]chef=male/.test(location.search);   // ?chef=male shows the male chef
+  chef = buildChef({ male }); scene.add(chef); cu = chef.userData;
 
   // what the chef carries — the real dish/ingredient model, swapped when it changes
   carry = new THREE.Group();

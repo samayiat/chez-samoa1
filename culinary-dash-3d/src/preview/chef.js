@@ -19,6 +19,7 @@ const SKIN = 0x7a4328;     // dark brown (#703020)
 const HAIR = 0x17110d;     // dark braided hair
 const TROUSER = 0x2a1f18;  // dark leggings under the skirt
 const HAT = 0xf1efe6;      // cream toque (#f0f0f0)
+const MALE_TOP = 0x356b7a; // the male chef's deep teal top (distinct from her mauve)
 
 // rounded low-poly primitives — a tapered limb (cyl) and a joint/cap (ball).
 // Soft, faceted forms so the body reads as a body, not a stack of blocks.
@@ -32,7 +33,9 @@ const COMBO = [
   { side: 'R', dur: 0.38, reach: 2.1, w: 1.9, lunge: 0.7 },  // roundhouse
 ];
 
-export function buildChef() {
+export function buildChef(opts = {}) {
+  const male = !!opts.male;         // male variant: teal top, bushy top-knot, no toque
+  const topCol = male ? MALE_TOP : TOP;
   const g = new THREE.Group();     // origin at feet, front = +Z
   const body = new THREE.Group();  // bob/squash pivot
   g.add(body);
@@ -58,7 +61,7 @@ export function buildChef() {
 
   // torso — a soft elliptical column (chest a touch wider than the waist), her
   // pink top with a tan apron panel, round shoulder caps, a neck and a collar.
-  const topMat = mat(TOP, { flat: true, rough: 0.7 });
+  const topMat = mat(topCol, { flat: true, rough: 0.7 });
   const torso = new THREE.Group(); torso.position.y = 0.9; body.add(torso);
   const core = cyl(0.3, 0.26, 0.72, topMat, 12); core.scale.z = 0.66; torso.add(put(core, 0, 0, 0));
   torso.add(put(ball(0.15, topMat, 1, 0.85, 0.9), -0.28, 0.3, 0));   // shoulder caps
@@ -69,69 +72,86 @@ export function buildChef() {
   torso.add(put(cyl(0.1, 0.11, 0.14, mat(SKIN, { rough: 0.72 }), 10), 0, 0.44, 0.02)); // neck
   torso.add(put(cyl(0.17, 0.19, 0.1, topMat, 12), 0, 0.37, 0.02));   // collar
 
-  // head — a brown face rounded out by a full head of thin, straight dreadlocks.
+  // head — a brown face. Her: dreadlocks + toque. Him: short hair + a bushy top-knot.
   const head = new THREE.Group(); head.position.y = 1.42; body.add(head);
   const hairMat = mat(HAIR, { flat: true, rough: 0.9 });
-  // rounded hair base (under the toque) so gaps between locs read as hair, not scalp
-  const base = new THREE.Mesh(new THREE.SphereGeometry(0.245, 14, 12), hairMat);
-  base.castShadow = true; base.position.set(0, 0.0, -0.03); base.scale.set(1.12, 0.9, 1.05); head.add(base);
-  // a hidden hair backing behind the shirt — its only job is to block the top from
-  // showing through the gaps between locs. Kept inside the loc envelope (narrower and
-  // shorter than the loc fan) so the locs overhang it on every side and it never
-  // reads as its own shape — you see locs, it just fills the space behind them.
-  const backfill = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.33, 0.52, 12), hairMat);
-  backfill.castShadow = true; backfill.position.set(0, -0.2, -0.26); backfill.scale.set(1, 1, 0.22); head.add(backfill);
-  // face in front of the hair
-  head.add(put(new THREE.Mesh(new THREE.SphereGeometry(0.235, 16, 12), mat(SKIN, { rough: 0.72 })), 0, 0, 0.06));
-  // ~35 thin straight locs emerging from under the hat brim, each flaring DOWN-AND-
-  // OUTWARD so its tip falls clear of the shoulders — the outward splay is what keeps
-  // the hair off the body (no clip). Front arc left open for the face.
   const UP = new THREE.Vector3(0, 1, 0);
-  const R = 0.24, FRONT_GAP = 0.95;   // radians of open face around +Z
-  const rings = [
-    { phi: 1.40, n: 16, len: 0.42 },
-    { phi: 1.52, n: 20, len: 0.54 },
-    { phi: 1.62, n: 22, len: 0.62 },
-  ];
-  for (const ring of rings) {
-    const hr = R * Math.sin(ring.phi), ry = R * Math.cos(ring.phi);
-    for (let i = 0; i < ring.n; i++) {
-      const th = (i / ring.n) * Math.PI * 2;
-      const rx = hr * Math.sin(th), rz = hr * Math.cos(th);       // th=0 -> +Z (front)
-      if (Math.abs(Math.atan2(rx, rz)) < FRONT_GAP) continue;     // keep the face open
-      // The fall direction follows each loc's root front/back: temple locs (rooted
-      // toward +Z) drape FORWARD, over the front of the shoulders, while the rest
-      // sweep back — both with an outward spread. The shoulders are thin front-to-
-      // back, so a loc leaning either way clears them; only a straight-down loc
-      // would land on top, which the −0.1 back bias avoids for the over-ear ones.
-      const jit = Math.sin(i * 12.9 + ring.phi * 78.2);           // deterministic wobble
-      const len = ring.len * (0.9 + 0.16 * (jit * 0.5 + 0.5));
-      const root = new THREE.Vector3(rx, ry + 0.02, rz - 0.02);
-      const dir = new THREE.Vector3(rx * 0.4, 0, rz * 1.6 - 0.1).normalize()
-        .multiplyScalar(0.62 + 0.12 * jit).add(new THREE.Vector3(0, -1, 0)).normalize();
-      const loc = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.033, len, 5), hairMat);
-      loc.castShadow = true;
-      loc.quaternion.setFromUnitVectors(UP, dir);
-      loc.position.copy(root).add(dir.clone().multiplyScalar(len / 2));
-      head.add(loc);
+  // face in front of the hair (shared)
+  head.add(put(new THREE.Mesh(new THREE.SphereGeometry(0.235, 16, 12), mat(SKIN, { rough: 0.72 })), 0, 0, 0.06));
+
+  if (!male) {
+    // rounded hair base (under the toque) so gaps between locs read as hair, not scalp
+    const base = new THREE.Mesh(new THREE.SphereGeometry(0.245, 14, 12), hairMat);
+    base.castShadow = true; base.position.set(0, 0.0, -0.03); base.scale.set(1.12, 0.9, 1.05); head.add(base);
+    // a hidden hair backing behind the shirt — its only job is to block the top from
+    // showing through the gaps between locs. Kept inside the loc envelope so the locs
+    // overhang it on every side and it never reads as its own shape.
+    const backfill = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.33, 0.52, 12), hairMat);
+    backfill.castShadow = true; backfill.position.set(0, -0.2, -0.26); backfill.scale.set(1, 1, 0.22); head.add(backfill);
+    // ~35 thin straight locs emerging from under the hat brim, each flaring DOWN-AND-
+    // OUTWARD/BACK so it falls clear of the shoulders (no body clip); face left open.
+    const R = 0.24, FRONT_GAP = 0.95;   // radians of open face around +Z
+    const rings = [
+      { phi: 1.40, n: 16, len: 0.42 },
+      { phi: 1.52, n: 20, len: 0.54 },
+      { phi: 1.62, n: 22, len: 0.62 },
+    ];
+    for (const ring of rings) {
+      const hr = R * Math.sin(ring.phi), ry = R * Math.cos(ring.phi);
+      for (let i = 0; i < ring.n; i++) {
+        const th = (i / ring.n) * Math.PI * 2;
+        const rx = hr * Math.sin(th), rz = hr * Math.cos(th);       // th=0 -> +Z (front)
+        if (Math.abs(Math.atan2(rx, rz)) < FRONT_GAP) continue;     // keep the face open
+        const jit = Math.sin(i * 12.9 + ring.phi * 78.2);           // deterministic wobble
+        const len = ring.len * (0.9 + 0.16 * (jit * 0.5 + 0.5));
+        const root = new THREE.Vector3(rx, ry + 0.02, rz - 0.02);
+        const dir = new THREE.Vector3(rx * 0.4, 0, rz * 1.6 - 0.1).normalize()
+          .multiplyScalar(0.62 + 0.12 * jit).add(new THREE.Vector3(0, -1, 0)).normalize();
+        const loc = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.033, len, 5), hairMat);
+        loc.castShadow = true;
+        loc.quaternion.setFromUnitVectors(UP, dir);
+        loc.position.copy(root).add(dir.clone().multiplyScalar(len / 2));
+        head.add(loc);
+      }
     }
+    // toque — a bigger, boxier chef's hat: faceted drum band + fat cuff brim + puff
+    const hatMat = mat(HAT, { flat: true, rough: 0.85 });
+    const band = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.28, 0.24, 12), hatMat);
+    band.castShadow = true; band.position.set(0, 0.2, -0.02); head.add(band);
+    const cuff = new THREE.Mesh(new THREE.TorusGeometry(0.29, 0.055, 8, 18), hatMat);
+    cuff.castShadow = true; cuff.rotation.x = Math.PI / 2; cuff.position.set(0, 0.09, -0.02); head.add(cuff);
+    const puff = new THREE.Mesh(new THREE.SphereGeometry(0.31, 10, 8), hatMat);
+    puff.castShadow = true; puff.position.set(0, 0.36, -0.02); puff.scale.set(1.12, 0.82, 1.12); head.add(puff);
+  } else {
+    // MALE — short-hair cap: sits high, tapered so it stops above the ears (not a bob)
+    const cap = new THREE.Mesh(new THREE.SphereGeometry(0.25, 14, 12), hairMat);
+    cap.castShadow = true; cap.scale.set(1.04, 0.78, 1.0); cap.position.set(0, 0.06, -0.03); head.add(cap);
+    head.add(put(ball(0.16, hairMat, 1, 0.6, 0.9), 0, 0.02, -0.16));   // fuller short hair at the back
+
+    // a BUSHY PONYTAIL sprouting directly from the top-center of the head: a wound
+    // hair tie, a volume puff at the base, then a fountain of thick fronds fanning up
+    // and out — the fronds read as the bushy tail, a small top puff just rounds it.
+    const gather = new THREE.Vector3(0, 0.27, -0.02);
+    const tie = cyl(0.055, 0.05, 0.06, hairMat, 8); tie.position.copy(gather); head.add(tie);
+    head.add(put(new THREE.Mesh(new THREE.SphereGeometry(0.11, 10, 8), hairMat), gather.x, gather.y + 0.06, gather.z));   // base bush
+    const FR = 16;
+    for (let i = 0; i < FR; i++) {
+      const a = (i / FR) * Math.PI * 2;
+      const jit = Math.sin(i * 12.9 + 3.1);
+      const spread = 0.5 + 0.32 * (jit * 0.5 + 0.5);
+      const dir = new THREE.Vector3(Math.cos(a) * spread, 1, Math.sin(a) * spread - 0.12).normalize();  // up, fan out, slight back
+      const len = 0.3 + 0.16 * (jit * 0.5 + 0.5);
+      const frond = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.026, len, 5), hairMat);          // fat tip = bushy
+      frond.castShadow = true;
+      frond.quaternion.setFromUnitVectors(UP, dir);
+      frond.position.copy(gather).add(dir.clone().multiplyScalar(len / 2 + 0.05));
+      head.add(frond);
+    }
+    head.add(put(new THREE.Mesh(new THREE.SphereGeometry(0.12, 10, 8), hairMat), gather.x, gather.y + 0.22, gather.z - 0.02));  // round the top
   }
-  // eyes
+  // eyes (shared)
   head.add(put(box(0.05, 0.06, 0.03, mat(0x120a06)), -0.09, 0.02, 0.25));
   head.add(put(box(0.05, 0.06, 0.03, mat(0x120a06)), 0.09, 0.02, 0.25));
-  // toque — a bigger, boxier chef's hat: a faceted drum band (wider at the top so
-  // the brim doesn't ride down over the face) under a large low-poly puff. Sized to
-  // sit over the hair + locs so they don't poke through.
-  const hatMat = mat(HAT, { flat: true, rough: 0.85 });
-  const band = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.28, 0.24, 12), hatMat);
-  band.castShadow = true; band.position.set(0, 0.2, -0.02); head.add(band);
-  // a fat rolled cuff at the base — a wide brim that fully caps the hairline so no
-  // hair shows between the hat and the head (overhangs wider than the base hair)
-  const cuff = new THREE.Mesh(new THREE.TorusGeometry(0.29, 0.055, 8, 18), hatMat);
-  cuff.castShadow = true; cuff.rotation.x = Math.PI / 2; cuff.position.set(0, 0.09, -0.02); head.add(cuff);
-  const puff = new THREE.Mesh(new THREE.SphereGeometry(0.31, 10, 8), hatMat);
-  puff.castShadow = true; puff.position.set(0, 0.36, -0.02); puff.scale.set(1.12, 0.82, 1.12);
-  head.add(puff);
 
   // arms — pink upper sleeve, bare brown forearm + fist, hinged at an elbow
   // (userData.elbow bends the forearm; userData.fist is the hand).
