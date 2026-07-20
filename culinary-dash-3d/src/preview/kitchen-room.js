@@ -25,42 +25,54 @@ const TEAL = 0x2f6e66, BRASS = 0xb8912f, STEEL = 0x8a9098;
 function localeWorld() {
   const v = new THREE.Group();
   const flat = (col, side) => new THREE.MeshBasicMaterial({ color: col, side, fog: false });
-  // backdrop arcs cover just the BACK half (the only windowed side) — half the
-  // geometry of a full ring, still wide enough for any turned camera that can
-  // actually see out
-  const band = (r, y0, y1, col) => {
-    const m = new THREE.Mesh(new THREE.CylinderGeometry(r, r, y1 - y0, 16, 1, true, Math.PI / 2, Math.PI), flat(col, THREE.BackSide));
-    m.position.y = (y0 + y1) / 2; v.add(m); return m;
+  // The backdrop is a straight theater flat behind the wall — stacked horizontal
+  // bands on one huge vertical plane, so the horizon is a straight line (matching
+  // the 2D game's envOcean), not a curved rim. Wide enough for any turned camera.
+  const wallQuad = (w2, y0, y1, col, z) => {
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(w2, y1 - y0), flat(col));
+    m.position.set(0, (y0 + y1) / 2, z); v.add(m); return m;
   };
-  // The visible horizon through the windows is the ocean disc's far RIM (the
-  // backdrop below y ~ -5.6 hides behind it from the diorama camera), so the
-  // haze band sits right at that hand-off and the sky starts above it.
-  const sky = band(24, -4.4, 14, 0x8fc9e8);                           // sky, up past any aspect's view
-  const haze = band(23.85, -5.6, -4.4, 0xbfe3ea);                     // pale band at the horizon hand-off
-  const sea = band(23.7, -12, -5.6, 0x35839b);                        // distant sea below the horizon line
-  // the sun — a billboard between the sky (r24) and sea (r23.7) shells, so when it
-  // descends past the horizon the sea shell genuinely occludes it
+  const sky = wallQuad(90, -4.4, 14, 0x8fc9e8, -26);                  // sky, up past any aspect's view
+  const haze = wallQuad(90, -5.6, -4.4, 0xbfe3ea, -25.9);             // pale band at the horizon hand-off
+  const sea = wallQuad(90, -14, -5.6, 0x35839b, -25.9);               // distant sea below the horizon line
+  // the sun — a billboard in front of the flat; sinking below the far-sea shelf's
+  // level hides it behind that shelf (the camera looks down over it)
   const sun = new THREE.Sprite(new THREE.SpriteMaterial({ color: 0xfff2cf, fog: false }));
-  sun.position.set(4, -3.2, -23.55); sun.scale.setScalar(2.4); v.add(sun);
-  // island — a real mound ON the water near the disc rim (left window's view)
+  sun.position.set(4, -3.2, -25.5); sun.scale.setScalar(2.4); v.add(sun);
+  // island — a real mound ON the water (left window's view)
   const isl = new THREE.Mesh(new THREE.SphereGeometry(3, 18, 10), flat(0x86ad8c));
   isl.position.set(-7, -0.5, -9.5); isl.scale.set(1, 0.35, 0.6); v.add(isl);
-  // the REAL ocean the diner floats on — a wide disc under and around the room
-  const ocean = new THREE.Mesh(new THREE.CircleGeometry(12, 36), flat(0x3f97ad));
-  ocean.rotation.x = -Math.PI / 2; ocean.position.y = -0.45; v.add(ocean);
-  // far sea shelf — a lower annulus from the disc rim out to the cyclorama, so
-  // looking down over the horizon rim shows deep water, never a void
-  const seaFar = new THREE.Mesh(new THREE.RingGeometry(11.8, 24.2, 24, 1, 0, Math.PI), flat(0x35839b));
-  seaFar.rotation.x = -Math.PI / 2; seaFar.position.y = -5.62; v.add(seaFar);   // back half only, like the arcs
-  // wave strips lying ON the water, drifting sideways
+  // the REAL ocean the diner floats on — a wide rectangle whose far edge is a
+  // straight line parallel to the wall (this WAS the curved rim)
+  const ocean = new THREE.Mesh(new THREE.PlaneGeometry(90, 21), flat(0x3f97ad));
+  ocean.rotation.x = -Math.PI / 2; ocean.position.set(0, -0.45, -4.5); v.add(ocean);   // z -15 .. +6 (under the room too)
+  // far sea shelf — a lower rectangle from the ocean's far edge out to the flat,
+  // so looking down over the horizon shows deep water, never a void
+  const seaFar = new THREE.Mesh(new THREE.PlaneGeometry(90, 11), flat(0x35839b));
+  seaFar.rotation.x = -Math.PI / 2; seaFar.position.set(0, -5.62, -20.5); v.add(seaFar);
+  // waves — DASHED strips lying on the water (per the 2D game: dashes are what
+  // make the sideways drift VISIBLE; a solid line sliding shows nothing)
   const waves = [];
-  [[-6.5, 0.22, 0x59acc0], [-8.5, 0.3, 0x2f7b90], [-10.5, 0.38, 0x59acc0]].forEach(([z, w, col]) => {
-    const m = new THREE.Mesh(new THREE.PlaneGeometry(24, w), flat(col));
-    m.rotation.x = -Math.PI / 2; m.position.set(0, -0.42, z); v.add(m); waves.push(m);
+  [[-7, 0x2f7088], [-9.5, 0x5fb0c4], [-12, 0x2f7088]].forEach(([z, col], row) => {
+    const g2 = new THREE.Group(); g2.position.set(0, -0.42, z); v.add(g2);
+    const m = new THREE.MeshBasicMaterial({ color: col, fog: false });
+    for (let x = -16; x <= 16; x += 2.6) {
+      const dash = new THREE.Mesh(new THREE.PlaneGeometry(1.4, 0.22 + row * 0.06), m);
+      dash.rotation.x = -Math.PI / 2; dash.position.x = x + (row % 2) * 1.3; g2.add(dash);
+    }
+    waves.push({ group: g2, material: m, row });
   });
   // sun glint running along the water toward the sun's azimuth
   const glint = new THREE.Mesh(new THREE.PlaneGeometry(1.5, 8.5), flat(0xcdeef0));
   glint.rotation.x = -Math.PI / 2; glint.rotation.z = -0.17; glint.position.set(2.2, -0.41, -9.5); v.add(glint);
+  // a little sailboat drifting across the view (the 2D game has one too)
+  const boat = new THREE.Group(); boat.position.set(0, -0.45, -11); v.add(boat);
+  const hull = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.22, 0.4), flat(0x1a2430));
+  hull.position.y = 0.1; boat.add(hull);
+  const sailShape = new THREE.Shape();
+  sailShape.moveTo(0, 0); sailShape.lineTo(0, 1.3); sailShape.lineTo(0.8, 0.15); sailShape.closePath();
+  const sail = new THREE.Mesh(new THREE.ShapeGeometry(sailShape), flat(0xf0ead8, THREE.DoubleSide));
+  sail.position.set(-0.05, 0.24, 0); boat.add(sail);
   // sunset grade — each material lerps noon -> pinkish-orange dusk
   const C = (h) => new THREE.Color(h);
   const grade = [
@@ -72,9 +84,9 @@ function localeWorld() {
     [ocean.material, C(0x3f97ad), C(0x3d5f88)],
     [glint.material, C(0xcdeef0), C(0xffbfa4)],
     [isl.material, C(0x86ad8c), C(0x5e7a66)],
-    [waves[0].material, C(0x59acc0), C(0x3f7a94)],
-    [waves[1].material, C(0x2f7b90), C(0x27556e)],
-    [waves[2].material, C(0x59acc0), C(0x3f7a94)],
+    [waves[0].material, C(0x2f7088), C(0x27556e)],
+    [waves[1].material, C(0x5fb0c4), C(0x3f7a94)],
+    [waves[2].material, C(0x2f7088), C(0x27556e)],
   ];
   const SUN_TOP = -3.2, SUN_SET = -6.9;                               // sinks behind the sea shell by close
   // palms standing outside the windows — TWO crossed cards each, so they hold up
@@ -116,8 +128,14 @@ function localeWorld() {
   return {
     group: v,
     update(dt, t, day = 0) {
-      for (let i = 0; i < waves.length; i++) waves[i].position.x = Math.sin(t * (0.22 + i * 0.09) + i * 2.1) * 0.7;   // strips slide at offset rates
-      for (let i = 0; i < palms.length; i++) palms[i].rotation.z = Math.sin(t * 0.5 + i * 1.7) * 0.02;                 // breeze in the fronds
+      // dashed strips slide continuously in alternating directions — visible motion
+      for (let i = 0; i < waves.length; i++) {
+        const dir = i % 2 ? -1 : 1;
+        waves[i].group.position.x = ((t * 0.32 * dir + i * 0.9) % 2.6 + 2.6) % 2.6 - 1.3;
+      }
+      boat.position.x = ((t * 0.28) % 34) - 17;                   // the sailboat crosses, wraps, crosses again
+      boat.position.y = -0.45 + Math.sin(t * 1.1) * 0.05;         // riding the swell
+      for (let i = 0; i < palms.length; i++) palms[i].rotation.z = Math.sin(t * 0.5 + i * 1.7) * 0.02;   // breeze in the fronds
       v.position.y = Math.sin(t * 0.42) * 0.07;                   // the whole outside world bobs against the frames...
       v.rotation.z = Math.sin(t * 0.27 + 1) * 0.006;              // ...and rolls a touch — we're afloat
       // the sun sets as the day runs out: noon for the first third, then it slides
