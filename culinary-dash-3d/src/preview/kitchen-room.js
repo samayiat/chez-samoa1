@@ -11,30 +11,38 @@ import { rpos } from './kitchen-space.js';
 const FLOOR = 0x8a5a34, WALL = 0xcaa47a, WOOD = 0x6e4526, CREAM = 0xe7d8b8;
 const TEAL = 0x2f6e66, BRASS = 0xb8912f, STEEL = 0x8a9098;
 
-// The locale outside the windows — a warm tropical view (sky, sun, an island on
-// the horizon, ocean, and palm silhouettes), built from FLAT-COLOURED GEOMETRY
-// rather than a texture. That keeps it on-style with the rest of the (textureless)
-// art and, unlike a textured plane at a grazing angle, it never moirés.
-function localeView(w, h) {
-  const v = new THREE.Group();
+// The locale outside the windows — ONE continuous tropical panorama behind the
+// whole wall, so all three windows look into the same world (one sun, one island,
+// one ocean). Flat-coloured geometry, on-style and moiré-free. Returns update():
+// wave bands drift, palms sway, and the whole view bobs + rolls gently against
+// the window frames — the diner reads as floating.
+function localePanorama() {
+  const W = 22, H = 4.5, BASE_Y = 3.1;
+  const v = new THREE.Group(); v.position.set(0, BASE_Y, -4.55);
   const flat = (col) => new THREE.MeshBasicMaterial({ color: col });
   const quad = (qw, qh, col, x, y, z) => { const m = new THREE.Mesh(new THREE.PlaneGeometry(qw, qh), flat(col)); m.position.set(x, y, z); v.add(m); return m; };
-  const HZ = -h * 0.06;                                          // horizon line (y)
-  quad(w, h, 0x8fc9e8, 0, 0, 0);                                 // sky
-  quad(w, h * 0.14, 0xbfe3ea, 0, HZ + h * 0.07, 0.001);          // pale haze at the horizon
-  const sun = new THREE.Mesh(new THREE.CircleGeometry(h * 0.09, 20), flat(0xfff2cf)); sun.position.set(w * 0.26, h * 0.26, 0.002); v.add(sun);
-  const isl = new THREE.Mesh(new THREE.CircleGeometry(h * 0.3, 18, 0, Math.PI), flat(0x86ad8c)); isl.position.set(-w * 0.18, HZ, 0.003); isl.scale.set(1, 0.42, 1); v.add(isl);
-  quad(w, h * 0.44 + h * 0.06, 0x3f97ad, 0, HZ - (h * 0.44) / 2, 0.004);   // ocean (up to the horizon)
-  quad(w * 0.05, h * 0.42, 0xcdeef0, w * 0.2, HZ - h * 0.2, 0.005);        // sun glint on the water
+  const HZ = -0.15;                                              // horizon (local y)
+  quad(W, H, 0x8fc9e8, 0, 0, 0);                                 // sky
+  quad(W, 0.5, 0xbfe3ea, 0, HZ + 0.25, 0.001);                   // pale haze at the horizon
+  const sun = new THREE.Mesh(new THREE.CircleGeometry(0.34, 20), flat(0xfff2cf)); sun.position.set(1.3, 1.05, 0.002); v.add(sun);   // the ONE sun (center window)
+  const isl = new THREE.Mesh(new THREE.CircleGeometry(1.15, 18, 0, Math.PI), flat(0x86ad8c)); isl.position.set(-5.6, HZ, 0.003); isl.scale.set(1, 0.4, 1); v.add(isl);   // island (left window)
+  quad(W, HZ + H / 2, 0x3f97ad, 0, (HZ - H / 2) / 2, 0.004);     // ocean up to the horizon
+  quad(0.9, HZ + H / 2, 0xcdeef0, 1.3, (HZ - H / 2) / 2, 0.0045); // sun glint on the water
+  // wave bands — long light/dark strips that update() drifts sideways
+  const waves = [
+    quad(W + 2, 0.09, 0x59acc0, 0, HZ - 0.28, 0.005),
+    quad(W + 2, 0.12, 0x357f95, 0, HZ - 0.8, 0.005),
+    quad(W + 2, 0.15, 0x59acc0, 0, HZ - 1.45, 0.005),
+  ];
+  const palms = [];
   const palm = (px, s, flip) => {
-    const p = new THREE.Group(); p.position.set(px, -h * 0.5, 0.01); p.scale.x = flip ? -1 : 1; v.add(p);
+    const p = new THREE.Group(); p.position.set(px, -H / 2 + 0.05, 0.01); p.scale.x = flip ? -1 : 1; v.add(p); palms.push(p);
     // gently curved, tapered trunk (a shape, not a rectangle)
     const ts = new THREE.Shape();
     ts.moveTo(-s * 0.045, 0); ts.quadraticCurveTo(-s * 0.1, s * 0.55, -s * 0.1, s);
     ts.lineTo(-s * 0.045, s); ts.quadraticCurveTo(-s * 0.055, s * 0.5, s * 0.045, 0); ts.closePath();
     const trunk = new THREE.Mesh(new THREE.ShapeGeometry(ts), flat(0x33422c)); p.add(trunk);
-    // fronds — curved blades arching out of the crown and drooping at the tip,
-    // tapered to a point (a shape per frond, mirrored for the left side)
+    // fronds — curved blades arching out of the crown and drooping at the tip
     const crown = { x: -s * 0.075, y: s };
     const frond = (len, lift, droop, dir) => {
       const f = new THREE.Shape();
@@ -57,9 +65,17 @@ function localeView(w, h) {
       nut.position.set(crown.x + cx * s, crown.y + cy * s, 0.002); p.add(nut);
     }
   };
-  palm(-w * 0.3, h * 0.62, false);
-  palm(w * 0.34, h * 0.5, true);
-  return v;
+  palm(-7.6, 2.7, false);   // left window
+  palm(7.3, 2.4, true);     // right window
+  return {
+    group: v,
+    update(dt, t) {
+      for (let i = 0; i < waves.length; i++) waves[i].position.x = Math.sin(t * (0.22 + i * 0.09) + i * 2.1) * 0.5;   // bands slide at offset rates
+      for (let i = 0; i < palms.length; i++) palms[i].rotation.z = Math.sin(t * 0.5 + i * 1.7) * 0.02;                 // breeze in the fronds
+      v.position.y = BASE_Y + Math.sin(t * 0.42) * 0.06;          // the world bobs against the frames...
+      v.rotation.z = Math.sin(t * 0.27 + 1) * 0.007;              // ...and rolls a touch — we're afloat
+    },
+  };
 }
 
 export function buildKitchen(scene) {
@@ -71,19 +87,26 @@ export function buildKitchen(scene) {
   floor.position.set(0, -0.2, 0.5); floor.receiveShadow = true; g.add(floor);
   for (let i = -9; i <= 9; i++) g.add(put(box(0.04, 0.01, 12, mat(0x5f3f22, { rough: 1 })), i * 1.05, 0.011, 0.5));
 
-  // walls
+  // walls — the back wall has three real openings cut into it (bottom strip, top
+  // strip, and piers between the windows) so all windows see one shared outside
   const wallMat = mat(WALL, { rough: 0.95 });
-  g.add(put(box(19, 6, 0.4, wallMat), 0, 2.6, -4.2));
+  g.add(put(box(19, 2.25, 0.4, wallMat), 0, 0.725, -4.2));    // below the sills
+  g.add(put(box(19, 0.95, 0.4, wallMat), 0, 5.125, -4.2));    // above the windows
+  g.add(put(box(1.4, 2.8, 0.4, wallMat), -8.8, 3.25, -4.2));  // piers between openings
+  g.add(put(box(1.8, 2.8, 0.4, wallMat), -3.0, 3.25, -4.2));
+  g.add(put(box(1.8, 2.8, 0.4, wallMat), 3.0, 3.25, -4.2));
+  g.add(put(box(1.4, 2.8, 0.4, wallMat), 8.8, 3.25, -4.2));
   g.add(put(box(0.4, 6, 12, wallMat), -9.4, 2.6, 0.5));
   g.add(put(box(0.4, 6, 12, wallMat), 9.4, 2.6, 0.5));
   g.add(put(box(19, 1.0, 0.5, mat(TEAL, { rough: 0.7 })), 0, 0.3, -4.15));
   g.add(put(box(19, 0.12, 0.55, mat(BRASS, { metal: 0.6, rough: 0.4 })), 0, 0.85, -4.13));
 
-  // big windows looking out onto the locale (daylight) — the tropical view is a
-  // little flat-geometry diorama set in the opening, always bright like outside.
+  // the shared tropical panorama behind the wall, seen through every opening
+  const locale = localePanorama(); g.add(locale.group);
+
+  // window frames over the openings
   const addWindow = (x, w, h) => {
     const win = new THREE.Group(); win.position.set(x, 3.25, -4.0); g.add(win);
-    const view = localeView(w, h); win.add(view);                                 // the outside view
     win.add(put(box(w + 0.3, 0.18, 0.24, mat(WOOD)), 0, h / 2, 0.08));            // top rail
     win.add(put(box(w + 0.3, 0.18, 0.24, mat(WOOD)), 0, -h / 2, 0.08));           // sill
     win.add(put(box(0.13, h, 0.24, mat(WOOD)), 0, 0, 0.08));                      // center mullion
@@ -143,6 +166,7 @@ export function buildKitchen(scene) {
       for (const s of steamers) s.update(dt, t);
       for (let i = 0; i < lamps.length; i++) lamps[i].rotation.z = Math.sin(t * 0.7 + i) * 0.02;
       for (const id in stations) stations[id].tickAnim(dt, t);
+      locale.update(dt, t);
     },
   };
 }
