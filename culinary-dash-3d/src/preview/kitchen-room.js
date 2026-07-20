@@ -11,90 +11,119 @@ import { rpos } from './kitchen-space.js';
 const FLOOR = 0x8a5a34, WALL = 0xcaa47a, WOOD = 0x6e4526, CREAM = 0xe7d8b8;
 const TEAL = 0x2f6e66, BRASS = 0xb8912f, STEEL = 0x8a9098;
 
-// The locale outside the windows — ONE continuous tropical panorama behind the
-// whole wall, so all three windows look into the same world (one sun, one island,
-// one ocean). Flat-coloured geometry, on-style and moiré-free. Returns update():
-// wave bands drift, palms sway, and the whole view bobs + rolls gently against
-// the window frames — the diner reads as floating.
-function localePanorama() {
-  const W = 22, H = 4.5, BASE_Y = 3.1;
-  const v = new THREE.Group(); v.position.set(0, BASE_Y, -4.55);
-  const flat = (col) => new THREE.MeshBasicMaterial({ color: col });
-  const quad = (qw, qh, col, x, y, z) => { const m = new THREE.Mesh(new THREE.PlaneGeometry(qw, qh), flat(col)); m.position.set(x, y, z); v.add(m); return m; };
-  const HZ = -0.15;                                              // horizon (local y)
-  const sky = quad(W, H, 0x8fc9e8, 0, 0, 0);                     // sky
-  const haze = quad(W, 0.5, 0xbfe3ea, 0, HZ + 0.25, 0.001);      // pale haze at the horizon
-  const sun = new THREE.Mesh(new THREE.CircleGeometry(0.34, 20), flat(0xfff2cf)); sun.position.set(1.3, 1.05, 0.002); v.add(sun);   // the ONE sun (center window)
-  const isl = new THREE.Mesh(new THREE.CircleGeometry(1.15, 18, 0, Math.PI), flat(0x86ad8c)); isl.position.set(-5.6, HZ, 0.003); isl.scale.set(1, 0.4, 1); v.add(isl);   // island (left window)
-  const ocean = quad(W, HZ + H / 2, 0x3f97ad, 0, (HZ - H / 2) / 2, 0.004);     // ocean up to the horizon (in FRONT of the sun, so it sinks behind the water)
-  const glint = quad(0.9, HZ + H / 2, 0xcdeef0, 1.3, (HZ - H / 2) / 2, 0.0045); // sun glint on the water
-  // wave bands — long light/dark strips that update() drifts sideways
-  const waves = [
-    quad(W + 2, 0.09, 0x59acc0, 0, HZ - 0.28, 0.005),
-    quad(W + 2, 0.12, 0x357f95, 0, HZ - 0.8, 0.005),
-    quad(W + 2, 0.15, 0x59acc0, 0, HZ - 1.45, 0.005),
-  ];
-  // sunset grade — each material lerps noon -> dusk as the day runs out
+// The locale outside the windows — a real miniature WORLD, not a painted card.
+// A 360° cyclorama of concentric open cylinders (sky / horizon haze / distant
+// sea) surrounds the diner at ~24 units, a genuine ocean plane spreads under and
+// around the floating room carrying the drifting wave strips, the sun is a
+// billboard hung BETWEEN the sky and sea cylinders (so sinking below the horizon
+// genuinely occludes it), and the palms are crossed cards standing outside the
+// windows. Because it is surrounding geometry, any camera angle or aspect —
+// portrait, closeups, orbits — sees a coherent outside instead of a card's edge.
+// The horizon sits low (y ~ -3.4) because the diorama camera is high and looks
+// DOWN through the windows; these heights put sky/horizon/sea exactly where the
+// window sight-lines land. Flat colours, fog off (it is "beyond" the room haze).
+function localeWorld() {
+  const v = new THREE.Group();
+  const flat = (col, side) => new THREE.MeshBasicMaterial({ color: col, side, fog: false });
+  const band = (r, y0, y1, col) => {
+    const m = new THREE.Mesh(new THREE.CylinderGeometry(r, r, y1 - y0, 28, 1, true), flat(col, THREE.BackSide));
+    m.position.y = (y0 + y1) / 2; v.add(m); return m;
+  };
+  // The visible horizon through the windows is the ocean disc's far RIM (the
+  // backdrop below y ~ -5.6 hides behind it from the diorama camera), so the
+  // haze band sits right at that hand-off and the sky starts above it.
+  const sky = band(24, -4.4, 14, 0x8fc9e8);                           // sky, up past any aspect's view
+  const haze = band(23.85, -5.6, -4.4, 0xbfe3ea);                     // pale band at the horizon hand-off
+  const sea = band(23.7, -12, -5.6, 0x35839b);                        // distant sea below the horizon line
+  // the sun — a billboard between the sky (r24) and sea (r23.7) shells, so when it
+  // descends past the horizon the sea shell genuinely occludes it
+  const sun = new THREE.Sprite(new THREE.SpriteMaterial({ color: 0xfff2cf, fog: false }));
+  sun.position.set(4, -3.2, -23.55); sun.scale.setScalar(2.4); v.add(sun);
+  // island — a real mound ON the water near the disc rim (left window's view)
+  const isl = new THREE.Mesh(new THREE.SphereGeometry(3, 18, 10), flat(0x86ad8c));
+  isl.position.set(-7, -0.5, -9.5); isl.scale.set(1, 0.35, 0.6); v.add(isl);
+  // the REAL ocean the diner floats on — a wide disc under and around the room
+  const ocean = new THREE.Mesh(new THREE.CircleGeometry(12, 36), flat(0x3f97ad));
+  ocean.rotation.x = -Math.PI / 2; ocean.position.y = -0.45; v.add(ocean);
+  // far sea shelf — a lower annulus from the disc rim out to the cyclorama, so
+  // looking down over the horizon rim shows deep water, never a void
+  const seaFar = new THREE.Mesh(new THREE.RingGeometry(11.8, 24.2, 40), flat(0x35839b));
+  seaFar.rotation.x = -Math.PI / 2; seaFar.position.y = -5.62; v.add(seaFar);
+  // wave strips lying ON the water, drifting sideways
+  const waves = [];
+  [[-6.5, 0.22, 0x59acc0], [-8.5, 0.3, 0x2f7b90], [-10.5, 0.38, 0x59acc0]].forEach(([z, w, col]) => {
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(24, w), flat(col));
+    m.rotation.x = -Math.PI / 2; m.position.set(0, -0.42, z); v.add(m); waves.push(m);
+  });
+  // sun glint running along the water toward the sun's azimuth
+  const glint = new THREE.Mesh(new THREE.PlaneGeometry(1.5, 8.5), flat(0xcdeef0));
+  glint.rotation.x = -Math.PI / 2; glint.rotation.z = -0.17; glint.position.set(2.2, -0.41, -9.5); v.add(glint);
+  // sunset grade — each material lerps noon -> pinkish-orange dusk
   const C = (h) => new THREE.Color(h);
   const grade = [
-    [sky.material, C(0x8fc9e8), C(0xef8a70)],   // late day goes pinkish orange
+    [sky.material, C(0x8fc9e8), C(0xef8a70)],
     [haze.material, C(0xbfe3ea), C(0xffb39c)],
+    [sea.material, C(0x35839b), C(0x35597e)],
+    [seaFar.material, C(0x35839b), C(0x35597e)],
     [sun.material, C(0xfff2cf), C(0xff9260)],
-    [ocean.material, C(0x3f97ad), C(0x3d5f88)], // deep with a violet cast under the pink sky
+    [ocean.material, C(0x3f97ad), C(0x3d5f88)],
     [glint.material, C(0xcdeef0), C(0xffbfa4)],
     [isl.material, C(0x86ad8c), C(0x5e7a66)],
     [waves[0].material, C(0x59acc0), C(0x3f7a94)],
-    [waves[1].material, C(0x357f95), C(0x27556e)],
+    [waves[1].material, C(0x2f7b90), C(0x27556e)],
     [waves[2].material, C(0x59acc0), C(0x3f7a94)],
   ];
-  const SUN_TOP = 1.05, SUN_SET = HZ - 0.24;                     // half-sunk into the sea by close
+  const SUN_TOP = -3.2, SUN_SET = -6.9;                               // sinks behind the sea shell by close
+  // palms standing outside the windows — TWO crossed cards each, so they hold up
+  // when the camera looks from the side instead of vanishing edge-on
   const palms = [];
-  const palm = (px, s, flip) => {
-    const p = new THREE.Group(); p.position.set(px, -H / 2 + 0.05, 0.01); p.scale.x = flip ? -1 : 1; v.add(p); palms.push(p);
-    // gently curved, tapered trunk (a shape, not a rectangle)
+  const palmCard = (s) => {
+    const p = new THREE.Group();
+    const leafM = flat(0x2b3a26, THREE.DoubleSide), trunkM = flat(0x33422c, THREE.DoubleSide);
     const ts = new THREE.Shape();
     ts.moveTo(-s * 0.045, 0); ts.quadraticCurveTo(-s * 0.1, s * 0.55, -s * 0.1, s);
     ts.lineTo(-s * 0.045, s); ts.quadraticCurveTo(-s * 0.055, s * 0.5, s * 0.045, 0); ts.closePath();
-    const trunk = new THREE.Mesh(new THREE.ShapeGeometry(ts), flat(0x33422c)); p.add(trunk);
-    // fronds — curved blades arching out of the crown and drooping at the tip
+    p.add(new THREE.Mesh(new THREE.ShapeGeometry(ts), trunkM));
     const crown = { x: -s * 0.075, y: s };
     const frond = (len, lift, droop, dir) => {
       const f = new THREE.Shape();
       f.moveTo(0, 0);
-      f.quadraticCurveTo(len * 0.45, lift, len, lift - droop);                    // upper edge out to the tip
-      f.quadraticCurveTo(len * 0.5, lift - len * 0.16, 0, -len * 0.1);           // lower edge back, fatter near the crown
+      f.quadraticCurveTo(len * 0.45, lift, len, lift - droop);
+      f.quadraticCurveTo(len * 0.5, lift - len * 0.16, 0, -len * 0.1);
       f.closePath();
-      const m = new THREE.Mesh(new THREE.ShapeGeometry(f), flat(0x2b3a26));
+      const m = new THREE.Mesh(new THREE.ShapeGeometry(f), leafM);
       m.position.set(crown.x, crown.y, 0.001); m.scale.x = dir; p.add(m);
     };
-    frond(s * 0.62, s * 0.3, s * 0.42, 1);     // right: high arch, deep droop
-    frond(s * 0.56, s * 0.14, s * 0.4, 1);     // right: lower, droopier
-    frond(s * 0.6, s * 0.3, s * 0.42, -1);     // left: mirrored pair
-    frond(s * 0.52, s * 0.12, s * 0.38, -1);
-    frond(s * 0.34, s * 0.42, s * 0.24, 1);    // short top tuft either side
-    frond(s * 0.3, s * 0.4, s * 0.2, -1);
-    // coconuts at the crown
+    frond(s * 0.62, s * 0.3, s * 0.42, 1); frond(s * 0.56, s * 0.14, s * 0.4, 1);
+    frond(s * 0.6, s * 0.3, s * 0.42, -1); frond(s * 0.52, s * 0.12, s * 0.38, -1);
+    frond(s * 0.34, s * 0.42, s * 0.24, 1); frond(s * 0.3, s * 0.4, s * 0.2, -1);
     for (const [cx, cy] of [[-0.02, -0.02], [0.045, 0.005], [-0.085, 0.01]]) {
       const nut = new THREE.Mesh(new THREE.CircleGeometry(s * 0.045, 10), flat(0x4a3a22));
       nut.position.set(crown.x + cx * s, crown.y + cy * s, 0.002); p.add(nut);
     }
+    return p;
   };
-  palm(-7.6, 2.7, false);   // left window
-  palm(7.3, 2.4, true);     // right window
+  const palm = (px, pz, s, flip) => {
+    const p = new THREE.Group(); p.position.set(px, -0.45, pz); p.scale.x = flip ? -1 : 1; v.add(p); palms.push(p);
+    const c1 = palmCard(s); p.add(c1);
+    const c2 = palmCard(s); c2.rotation.y = Math.PI / 2; p.add(c2);
+  };
+  palm(-7.5, -5.3, 3.4, false);   // outside the left window
+  palm(7.3, -5.4, 3.1, true);     // outside the right window
   return {
     group: v,
     update(dt, t, day = 0) {
-      for (let i = 0; i < waves.length; i++) waves[i].position.x = Math.sin(t * (0.22 + i * 0.09) + i * 2.1) * 0.5;   // bands slide at offset rates
+      for (let i = 0; i < waves.length; i++) waves[i].position.x = Math.sin(t * (0.22 + i * 0.09) + i * 2.1) * 0.7;   // strips slide at offset rates
       for (let i = 0; i < palms.length; i++) palms[i].rotation.z = Math.sin(t * 0.5 + i * 1.7) * 0.02;                 // breeze in the fronds
-      v.position.y = BASE_Y + Math.sin(t * 0.42) * 0.06;          // the world bobs against the frames...
-      v.rotation.z = Math.sin(t * 0.27 + 1) * 0.007;              // ...and rolls a touch — we're afloat
+      v.position.y = Math.sin(t * 0.42) * 0.07;                   // the whole outside world bobs against the frames...
+      v.rotation.z = Math.sin(t * 0.27 + 1) * 0.006;              // ...and rolls a touch — we're afloat
       // the sun sets as the day runs out: noon for the first third, then it slides
-      // down and half-sinks behind the water while the whole view grades warm
+      // down behind the horizon while the whole world grades pinkish orange
       let k = Math.min(1, Math.max(0, (day - 0.3) / 0.65));
       k = k * k * (3 - 2 * k);                                    // smoothstep
       for (const [m, a, b] of grade) m.color.copy(a).lerp(b, k);
       sun.position.y = SUN_TOP + (SUN_SET - SUN_TOP) * k;
-      sun.scale.setScalar(1 + 0.4 * k);                           // the low sun looms bigger
+      sun.scale.setScalar(2.4 * (1 + 0.35 * k));                  // the low sun looms bigger
     },
   };
 }
@@ -202,7 +231,7 @@ export function buildKitchen(scene) {
   g.add(put(box(19, 0.12, 0.55, mat(BRASS, { metal: 0.6, rough: 0.4 })), 0, 0.85, -4.13));
 
   // the shared tropical panorama behind the wall, seen through every opening
-  const locale = localePanorama(); g.add(locale.group);
+  const locale = localeWorld(); g.add(locale.group);
 
   // window frames over the openings
   const addWindow = (x, w, h) => {
