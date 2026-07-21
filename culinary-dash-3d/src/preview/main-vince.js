@@ -151,7 +151,7 @@ function tick(dt) {
   const sub = RENT ? '' : EMBED ? 'returning to the restaurant…' : 'tap to rematch';
   if (boss.dead && boss.winT > 1.3 && !ended) {
     ended = 1;
-    showBanner('VINCE IS DOWN', RENT ? `Rent paid — day ${run.day + 1} starts tomorrow…` : 'Your lease is safe — ' + sub);
+    showBanner('VINCE IS DOWN', RENT ? `Rent waived — day ${run.day + 1} starts tomorrow…` : 'Your lease is safe — ' + sub);
     reportResult('win'); settleRent('win');
   }
   if (chef.hp <= 0 && !ended) {

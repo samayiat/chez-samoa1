@@ -49,7 +49,10 @@
     #dayend p { margin: 0; color: #d3bf98; font-size: 15px; } #dayend p b { color: #ffdca6; }
     #dayend a { margin-top: 8px; text-decoration: none; color: #1a1018; font-weight: 800; letter-spacing: .04em; font-size: 15px;
       border-radius: 10px; padding: 13px 26px; background: linear-gradient(180deg, #ff8a3a, #d83a1a); box-shadow: 0 8px 24px rgba(216,58,26,.32); }
-    #dayend .again { margin-top: 4px; font-size: 12px; color: #8a7a64; }
+    #dayend #payBtn { margin-top: 8px; cursor: pointer; border: 0; color: #12240f; font-weight: 800; letter-spacing: .04em;
+      font-size: 15px; border-radius: 10px; padding: 13px 26px; background: linear-gradient(180deg, #a6e28a, #4f9a3e);
+      box-shadow: 0 8px 24px rgba(79,154,62,.32); }
+    #hud #rent { color: #ffab7a; } #hud #rent.ok { color: #8be27a; }
 
     #start { position: fixed; inset: 0; z-index: 10; display: flex; flex-direction: column; align-items: center; justify-content: center;
       gap: 14px; text-align: center; padding: 24px; transition: opacity .4s ease;
@@ -79,13 +82,17 @@
     <span id="money">$0</span>
     <span id="served">★ 0</span>
     <span><span class="lbl">DAY</span><span id="day">80s</span></span>
+    <span><span class="lbl">RENT</span><span id="rent">$40</span></span>
     <span id="danger"></span>
   </div>
   <div id="msg"></div>
   <div id="prompt"></div>
   <div id="hint"><b>Move</b> WASD / stick &nbsp;·&nbsp; <b>Action</b> E / the ACTION button — cook at a station, then carry &amp; serve</div>
 
-  <div id="dayend"><h2>—</h2><p>—</p><a href="../vince/">Face him →</a><div class="again">tap to close</div></div>
+  <div id="dayend"><h2>—</h2><p>—</p>
+    <button id="payBtn" type="button">Pay the rent</button>
+    <a href="../vince/">Face him →</a>
+  </div>
 
   <div id="start">
     <div class="kicker">2.5D SERVICE LOOP</div>

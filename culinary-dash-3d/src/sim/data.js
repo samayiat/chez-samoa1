@@ -72,6 +72,9 @@ export const ORDER_INTERVAL = [3.0, 6.0]; // seconds between new arrivals (slice
 // the game stays winnable. Day 1 is exactly the classic tuning (k = 1).
 export const DAY_SPAWN_K = (day) => Math.max(0.55, Math.pow(0.93, ((day || 1) - 1)));
 export const DAY_DRAIN_K = (day) => Math.min(1.8, 1 + 0.07 * ((day || 1) - 1));
+// The rent — due at every close, climbing day over day. Pay it and sleep safe,
+// or refuse and settle it with Vince in the alley.
+export const RENT_DUE = (day) => 40 + 15 * ((day || 1) - 1);
 
 // --- Combat / impact spine (ported: src lines 835-2321) --------------------
 export const COMBAT = {

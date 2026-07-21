@@ -13,7 +13,7 @@ import { initInput, pollInput } from '../engine/input.js';
 import { initTouch } from '../engine/touch.js';
 import { PIXEL_CAP, RIM_LIGHT } from '../engine/quality.js';
 import { createState, stepSim } from '../sim/state.js';
-import { STATIONS, DISHES, COMBAT } from '../sim/data.js';
+import { STATIONS, DISHES, COMBAT, RENT_DUE } from '../sim/data.js';
 import { rpos } from './kitchen-space.js';
 import { buildKitchen } from './kitchen-room.js';
 import { createCustomers, DISH_COLOR } from './kitchen-customers.js';
@@ -27,9 +27,11 @@ import { lerp, smooth, clamp01, mat, box, put } from './util.js';
 const app = document.getElementById('app');
 // the persistent RUN — day number + banked money, carried across the fight hop
 const run = loadRun();
-if (run.day > 1) {
+{
   const k = document.querySelector('#start .kicker');
-  if (k) k.textContent = `DAY ${run.day} · $${run.money} BANKED`;
+  if (k) k.textContent = run.day > 1
+    ? `DAY ${run.day} · $${run.money} BANKED · RENT $${RENT_DUE(run.day)} DUE AT CLOSE`
+    : `DAY 1 · RENT $${RENT_DUE(1)} DUE AT CLOSE`;
 }
 const startEl = document.getElementById('start');
 // who's cooking — persisted choice; ?chef=male still forces him (deep links)
@@ -44,7 +46,8 @@ const H = {
   money: document.getElementById('money'), served: document.getElementById('served'),
   day: document.getElementById('day'), danger: document.getElementById('danger'),
   msg: document.getElementById('msg'), prompt: document.getElementById('prompt'),
-  end: document.getElementById('dayend'),
+  end: document.getElementById('dayend'), rent: document.getElementById('rent'),
+  pay: document.getElementById('payBtn'),
 };
 
 let renderer, scene, camera, kitchen, customers, cats, chef, cu, carry, composer, booted = false, lastT = 0;
@@ -223,6 +226,9 @@ function updateHud() {
   H.money.textContent = '$' + (run.money + state.money);
   H.served.textContent = '★ ' + state.served;
   H.day.textContent = run.day + ' · ' + Math.max(0, Math.ceil(dayT)) + 's';
+  const rentDue = RENT_DUE(run.day);
+  H.rent.textContent = '$' + rentDue;
+  H.rent.classList.toggle('ok', run.money + state.money >= rentDue);   // green once covered
   // walkout danger pips (out of the trigger)
   const bad = state.badOrders, max = COMBAT.BRAWL_TRIGGER;
   H.danger.innerHTML = '';
@@ -250,15 +256,29 @@ function updateHud() {
 function endDay(kind) {
   if (ended) return; ended = kind === 'mob' ? -1 : 1;
   const win = kind === 'done';
-  // bank the day into the run — every close is rent night, so the fight is next
-  saveRun({ ...run, money: run.money + state.money, served: run.served + state.served });
+  const total = run.money + state.money;
+  const rent = RENT_DUE(run.day);
+  // bank the day; the choice below decides whether the rent leaves the bank
+  saveRun({ ...run, money: total, served: run.served + state.served });
   sfx(win ? 'dayend' : 'burnt');
+  // THE DECISION: pay up and sleep safe, or refuse and settle it in the alley.
+  // A mob night (or an empty wallet) takes the choice away — Vince is coming.
+  const canPay = win && total >= rent;
   H.end.querySelector('h2').textContent = win ? 'Closing time' : 'The mob is at the door';
   H.end.querySelector('p').innerHTML = win
-    ? `Day ${run.day}: served <b>${state.served}</b>, banked <b>$${state.money}</b> ($${run.money + state.money} total).<br>Vince is at the door about the rent.`
-    : `Too many walkouts — and Vince came to collect anyway. <b>Step into the fight.</b>`;
+    ? `Day ${run.day}: served <b>${state.served}</b>, banked <b>$${state.money}</b> — <b>$${total}</b> in the till.<br>` +
+      (canPay ? `Vince wants <b>$${rent}</b> rent. Pay him… or don't.` : `Vince wants <b>$${rent}</b> rent — and you don't have it.`)
+    : `Too many walkouts — and Vince came for the <b>$${rent}</b> rent anyway. <b>Step into the fight.</b>`;
+  H.pay.style.display = canPay ? 'inline-block' : 'none';
+  H.pay.textContent = `Pay the $${rent}`;
+  H.pay.onclick = () => {
+    saveRun({ day: run.day + 1, money: total - rent, served: run.served + state.served });
+    sfx('serve');
+    location.reload();                       // sleep; next day opens in the kitchen
+  };
   const link = H.end.querySelector('a');
   link.style.display = 'inline-block';
+  link.textContent = canPay ? `Refuse — fight him →` : `Face him →`;
   link.href = '../vince/?rent=1';
   H.end.classList.add('show');
 }
