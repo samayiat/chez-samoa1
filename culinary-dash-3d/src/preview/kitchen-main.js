@@ -18,7 +18,7 @@ import { rpos } from './kitchen-space.js';
 import { buildKitchen } from './kitchen-room.js';
 import { createCustomers, DISH_COLOR } from './kitchen-customers.js';
 import { createCats } from './kitchen-cats.js';
-import { loadRun, saveRun } from '../engine/run.js';
+import { loadRun, saveRun, loadChef, saveChef } from '../engine/run.js';
 import { initSfx, sfx } from '../engine/sfx.js';
 import { buildChef } from './chef.js';
 import { carriedModel } from './food.js';
@@ -32,6 +32,14 @@ if (run.day > 1) {
   if (k) k.textContent = `DAY ${run.day} · $${run.money} BANKED`;
 }
 const startEl = document.getElementById('start');
+// who's cooking — persisted choice; ?chef=male still forces him (deep links)
+let chefSel = /[?&]chef=male/.test(location.search) ? 'm' : loadChef();
+{
+  const opts = [...document.querySelectorAll('.chefopt')];
+  const syncSel = () => opts.forEach((x) => x.classList.toggle('on', x.dataset.chef === chefSel));
+  syncSel();
+  opts.forEach((b) => b.addEventListener('click', () => { chefSel = b.dataset.chef; saveChef(chefSel); syncSel(); }));
+}
 const H = {
   money: document.getElementById('money'), served: document.getElementById('served'),
   day: document.getElementById('day'), danger: document.getElementById('danger'),
@@ -68,8 +76,7 @@ function boot() {
   kitchen = buildKitchen(scene);
   customers = createCustomers(scene, kitchen.tables);
   cats = createCats(scene);
-  const male = /[?&]chef=male/.test(location.search);   // ?chef=male shows the male chef
-  chef = buildChef({ male }); scene.add(chef); cu = chef.userData;
+  chef = buildChef({ male: chefSel === 'm' }); scene.add(chef); cu = chef.userData;
 
   // what the chef carries — the real dish/ingredient model, swapped when it changes
   carry = new THREE.Group();

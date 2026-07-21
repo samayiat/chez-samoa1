@@ -19,7 +19,7 @@ import { initTouch } from '../engine/touch.js';
 import { PIXEL_CAP, RIM_LIGHT } from '../engine/quality.js';
 import { buildArena } from './arena.js';
 import { createBoss } from './boss.js';
-import { loadRun, saveRun, clearRun } from '../engine/run.js';
+import { loadRun, saveRun, clearRun, loadChef } from '../engine/run.js';
 import { createChef } from './chef.js';
 import { createFx } from './fx.js';
 import { clamp01, lerp, smooth } from './util.js';
@@ -296,7 +296,7 @@ function boot() {
     const k = 1 + 0.15 * (run.day - 1);
     boss.hp = Math.round(boss.hp * k); boss.maxHp = boss.hp;
   }
-  chef = createChef(scene);
+  chef = createChef(scene, { male: loadChef() === 'm' });   // same chef as the kitchen
 
   composer = new EffectComposer(renderer);
   composer.addPass(new RenderPass(scene, camera));

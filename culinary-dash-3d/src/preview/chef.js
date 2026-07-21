@@ -175,8 +175,8 @@ export function buildChef(opts = {}) {
   return g;
 }
 
-export function createChef(scene) {
-  const mesh = buildChef();
+export function createChef(scene, opts) {
+  const mesh = buildChef(opts);
   scene.add(mesh);
   const u = mesh.userData;
 

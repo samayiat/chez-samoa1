@@ -25,3 +25,12 @@ export function clearRun() {
   mem = null;
   try { localStorage.removeItem(KEY); } catch (e) { /* fine */ }
 }
+
+// Chef choice ('f' | 'm') — separate from the run so it survives an eviction.
+const CHEF_KEY = 'chez.chef';
+let chefMem = 'f';
+export function loadChef() {
+  try { const v = localStorage.getItem(CHEF_KEY); if (v === 'f' || v === 'm') return v; } catch (e) {}
+  return chefMem;
+}
+export function saveChef(v) { chefMem = v; try { localStorage.setItem(CHEF_KEY, v); } catch (e) {} }

@@ -64,6 +64,12 @@
     #start button { margin-top: 8px; cursor: pointer; color: #241811; font-weight: 800; letter-spacing: .04em; font-size: 15px;
       border: 0; border-radius: 10px; padding: 14px 30px; background: linear-gradient(180deg, #ffe0a6, #f0a83a); box-shadow: 0 8px 26px rgba(240,150,58,.34); }
     #start .note { font-size: 12px; color: #8a7a64; }
+    #start .who { display: flex; align-items: center; gap: 10px; margin-top: 4px; }
+    #start .who span { font-size: 10px; letter-spacing: .18em; color: #b79974; font-weight: 700; }
+    #start .chefopt { cursor: pointer; font-weight: 800; font-size: 13px; letter-spacing: .04em; color: #c9ab7c;
+      border: 1px solid #5a4632; border-radius: 9px; padding: 9px 16px; background: #2a1e14; transition: all .15s; }
+    #start .chefopt.on { color: #241811; background: linear-gradient(180deg, #ffe0a6, #f0a83a); border-color: transparent;
+      box-shadow: 0 4px 14px rgba(240,150,58,.3); }
   </style>
 </head>
 <body>
@@ -91,6 +97,11 @@
     <div class="keys">
       <span>WASD / Arrows — move</span>
       <span>E / Space — cook &amp; serve</span>
+    </div>
+    <div class="who">
+      <span>WHO'S COOKING TONIGHT?</span>
+      <button type="button" class="chefopt" data-chef="f">HER</button>
+      <button type="button" class="chefopt" data-chef="m">HIM</button>
     </div>
     <button id="startBtn" type="button">Open the kitchen</button>
     <p class="note">Best in landscape · touch, keyboard, or gamepad</p>
