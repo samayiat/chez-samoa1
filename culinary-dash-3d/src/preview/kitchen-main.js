@@ -340,7 +340,9 @@ function updateHud() {
   if (brawl) {
     const dr = state.chef.drinks || 0;
     const wpn = state.chef.weapon ? ` · armed: ${WEAPONS[state.chef.weapon.id].label}` : '';
-    H.prompt.textContent = 'FIGHT! E / ACTION to punch' + wpn +
+    const streak = (state.combo || 0) >= 2 ? ` · COMBO ×${state.combo}` : '';
+    const fl = (state.meter || 0) >= 10 ? ' · ★ FLURRY READY' : '';
+    H.prompt.textContent = 'FIGHT! E / ACTION to punch' + wpn + streak + fl +
       (dr >= 5 ? ` · WASTED (${dr} shots)` : dr > 0 ? ` · ${dr} shot${dr > 1 ? 's' : ''} of courage` : ' · drink at the bar for courage');
     H.prompt.style.opacity = '1';
   }

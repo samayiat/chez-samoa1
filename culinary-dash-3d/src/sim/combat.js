@@ -56,6 +56,27 @@ const MOVES = {
   thief:   { kind: 'lunge', windup: 0.4,  dur: 0.2,  speed: 220, reach: 10, recover: 0.6,  trigger: 30 },
 };
 
+// --- adopted from GLASS JAW (the boxing game's combat grammar) ---------------
+//  - fighters BLOCK: a raised guard eats the jab and the cross; only the
+//    roundhouse breaks through it (the uppercut's `breaks` rule)
+//  - the smasher is a COUNTER-PUNCHER: a punch on his guard is answered
+//    immediately with a fast-wound slam (`punish` + forceAttack)
+//  - a whiffed strike opens a COUNTER window: the next landed punch doubles
+//  - landed punches build a METER; full meter turns the next press into a
+//    FLURRY — four rapid swings through the same punch pipeline
+//  - chasers CIRCLE between swings and sometimes chain a second lunge
+const GUARD_CHANCE = { chaser: 0.15, smasher: 0.45, thief: 0 };
+const COUNTER_WINDOW = 1.1;
+const METER_MAX = 10;
+const FLURRY_SWINGS = 4;
+const FLURRY_TEMPO = 0.55;
+
+function openCounter(state) {
+  state.counterT = COUNTER_WINDOW;
+  state.msg = 'he missed — COUNTER!';
+  state.msgT = 1.1;
+}
+
 export function startBrawl(state, count = 4) {
   state.phase = 'brawl';
   state.customers = [];
@@ -73,6 +94,11 @@ export function startBrawl(state, count = 4) {
   state.brawlResult = null;
 
   chef.weapon = null;
+  chef.flurryN = 0;
+  state.combo = 0;         // landed-punch streak (glass-jaw combo)
+  state.comboT = 0;
+  state.meter = 0;         // fills as punches land; full = a FLURRY is loaded
+  state.counterT = 0;      // the window a whiffed enemy strike leaves open
   const kinds = Object.keys(ARCHETYPES);
   for (let i = 0; i < count; i++) {
     const kind = kinds[i % kinds.length];
@@ -88,6 +114,9 @@ export function startBrawl(state, count = 4) {
       role: kind === 'thief' ? 'thief' : 'fighter', state: 'steal', carry: false,
       // fighters get thirsty: most of them will break for the bar mid-fight
       job: 'chase', chugT: 0, buffed: false,
+      guard: 0, punish: false,                    // glass-jaw: blocks + counters
+      circle: range(state.rng, 0, 1) < 0.5 ? -1 : 1,
+      circleT: range(state.rng, 0.9, 2.7),
       thirstAt: range(state.rng, 0, 1) < 0.6 ? state.t + range(state.rng, 1.5, 6) : Infinity,
       // ...and some come to WRECK the place (2D raid system)
       raidAt: range(state.rng, 0, 1) < 0.5 ? state.t + range(state.rng, 1, 5) : Infinity,
@@ -114,7 +143,7 @@ function landPunch(state) {
   const baseW = COMBAT.W[step.weight] + (wp && wp.dmg ? 0.15 : 0);
   const impulse = COMBAT.BRAWL_KNOCK * (COMBAT.MOVE_KNOCK[step.move] ?? 1) * (wp ? wp.knock : 1);
 
-  let bodies = 0, anyKO = false;
+  let bodies = 0, blockedN = 0, anyKO = false;
   for (const e of state.enemies) {
     if (e.hp <= 0) continue;
     const dx = e.x - chef.x, dy = e.y - chef.y;
@@ -122,8 +151,22 @@ function landPunch(state) {
     const lat = dx * L.x + dy * L.y;
     if (fwd < -COMBAT.PUNCH_BACK || fwd > COMBAT.PUNCH_REACH + (wp ? wp.reach : 0) + e.r) continue;
     if (Math.abs(lat) > COMBAT.PUNCH_YBAND + (wp ? wp.band : 0)) continue;
-    // courage hits harder; Heavy Hands (the shop) and the pan stack on top
-    e.hp -= (chef.drinks >= BUZZED_AT ? 2 : 1) + ((state.mods && state.mods.pow) || 0) + (wp ? wp.dmg : 0);
+    // BLOCKED (glass jaw): a raised guard eats everything but the roundhouse.
+    // The smasher is a counter-puncher — feed his guard and he answers NOW.
+    if (e.guard > 0 && step.move !== 'roundhouse') {
+      blockedN++;
+      e.kx += F.x * impulse * 0.25;
+      e.ky += F.y * impulse * 0.25;
+      if (e.kind === 'smasher' && !e.atk) { e.guard = 0; e.punish = true; e.atkCd = 0; }
+      continue;
+    }
+    const broke = e.guard > 0;                    // the roundhouse goes THROUGH
+    if (broke) { e.guard = 0; e.punish = false; }
+    // courage hits harder; Heavy Hands (the shop) and the pan stack on top —
+    // and a counter (his whiff, your window) doubles the whole package
+    const counter = state.counterT > 0 ? 2 : 1;
+    e.hp -= ((chef.drinks >= BUZZED_AT ? 2 : 1) + ((state.mods && state.mods.pow) || 0) + (wp ? wp.dmg : 0)) * counter
+      + (broke ? 1 : 0);
     e.hurtT = 0.18;
     if (e.role === 'thief' && e.carry) {
       // caught him — the cash drops and a bounty lands in the till (2D port)
@@ -163,6 +206,14 @@ function landPunch(state) {
     const cy = chef.y + F.y * COMBAT.PUNCH_REACH * 0.5;
     emitHit(state, w, cx, cy, F.x, F.y);
     state.enemies = state.enemies.filter((e) => e.hp > 0);
+    // the streak: combo climbs, the meter loads, the ranks shout (glass jaw)
+    if (state.counterT > 0) { state.counterT = 0; state.msg = 'COUNTERED!'; state.msgT = 1.2; }
+    state.combo += 1;
+    state.comboT = 1.25;
+    state.meter = Math.min(METER_MAX, state.meter + 1 + (anyKO ? 1 : 0));
+    if (state.combo === 3) { state.msg = 'NICE!'; state.msgT = 0.9; }
+    else if (state.combo === 6) { state.msg = 'SHARP!'; state.msgT = 0.9; }
+    else if (state.combo === 10) { state.msg = 'BRUTAL!'; state.msgT = 1.1; }
     if (wp) {
       // every landed swing wears the tool down — appliances aren't forever
       if (state.sounds) state.sounds.push('clang');
@@ -173,6 +224,11 @@ function landPunch(state) {
         state.msgT = 1.6;
       }
     }
+  } else if (blockedN > 0) {
+    emitHit(state, COMBAT.W.scuff, chef.x + F.x * 10, chef.y + F.y * 10, F.x, F.y);
+    if (state.sounds) state.sounds.push('block');
+    state.msg = 'BLOCKED — the roundhouse breaks a guard';
+    state.msgT = 1.2;
   }
 }
 
@@ -187,13 +243,32 @@ function updatePunch(state, dt, input) {
     chef.swing.t += dt;
     const s = chef.swing;
     if (!s.hit && s.t >= s.dur * CONTACT_AT) { landPunch(state); s.hit = true; }
-    if (s.t >= s.dur) { chef.swing = null; chef.comboIdx = (chef.comboIdx + 1) % COMBO.length; chef.comboT = 0; }
+    if (s.t >= s.dur) {
+      chef.swing = null; chef.comboIdx = (chef.comboIdx + 1) % COMBO.length; chef.comboT = 0;
+      if (chef.flurryN > 0) {
+        // mid-FLURRY: the next swing throws itself, no press needed (glass jaw:
+        // six real punches through the same pipeline — ours throws four)
+        chef.flurryN -= 1;
+        const nxt = COMBO[chef.comboIdx];
+        chef.swing = { step: chef.comboIdx, dur: (nxt.frames * COMBAT.FIGHT_FRAME_MS) / 1000 * FLURRY_TEMPO, t: 0, hit: false };
+      }
+    }
   } else {
     chef.comboT += dt;
     if (chef.comboT > COMBO_RESET) chef.comboIdx = 0;
     if (chef.bufT > 0) {
       const step = COMBO[chef.comboIdx];
-      chef.swing = { step: chef.comboIdx, dur: (step.frames * COMBAT.FIGHT_FRAME_MS) / 1000, t: 0, hit: false };
+      let dur = (step.frames * COMBAT.FIGHT_FRAME_MS) / 1000;
+      if (state.meter >= METER_MAX) {
+        // full meter: this press IS the flurry
+        state.meter = 0;
+        chef.flurryN = FLURRY_SWINGS - 1;
+        dur *= FLURRY_TEMPO;
+        state.msg = 'FLURRY!';
+        state.msgT = 1.2;
+        if (state.sounds) state.sounds.push('perfect');
+      }
+      chef.swing = { step: chef.comboIdx, dur, t: 0, hit: false };
       chef.bufT = 0;
     }
   }
@@ -338,6 +413,7 @@ function updateEnemies(state, dt) {
           if (!a.hit && cd < mv.reach + 6) {
             a.hit = true;
             chef.hp -= e.dmg; chef.hurtT = 0.25;
+            state.combo = 0;                                // eating one ends the streak
             emitHit(state, COMBAT.W.scuff, chef.x, chef.y, a.dx, a.dy);
           }
         } else if (!a.hit && a.t >= mv.dur * 0.5) {         // slam lands mid-swing
@@ -345,17 +421,50 @@ function updateEnemies(state, dt) {
           emitHit(state, COMBAT.W.jab, a.cx, a.cy, 0, 0);   // the floor jumps either way
           if (Math.hypot(chef.x - a.cx, chef.y - a.cy) < mv.r) {
             chef.hp -= e.dmg; chef.hurtT = 0.3;
+            state.combo = 0;
+          } else {
+            openCounter(state);                             // slammed the floorboards
           }
         }
-        if (a.t >= mv.dur) { a.phase = 'recover'; a.t = 0; a.k = 0; }
+        if (a.t >= mv.dur) {
+          if (mv.kind === 'lunge' && !a.hit) openCounter(state);   // sailed right past
+          if (a.chain > 0) {
+            // a swarmer chains the second lunge off a half windup (glass jaw AI.chain)
+            e.atk = { phase: 'windup', t: mv.windup * tempo * 0.5, k: 0.5, kind: a.kind, chain: a.chain - 1 };
+          } else { a.phase = 'recover'; a.t = 0; a.k = 0; }
+        }
       } else if (a.phase === 'recover') {
         a.k = Math.min(1, a.t / (mv.recover * (e.buffed ? 0.8 : 1)));
         if (a.t >= mv.recover * (e.buffed ? 0.8 : 1)) { e.atk = null; e.atkCd = e.atkInterval; }
       }
+    } else if (e.guard > 0) {
+      // holding the guard — planted, arms up, waiting you out (glass jaw block)
+      e.guard -= dt;
+      e.atkCd = Math.max(0, e.atkCd - dt);
     } else {
       e.atkCd = Math.max(0, e.atkCd - dt);
       if (kb < 20 && d > 20) { e.x += (dx / d) * e.speed * dt; e.y += (dy / d) * e.speed * dt; }
-      if (e.atkCd <= 0 && d < mv.trigger) e.atk = { phase: 'windup', t: 0, k: 0, kind: mv.kind };
+      // footwork between swings: circle the chef instead of standing in line.
+      // (?? guards: a half-set enemy must never NaN its own position)
+      if (kb < 20 && e.atkCd > 0 && d < mv.trigger * 1.6) {
+        e.circleT = (e.circleT ?? 1) - dt;
+        if (e.circleT <= 0) { e.circle = -(e.circle || 1); e.circleT = range(state.rng, 0.9, 2.7); }
+        e.x += (-dy / d) * (e.circle || 1) * e.speed * 0.6 * dt;
+        e.y += (dx / d) * (e.circle || 1) * e.speed * 0.6 * dt;
+      }
+      if (e.atkCd <= 0 && d < mv.trigger) {
+        if (!e.punish && range(state.rng, 0, 1) < (GUARD_CHANCE[e.kind] || 0)) {
+          e.guard = range(state.rng, 0.5, 0.9);            // he covers up instead
+        } else {
+          // the punished answer comes off a half windup (glass jaw forceAttack)
+          const head = e.punish ? mv.windup * tempo * 0.55 : 0;
+          e.punish = false;
+          e.atk = {
+            phase: 'windup', t: head, k: 0, kind: mv.kind,
+            chain: e.kind === 'chaser' && range(state.rng, 0, 1) < 0.35 ? 1 : 0,
+          };
+        }
+      }
     }
     resolveCollision(e, state.obstacles, e.r);
   }
@@ -403,6 +512,8 @@ function tryDrink(state) {
 
 export function updateCombat(state, dt, input) {
   if (state.msgT > 0) { state.msgT -= dt; if (state.msgT <= 0) state.msg = ''; }
+  if (state.counterT > 0) state.counterT -= dt;
+  if (state.comboT > 0) { state.comboT -= dt; if (state.comboT <= 0) state.combo = 0; }
 
   // real appliances are real weapons: empty hands near the right station arms you
   if (!state.chef.weapon) {

@@ -236,6 +236,71 @@ describe('the moveset (telegraph -> strike -> recover)', () => {
   });
 });
 
+describe('glass-jaw grammar (guards, counters, the flurry)', () => {
+  // a lone parked fighter set up `dist` ahead of the chef, no jobs, no attacks
+  function duel(kind = 'chaser', dist = 15) {
+    const s = createState(7); startBrawl(s, 1);
+    const chef = s.chef; chef.x = 300; chef.y = 250; chef.facing = Math.PI / 2;
+    s.enemies = [{ id: 'D', kind, x: chef.x + dist, y: chef.y, hp: 9, maxHp: 9,
+      speed: 0, dmg: 1, atkInterval: 9, r: 7, atkCd: 99, kx: 0, ky: 0, hurtT: 0,
+      role: 'fighter', job: 'chase', thirstAt: Infinity, raidAt: Infinity, buffed: false,
+      chugT: 0, guard: 0, punish: false, circle: 1, circleT: 9 }];
+    return [s, s.enemies[0]];
+  }
+
+  it('a raised guard eats the jab — the roundhouse breaks through', () => {
+    const [s, e] = duel();
+    e.guard = 9;
+    drive(s, 18, PRESS);                       // the whole jab plays out on the guard
+    expect(e.hp).toBe(9);
+    drive(s, 40, null);                        // let the combo window lapse
+    e.guard = 9; s.chef.comboIdx = 2; s.chef.comboT = 0;   // load the roundhouse
+    drive(s, 20, PRESS);
+    expect(e.hp).toBeLessThan(9);              // guard broken, damage through
+    expect(e.guard).toBe(0);
+  });
+
+  it('the smasher answers a blocked punch immediately (counter-puncher)', () => {
+    const [s, e] = duel('smasher');
+    e.guard = 9; e.atkCd = 99;
+    drive(s, 12, PRESS);                       // jab dies on the guard mid-swing...
+    // ...and his slam is ALREADY winding, off a head-started windup
+    expect(e.atk && e.atk.phase).toBe('windup');
+    expect(e.atk.t).toBeGreaterThan(0.3);      // the forceAttack head start
+  });
+
+  it('a whiffed lunge opens a counter window, and the counter hits double', () => {
+    const [s, e] = duel('chaser', 40);
+    e.atkCd = 0;                               // he lunges...
+    for (let i = 0; i < 34 && !(e.atk && e.atk.phase === 'strike'); i++) stepSim(s, STEP, NO);
+    s.chef.x = 60; s.chef.y = 60;              // ...at where she isn't
+    for (let i = 0; i < 20 && s.counterT <= 0; i++) stepSim(s, STEP, NO);
+    expect(s.counterT).toBeGreaterThan(0);
+    // step into him and land the counter — double damage
+    e.atk = null; e.atkCd = 99; e.kx = 0; e.ky = 0;
+    s.chef.x = e.x - 15; s.chef.y = e.y; s.chef.facing = Math.PI / 2;
+    drive(s, 12, PRESS);
+    expect(e.hp).toBe(7);                      // 9 - (1 x2 counter)
+    expect(s.counterT).toBe(0);                // window spent
+  });
+
+  it('a full meter turns the next press into a four-swing flurry', () => {
+    const [s] = duel();
+    s.meter = 10;
+    stepSim(s, STEP, PRESS);
+    expect(s.chef.flurryN).toBe(3);            // this swing + three more loaded
+    expect(s.meter).toBe(0);
+    // no further presses: the flurry keeps swinging by itself
+    let swings = 0, prev = s.chef.swing;
+    for (let i = 0; i < 120; i++) {
+      stepSim(s, STEP, NO);
+      if (s.chef.swing && s.chef.swing !== prev) { swings++; prev = s.chef.swing; }
+    }
+    expect(swings).toBeGreaterThanOrEqual(3);  // the chained swings threw themselves
+    expect(s.chef.flurryN).toBe(0);            // ...and the flurry spent itself
+  });
+});
+
 describe('wrecking the place (raids, table flips, weapons)', () => {
   const fryer = STATIONS.find((s) => s.id === 'fryer');
 

@@ -121,7 +121,10 @@ export function createBrawlers(scene) {
       // strike, slump on the recover. (sim: e.atk {kind, phase, k})
       const atk = e.atk;
       let lean = 0, armLX = -0.7, armRX = chugging ? -2.3 : -0.7, headX = chugging ? -0.4 : 0;
-      if (atk) {
+      if (e.guard > 0) {
+        // covered up (glass jaw block): arms crossed high, chin tucked
+        armLX = armRX = -1.85; headX = 0.22; lean = 0.08;
+      } else if (atk) {
         if (atk.phase === 'windup') {
           lean = -0.32 * atk.k;                                     // rearing back
           if (atk.kind === 'slam') { armLX = armRX = lerp(-0.7, -2.7, atk.k); headX = -0.25 * atk.k; }
@@ -141,9 +144,11 @@ export function createBrawlers(scene) {
 
       const flash = e.hurtT > 0 ? 0.45 : 0;
       const lit = e.buffed ? 0.3 + Math.sin(t * 9) * 0.1 : 0;
-      // the telegraph glows hotter as the strike closes in (red pulse)
+      // the telegraph glows hotter as the strike closes in (red pulse); a held
+      // guard reads as a cool steel sheen instead
       const tele = atk && atk.phase === 'windup' ? atk.k * (0.4 + 0.25 * Math.sin(t * 22)) : 0;
-      b.torso.material.emissive.setRGB(Math.max(flash, lit, tele), lit * 0.22, 0);
+      const grd = e.guard > 0 ? 0.22 : 0;
+      b.torso.material.emissive.setRGB(Math.max(flash, lit, tele), Math.max(lit * 0.22, grd * 0.6), grd);
     }
   }
 
