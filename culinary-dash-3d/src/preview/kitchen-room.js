@@ -279,6 +279,22 @@ export function buildKitchen(scene) {
     door.add(put(box(1.9, 0.12, 0.7, mat(0x6a4526, { rough: 0.8 })), 0, 0.03, 0.2));             // threshold mat
   }
 
+  // the BACK OFFICE door on the left wall — where the bank gets spent. The
+  // panel hangs on a hinge pivot so the render loop can swing it open when
+  // the chef walks in after paying the rent (kitchen-main's office beat).
+  let officeDoor;
+  {
+    const door = new THREE.Group(); door.position.set(-13.58, 0, -1.5); door.rotation.y = Math.PI / 2; g.add(door);
+    door.add(put(box(1.7, 3.1, 0.22, mat(WOOD, { rough: 0.75 })), 0, 1.55, 0));                  // frame
+    door.add(put(box(1.4, 2.85, 0.02, mat(0x120c08, { rough: 1 })), 0, 1.42, -0.02));            // dark recess behind
+    const hinge = new THREE.Group(); hinge.position.set(-0.68, 0, 0.08); door.add(hinge);        // hinge on the jamb
+    const panel = put(box(1.36, 2.8, 0.1, mat(WOOD, { rough: 0.7 })), 0.68, 1.4, 0);
+    panel.castShadow = true; hinge.add(panel);
+    hinge.add(put(box(0.08, 0.28, 0.08, mat(BRASS, { metal: 0.6, rough: 0.4 })), 1.2, 1.35, 0.09)); // handle rides the panel
+    hinge.add(put(box(0.62, 0.2, 0.03, mat(BRASS, { metal: 0.6, rough: 0.35, emissive: 0x442a08, emi: 0.35 })), 0.68, 2.25, 0.08)); // OFFICE plaque
+    officeDoor = { group: door, hinge, inside: { x: -13.6, z: -1.5 }, at: { x: -12.5, z: -1.5 } };
+  }
+
   // back counter running behind the stations
   const counter = put(box(26, 1.2, 0.7, mat(WOOD, { rough: 0.8 })), 0, 0.6, -5.6);
   counter.castShadow = true; counter.receiveShadow = true; g.add(counter);
@@ -293,7 +309,7 @@ export function buildKitchen(scene) {
   plantAt(-12.4, 1.3, -5.6, 68, 0.45); plantAt(12.4, 1.3, -5.6, 81, 0.5);
   // and proper indoor trees along the side walls
   const treeAt = (x, z, seed, s) => { const tr = pottedTree(seed, s); tr.group.position.set(x, 0, z); g.add(tr.group); plants.push(tr); };
-  treeAt(-12.9, 0.2, 101, 1.15); treeAt(12.9, 0.6, 117, 1.05);
+  treeAt(-12.9, 2.2, 101, 1.15); treeAt(12.9, 0.6, 117, 1.05);   // (left tree shifted clear of the office door)
   treeAt(-12.8, 6.2, 133, 1.25); treeAt(12.8, 6.4, 149, 1.2);
 
   // ---- stations at the sim's positions ----
@@ -337,7 +353,7 @@ export function buildKitchen(scene) {
   if (RIM_LIGHT) { const rim = new THREE.DirectionalLight(0x6d84ff, 0.95); rim.position.set(-6, 7, -9); scene.add(rim); }   // cold back rim → edge separation
 
   return {
-    stations, tables,
+    stations, tables, officeDoor,
     update(dt, t, day) {
       for (const s of steamers) s.update(dt, t);
       for (let i = 0; i < lamps.length; i++) lamps[i].rotation.z = Math.sin(t * 0.7 + i) * 0.02;

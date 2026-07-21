@@ -56,6 +56,9 @@ const H = {
 let renderer, scene, camera, kitchen, customers, cats, brawlers, chef, cu, carry, composer, booted = false, lastT = 0;
 let camShake = 0, lastPhase = 'service';
 let state, walkPhase = 0, facing = Math.PI, dayT = 80, ended = 0, workBurst = 0, lastCarryKey = null;
+// the PARTNER — whichever chef you didn't pick. They open the day on the floor
+// with you, then walk off into the back office to run the books.
+let partner = null, pu = null, partnerWalk = null, partnerPhase = 0;
 const stationDef = Object.fromEntries(STATIONS.map((s) => [s.id, s]));
 
 function boot() {
@@ -85,6 +88,12 @@ function boot() {
   cats = createCats(scene);
   brawlers = createBrawlers(scene);
   chef = buildChef({ male: chefSel === 'm' }); scene.add(chef); cu = chef.userData;
+  // the partner — the chef you DIDN'T pick — opens the day beside you, then
+  // heads into the back office to run the books (updatePartnerWalk)
+  partner = buildChef({ male: chefSel !== 'm' }); scene.add(partner); pu = partner.userData;
+  partner.position.set(1.5, 0, 1.1);
+  partner.rotation.y = -Math.PI / 2.4;                 // half-turned toward the office side
+  partnerWalk = { stage: 0, wait: 0.9, done: false, creaked: false };
 
   // what the chef carries — the real dish/ingredient model, swapped when it changes
   carry = new THREE.Group();
@@ -134,6 +143,7 @@ function tick(dt) {
 
 function render(alpha, now) {
   const t = now / 1000; const rdt = Math.min(0.05, t - lastT); lastT = t;
+  if (partnerWalk && !partnerWalk.done) updatePartnerWalk(rdt);
   if (state) syncScene(rdt, t);
   // impact shake + the drunk lean (buzzed brawling tilts the whole room a touch)
   const drinks = state && state.phase === 'brawl' ? state.chef.drinks || 0 : 0;
@@ -342,6 +352,52 @@ function endDay(kind) {
   link.textContent = canPay ? `Refuse — fight ${who} →` : `Face ${who} →`;
   link.href = '../vince/?rent=1';
   H.end.classList.add('show');
+}
+
+// The opening beat: the partner starts the day on the floor beside you, then
+// crosses to the back-office door on the left wall; it creaks open as they
+// reach it, they step into the dark, it shuts. Pure render-side cinema — the
+// service sim never knows they were there.
+function updatePartnerWalk(dt) {
+  const w = partnerWalk;
+  if (w.wait > 0) { w.wait -= dt; return; }            // a beat: they check the room first
+  const door = kitchen.officeDoor;
+  const WAYPOINTS = [{ x: -10.4, z: -1.3 }, door.at, door.inside];
+  const tgt = WAYPOINTS[w.stage];
+  const dx = tgt.x - partner.position.x, dz = tgt.z - partner.position.z;
+  const d = Math.hypot(dx, dz);
+  const doorDist = Math.hypot(door.at.x - partner.position.x, door.at.z - partner.position.z);
+
+  if (partner.visible) {
+    if (d > 0.1) {
+      const speed = w.stage === 2 ? 2.0 : 3.2;         // slows to step through
+      partner.position.x += (dx / d) * Math.min(speed * dt, d);
+      partner.position.z += (dz / d) * Math.min(speed * dt, d);
+      const want = Math.atan2(dx, dz);
+      let turn = want - partner.rotation.y;
+      while (turn > Math.PI) turn -= Math.PI * 2; while (turn < -Math.PI) turn += Math.PI * 2;
+      partner.rotation.y += turn * Math.min(1, dt * 10);
+      // the same walk cycle the service loop plays
+      partnerPhase += dt * 10;
+      const kL = pu.legL.userData.knee, kR = pu.legR.userData.knee;
+      pu.legL.rotation.x = Math.sin(partnerPhase) * 0.55; pu.legR.rotation.x = -Math.sin(partnerPhase) * 0.55;
+      kL.rotation.x = 0.15 + Math.max(0, -Math.sin(partnerPhase)) * 0.65;
+      kR.rotation.x = 0.15 + Math.max(0, Math.sin(partnerPhase)) * 0.65;
+      pu.armL.rotation.x = -Math.sin(partnerPhase) * 0.35; pu.armR.rotation.x = Math.sin(partnerPhase) * 0.35;
+      pu.body.position.y = Math.abs(Math.sin(partnerPhase)) * 0.05;
+    } else if (w.stage < 2) {
+      w.stage++;
+    } else {
+      partner.visible = false;                         // they're in. the books await.
+    }
+  }
+
+  // the door swings for them — open as they close in, shut once they're inside
+  const wantOpen = partner.visible ? doorDist < 2.1 : false;
+  if (wantOpen && !w.creaked) { w.creaked = true; sfx('door'); }
+  door.hinge.rotation.y = lerp(door.hinge.rotation.y, wantOpen ? -1.85 : 0, smooth(dt, wantOpen ? 7 : 5));
+
+  if (!partner.visible && door.hinge.rotation.y > -0.02) w.done = true;
 }
 
 // THE BACK OFFICE — the 2D game's between-days shop. The rent is paid, the bank
