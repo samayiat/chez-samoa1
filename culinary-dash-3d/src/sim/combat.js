@@ -15,11 +15,17 @@
 //  - Input BUFFERS (PUNCH_BUFFER), it never accelerates; cadence comes from the
 //    animation frame counts, not from mashing.
 
-import { COMBAT, COMBO, WORLD } from './data.js';
+import { COMBAT, COMBO, WORLD, STATIONS } from './data.js';
 import { moveChef, resolveCollision, forwardVec, lateralVec } from './movement.js';
 import { range } from './rng.js';
 
 const ENEMY_R = 6;
+// LIQUID COURAGE (ported from the 2D game's drink system): a shot heals a heart
+// and stacks courage — harder knockback, and at 3+ shots the punches deal double.
+// But the room starts to lean: 3+ shots wobble your steering, 5+ is WASTED.
+const BAR = STATIONS.find((s) => s.id === 'bar');
+const DRINK_REACH = 26, BUZZED_AT = 3, WASTED_AT = 5;
+const isSour = (d) => d === 'whiskey-sour' || d === 'gin-sour';
 const LUNGE_SPEED = 42;      // px/s forward drive during the first 45% of a swing
 const DRIVE_WINDOW = 0.45;
 const CONTACT_AT = 0.4;      // fraction of the swing where the blow lands
@@ -37,6 +43,7 @@ export function startBrawl(state, count = 4) {
   state.phase = 'brawl';
   state.customers = [];
   const chef = state.chef;
+  chef.drinks = 0;
   chef.hp = COMBAT.CHEF_HP;
   chef.maxHp = COMBAT.CHEF_HP;
   chef.swing = null;
@@ -87,10 +94,11 @@ function landPunch(state) {
     const lat = dx * L.x + dy * L.y;
     if (fwd < -COMBAT.PUNCH_BACK || fwd > COMBAT.PUNCH_REACH + e.r) continue;
     if (Math.abs(lat) > COMBAT.PUNCH_YBAND) continue;
-    e.hp -= 1;
+    e.hp -= chef.drinks >= BUZZED_AT ? 2 : 1;                       // courage hits harder
     e.hurtT = 0.18;
-    e.kx += F.x * impulse;
-    e.ky += F.y * impulse;
+    const send = impulse * Math.min(2, 1 + 0.25 * (chef.drinks || 0));
+    e.kx += F.x * send;
+    e.ky += F.y * send;
     bodies++;
     if (e.hp <= 0) anyKO = true;
   }
@@ -167,10 +175,27 @@ function endBrawl(state, won) {
   state.msgT = 2.4;
 }
 
+// Take a drink instead of throwing a punch: chug the sour you were carrying
+// (anywhere), or pour a fresh one at the bar. Consumes the press.
+function tryDrink(state) {
+  const chef = state.chef;
+  const carriedSour = chef.carrying && chef.carrying.cooked && isSour(chef.carrying.dish);
+  const nearBar = Math.hypot(chef.x - BAR.x, chef.y - BAR.y) < DRINK_REACH;
+  if (carriedSour) chef.carrying = null;
+  else if (!nearBar) return false;
+  chef.drinks = (chef.drinks || 0) + 1;
+  chef.hp = Math.min(chef.maxHp, chef.hp + 1);
+  state.msg = chef.drinks >= WASTED_AT ? 'WASTED…' : 'liquid courage! +1 ♥';
+  state.msgT = 1.4;
+  if (state.sounds) state.sounds.push('drink');
+  return true;
+}
+
 export function updateCombat(state, dt, input) {
   if (state.msgT > 0) { state.msgT -= dt; if (state.msgT <= 0) state.msg = ''; }
 
-  updatePunch(state, dt, input);
+  const drank = input.primaryDown && !state.chef.swing && tryDrink(state);
+  updatePunch(state, dt, drank ? { ...input, primaryDown: false } : input);
 
   // movement: rooted during a swing (with a short forward drive), else free
   const chef = state.chef;
@@ -182,7 +207,16 @@ export function updateCombat(state, dt, input) {
       moveChef(state, dt, 0, 0, 0, true);
     }
   } else {
-    moveChef(state, dt, input.move.x, input.move.y);
+    // buzzed steering: 3+ shots rotate your input by a slow deterministic sway
+    let mx = input.move.x, my = input.move.y;
+    const dr = chef.drinks || 0;
+    if (dr >= BUZZED_AT) {
+      const a = Math.sin(state.t * 6) * 0.5 * Math.min(1, (dr - BUZZED_AT + 1) / 3);
+      const ca = Math.cos(a), sa = Math.sin(a);
+      const rx = mx * ca - my * sa, ry = mx * sa + my * ca;
+      mx = rx; my = ry;
+    }
+    moveChef(state, dt, mx, my);
   }
 
   updateEnemies(state, dt);

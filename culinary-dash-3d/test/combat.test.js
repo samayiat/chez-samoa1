@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { createState, stepSim } from '../src/sim/state.js';
 import { startBrawl } from '../src/sim/combat.js';
 import { forwardVec } from '../src/sim/movement.js';
-import { COMBAT, COMBO } from '../src/sim/data.js';
+import { COMBAT, COMBO, STATIONS } from '../src/sim/data.js';
 import { createImpactBus, impact, decayImpact } from '../src/fx/impact.js';
 
 const STEP = 1 / 60;
@@ -141,5 +141,46 @@ describe('impact spine', () => {
     const bus = createImpactBus();
     for (let i = 0; i < 20; i++) impact(bus, COMBAT.W.stumble, 0, 1, 0, 1, 0);
     expect(bus.hitstop).toBeLessThanOrEqual(COMBAT.STOP_MAX + 1e-9);
+  });
+});
+
+describe('liquid courage (the drinking mechanic)', () => {
+  const NO = { move: { x: 0, y: 0 }, primary: false, primaryDown: false, secondary: false, secondaryDown: false };
+  const PRESS = { ...NO, primary: true, primaryDown: true };
+  const bar = STATIONS.find((s) => s.id === 'bar');
+
+  it('chugs a carried sour: +1 heart, +1 shot, hands free, no swing', () => {
+    const s = createState(7); startBrawl(s, 1);
+    s.chef.hp = 2;
+    s.chef.carrying = { kind: 'dish', dish: 'whiskey-sour', cooked: true, quality: 'perfect' };
+    s.enemies[0].x = 40; s.enemies[0].y = 40;      // out of everything
+    stepSim(s, 1 / 60, PRESS);
+    expect(s.chef.drinks).toBe(1);
+    expect(s.chef.hp).toBe(3);
+    expect(s.chef.carrying).toBe(null);
+    expect(s.chef.swing).toBe(null);               // the press drank, it did not punch
+  });
+
+  it('pours shots at the bar, and 3+ makes punches hit double', () => {
+    const s = createState(7); startBrawl(s, 1);
+    s.chef.x = bar.x; s.chef.y = bar.y;
+    s.enemies[0].x = 500; s.enemies[0].y = 300;
+    for (let i = 0; i < 3; i++) { stepSim(s, 1 / 60, PRESS); for (let j = 0; j < 30; j++) stepSim(s, 1 / 60, NO); }
+    expect(s.chef.drinks).toBe(3);
+    // now square up on the enemy and land one punch — chaser (3hp) should take 2
+    const e = s.enemies[0];
+    s.chef.x = e.x - 15; s.chef.y = e.y; s.chef.facing = Math.atan2(1, 0);   // face +x
+    stepSim(s, 1 / 60, PRESS);
+    for (let j = 0; j < 30; j++) stepSim(s, 1 / 60, NO);                     // swing completes
+    expect(e.hp).toBe(1);                          // 3 - 2 (buzzed damage)
+  });
+
+  it('drinking away from the bar with empty hands just punches', () => {
+    const s = createState(7); startBrawl(s, 1);
+    s.chef.x = 300; s.chef.y = 250; s.chef.carrying = null;
+    s.enemies[0].x = 40; s.enemies[0].y = 40;
+    stepSim(s, 1 / 60, PRESS);
+    expect(s.chef.drinks).toBe(0);
+    expect(s.chef.swing).not.toBe(null);           // the press was a punch
   });
 });

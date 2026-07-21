@@ -134,10 +134,16 @@ function tick(dt) {
 function render(alpha, now) {
   const t = now / 1000; const rdt = Math.min(0.05, t - lastT); lastT = t;
   if (state) syncScene(rdt, t);
-  if (camShake > 0.002) {
-    camera.position.set(0.5 + (Math.random() - 0.5) * camShake, 13.6 + (Math.random() - 0.5) * camShake * 0.6, 15.4);
+  // impact shake + the drunk lean (buzzed brawling tilts the whole room a touch)
+  const drinks = state && state.phase === 'brawl' ? state.chef.drinks || 0 : 0;
+  const sway = drinks >= 3 ? Math.sin(t * 1.3) * 0.12 * Math.min(1, (drinks - 2) / 3) : 0;
+  if (camShake > 0.002 || sway) {
+    camera.position.set(0.5 + (Math.random() - 0.5) * camShake + sway * 2, 13.6 + (Math.random() - 0.5) * camShake * 0.6, 15.4);
     camera.lookAt(0, 0.4, -0.4);
+    camera.rotation.z += sway * 0.25;
     camShake *= Math.exp(-7 * rdt);
+  } else if (camera.rotation.z !== 0) {
+    camera.position.set(0.5, 13.6, 15.4); camera.lookAt(0, 0.4, -0.4);
   }
   kitchen && kitchen.update(rdt, t, 1 - Math.max(0, dayT) / 80);   // third arg: day progress 0..1 (drives the sunset)
   cats && cats.update(rdt, t);
@@ -254,6 +260,11 @@ function syncScene(dt, t) {
       cu.armL.rotation.x = -0.5; cu.armL.userData.elbow.rotation.x = 1.2;
       cu.armR.rotation.x = -0.5; cu.armR.userData.elbow.rotation.x = 1.2;
     }
+    // buzzed: the whole chef sways with the same rhythm steering the input drift
+    const dr = c.drinks || 0;
+    cu.body.rotation.z = dr >= 3 ? Math.sin(state.t * 6) * 0.07 * Math.min(1, (dr - 2) / 3) : 0;
+  } else if (cu.body.rotation.z !== 0) {
+    cu.body.rotation.z = 0;
   }
   brawlers && brawlers.sync(state, dt, t);
   customers.sync(state, dt, t);
@@ -274,7 +285,12 @@ function updateHud() {
   const on = brawl ? Math.max(0, state.chef.hp) : state.badOrders;
   H.danger.innerHTML = '';
   for (let i = 0; i < max; i++) { const d = document.createElement('span'); d.className = 'pip' + (i < on ? ' on' : ''); H.danger.appendChild(d); }
-  if (brawl) { H.prompt.textContent = 'FIGHT! E / ACTION to punch'; H.prompt.style.opacity = '1'; }
+  if (brawl) {
+    const dr = state.chef.drinks || 0;
+    H.prompt.textContent = 'FIGHT! E / ACTION to punch' +
+      (dr >= 5 ? ` · WASTED (${dr} shots)` : dr > 0 ? ` · ${dr} shot${dr > 1 ? 's' : ''} of courage` : ' · drink at the bar for courage');
+    H.prompt.style.opacity = '1';
+  }
   H.msg.textContent = state.msg || '';
   H.msg.style.opacity = state.msg ? '1' : '0';
   // action prompt
