@@ -38,11 +38,22 @@ const CONTACT_AT = 0.4;      // fraction of the swing where the blow lands
 const COMBO_RESET = 0.6;     // s of idle before the combo drops back to the jab
 
 // Enemy archetypes (from BRAWL_SPEC): a chaser, a slow tanky smasher, a fast
-// thief. For the slice they share one AI with tuned numbers.
+// thief. Bigger bodies now (r), and each fighter kind owns a real MOVE.
 const ARCHETYPES = {
-  chaser:  { hp: 3, speed: 44, dmg: 1, atkInterval: 1.0, r: 6,  color: 0xc0392b },
-  smasher: { hp: 5, speed: 30, dmg: 2, atkInterval: 1.4, r: 7,  color: 0x8e44ad },
-  thief:   { hp: 2, speed: 62, dmg: 1, atkInterval: 0.8, r: 5,  color: 0xe67e22 },
+  chaser:  { hp: 3, speed: 44, dmg: 1, atkInterval: 1.0, r: 7,  color: 0xc0392b },
+  smasher: { hp: 5, speed: 30, dmg: 2, atkInterval: 1.4, r: 9,  color: 0x8e44ad },
+  thief:   { hp: 2, speed: 62, dmg: 1, atkInterval: 0.8, r: 6,  color: 0xe67e22 },
+};
+
+// The fighters' moveset (2D windup->strike port): every attack TELEGRAPHS —
+// they rear back for `windup` seconds (punch them then and it's cancelled),
+// then the strike commits, then a `recover` opening. Buffed = quicker tempo.
+//  - chaser LUNGES: a locked-direction dash that clips you on contact
+//  - smasher SLAMS: an AOE thud around the spot he wound up on — leave it
+const MOVES = {
+  chaser:  { kind: 'lunge', windup: 0.5,  dur: 0.24, speed: 200, reach: 12, recover: 0.7,  trigger: 46 },
+  smasher: { kind: 'slam',  windup: 0.85, dur: 0.34, r: 30,      recover: 1.05, trigger: 22 },
+  thief:   { kind: 'lunge', windup: 0.4,  dur: 0.2,  speed: 220, reach: 10, recover: 0.6,  trigger: 30 },
 };
 
 export function startBrawl(state, count = 4) {
@@ -122,6 +133,12 @@ function landPunch(state) {
       state.msg = 'SPILLED!';
       state.msgT = 1.4;
     }
+    if (e.atk) {
+      // knocked clean off their swing (2D riot rule): the telegraph is the
+      // counterplay — a landed punch cancels the wound-up attack
+      e.atk = null;
+      e.atkCd = Math.max(e.atkCd || 0, 0.6);
+    }
     const send = impulse * Math.min(2, 1 + 0.25 * (chef.drinks || 0));
     e.kx += F.x * send;
     e.ky += F.y * send;
@@ -200,7 +217,7 @@ function updateEnemies(state, dt) {
 
     // THE MOB DRINKS TOO (2D smash/buffed port): when the thirst hits, break
     // for the bar, chug, come back LIT — unless the chef spills it first.
-    if (!e.buffed && e.job !== 'drink' && state.t >= e.thirstAt) e.job = 'drink';
+    if (!e.buffed && e.job !== 'drink' && !e.atk && state.t >= e.thirstAt) e.job = 'drink';
     if (e.job === 'drink') {
       const bx = BAR_SPOT.x - e.x, by = BAR_SPOT.y - e.y;
       const bd = Math.hypot(bx, by);
@@ -227,18 +244,45 @@ function updateEnemies(state, dt) {
     const dx = chef.x - e.x, dy = chef.y - e.y;
     const d = Math.hypot(dx, dy) || 1;
     const kb = Math.hypot(e.kx, e.ky);
-    if (d > COMBAT.ATK_REACH) {
-      if (kb < 20) { e.x += (dx / d) * e.speed * dt; e.y += (dy / d) * e.speed * dt; }
-      e.atkCd = Math.max(0, e.atkCd - dt);
-    } else {
-      e.atkCd -= dt;
-      if (e.atkCd <= 0) {
-        chef.hp -= e.dmg;
-        chef.hurtT = 0.25;
-        e.atkCd = e.atkInterval;
-        // getting hit is a light shake — a real (small) weighted event
-        emitHit(state, COMBAT.W.scuff, chef.x, chef.y, -dx / d, -dy / d);
+    const mv = MOVES[e.kind] || MOVES.chaser;
+    const tempo = e.buffed ? 0.78 : 1;               // lit brawlers swing sooner
+
+    if (e.atk) {
+      const a = e.atk;
+      a.t += dt;
+      if (a.phase === 'windup') {
+        a.k = Math.min(1, a.t / (mv.windup * tempo));       // telegraph progress (render reads this)
+        if (a.t >= mv.windup * tempo) {
+          a.phase = 'strike'; a.t = 0; a.k = 0; a.hit = false;
+          a.dx = dx / d; a.dy = dy / d;                     // direction locks HERE — sidestep it
+          if (mv.kind === 'slam') { a.cx = e.x; a.cy = e.y; }
+        }
+      } else if (a.phase === 'strike') {
+        a.k = Math.min(1, a.t / mv.dur);
+        if (mv.kind === 'lunge') {
+          e.x += a.dx * mv.speed * dt; e.y += a.dy * mv.speed * dt;
+          const cd = Math.hypot(chef.x - e.x, chef.y - e.y);
+          if (!a.hit && cd < mv.reach + 6) {
+            a.hit = true;
+            chef.hp -= e.dmg; chef.hurtT = 0.25;
+            emitHit(state, COMBAT.W.scuff, chef.x, chef.y, a.dx, a.dy);
+          }
+        } else if (!a.hit && a.t >= mv.dur * 0.5) {         // slam lands mid-swing
+          a.hit = true;
+          emitHit(state, COMBAT.W.jab, a.cx, a.cy, 0, 0);   // the floor jumps either way
+          if (Math.hypot(chef.x - a.cx, chef.y - a.cy) < mv.r) {
+            chef.hp -= e.dmg; chef.hurtT = 0.3;
+          }
+        }
+        if (a.t >= mv.dur) { a.phase = 'recover'; a.t = 0; a.k = 0; }
+      } else if (a.phase === 'recover') {
+        a.k = Math.min(1, a.t / (mv.recover * (e.buffed ? 0.8 : 1)));
+        if (a.t >= mv.recover * (e.buffed ? 0.8 : 1)) { e.atk = null; e.atkCd = e.atkInterval; }
       }
+    } else {
+      e.atkCd = Math.max(0, e.atkCd - dt);
+      if (kb < 20 && d > 20) { e.x += (dx / d) * e.speed * dt; e.y += (dy / d) * e.speed * dt; }
+      if (e.atkCd <= 0 && d < mv.trigger) e.atk = { phase: 'windup', t: 0, k: 0, kind: mv.kind };
     }
     resolveCollision(e, state.obstacles, e.r);
   }

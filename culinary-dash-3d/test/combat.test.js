@@ -99,10 +99,10 @@ describe('brawl resolution', () => {
   it('losing all HP ends the brawl as a loss', () => {
     const s = createState(3); startBrawl(s, 2);
     s.chef.hp = 1;
-    // put an enemy in contact so it attacks
+    // put an enemy close so its lunge (windup -> strike) connects
     s.enemies = [{ id: 'X', kind: 'chaser', x: s.chef.x + 5, y: s.chef.y, hp: 9, maxHp: 9,
       speed: 0, dmg: 5, atkInterval: 0.1, r: 6, atkCd: 0, kx: 0, ky: 0, hurtT: 0 }];
-    drive(s, 5, null);
+    drive(s, 70, null);                     // the whole windup + strike plays out
     expect(s.phase).toBe('service');
     expect(s.brawlResult).toBe('lose');
   });
@@ -184,6 +184,55 @@ describe('the steal (brawl thieves)', () => {
     expect(th.carry).toBe(false);
     expect(s.money).toBe(STEAL.BOUNTY);
     expect(th.hp).toBe(th.maxHp - 1);                                    // hit, not necessarily KO'd
+  });
+});
+
+describe('the moveset (telegraph -> strike -> recover)', () => {
+  // one fighter of `kind`, `dist` px from the chef, ready to swing NOW
+  function fighter(s, kind, dist, dmg = 1) {
+    const chef = s.chef; chef.x = 300; chef.y = 250;
+    s.enemies = [{ id: 'M', kind, x: chef.x + dist, y: chef.y, hp: 9, maxHp: 9,
+      speed: 0, dmg, atkInterval: 9, r: 7, atkCd: 0, kx: 0, ky: 0, hurtT: 0,
+      role: 'fighter', job: 'chase', thirstAt: Infinity, buffed: false, chugT: 0 }];
+    return s.enemies[0];
+  }
+
+  it('the chaser telegraphs a windup, then lunges into contact', () => {
+    const s = createState(3); startBrawl(s, 1);
+    const e = fighter(s, 'chaser', 40);
+    const hp0 = s.chef.hp;
+    drive(s, 10, null);
+    expect(e.atk && e.atk.phase).toBe('windup');       // rearing back, readable
+    expect(s.chef.hp).toBe(hp0);                        // nothing lands yet
+    drive(s, 40, null);
+    expect(s.chef.hp).toBe(hp0 - 1);                    // the lunge connected
+  });
+
+  it("the smasher's slam is an AOE — standing in it hurts, leaving it doesn't", () => {
+    const stay = createState(3); startBrawl(stay, 1);
+    fighter(stay, 'smasher', 15, 2);
+    const hp0 = stay.chef.hp;
+    drive(stay, 80, null);
+    expect(stay.chef.hp).toBe(hp0 - 2);                 // ate the slam
+
+    const flee = createState(3); startBrawl(flee, 1);
+    const e2 = fighter(flee, 'smasher', 15, 2);
+    for (let i = 0; i < 80; i++) {
+      if (e2.atk && e2.atk.phase === 'strike' && !e2.atk.hit) { flee.chef.x = 60; flee.chef.y = 60; }
+      stepSim(flee, STEP, NO);
+    }
+    expect(flee.chef.hp).toBe(hp0);                     // left the circle in time
+  });
+
+  it('a punch during the windup cancels the attack', () => {
+    const s = createState(3); startBrawl(s, 1);
+    const e = fighter(s, 'chaser', 15);
+    s.chef.facing = Math.PI / 2;                        // face him
+    drive(s, 6, null);
+    expect(e.atk && e.atk.phase).toBe('windup');
+    drive(s, 12, PRESS);                                // knock him off his swing
+    expect(e.atk).toBe(null);
+    expect(e.hp).toBe(8);
   });
 });
 

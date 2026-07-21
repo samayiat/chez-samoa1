@@ -11,9 +11,9 @@ import { TILL, DOOR, STATIONS } from '../sim/data.js';
 const BAR = STATIONS.find((s) => s.id === 'bar');
 
 const ARCH = {
-  chaser:  { top: 0xc0392b, scale: 1.0 },
-  smasher: { top: 0x8e44ad, scale: 1.18 },
-  thief:   { top: 0xe67e22, scale: 0.88 },
+  chaser:  { top: 0xc0392b, scale: 1.3 },    // bigger across the board — they
+  smasher: { top: 0x8e44ad, scale: 1.55 },   // should crowd the room, not
+  thief:   { top: 0xe67e22, scale: 1.1 },    // blend in with the diners
 };
 const SKINS = [0x7a4328, 0x8a5a3a, 0xb07a4e, 0x633119];
 
@@ -69,7 +69,7 @@ function buildBrawler(kind, seed) {
   loot.add(put(box(0.1, 0.1, 0.02, mat(0x7a5c1e, { flat: true })), 0, 0, 0.17)); // the $ patch
   g.add(loot);
   g.scale.setScalar(a.scale);
-  return { group: g, torso, head, loot, armR: arms[1], bottle };
+  return { group: g, torso, head, loot, armL: arms[0], armR: arms[1], bottle };
 }
 
 export function createBrawlers(scene) {
@@ -116,11 +116,34 @@ export function createBrawlers(scene) {
       // mid-chug: head back, bottle up. LIT: a hot ember glow under the shirt.
       const chugging = e.job === 'drink' && !e.buffed && (e.chugT || 0) > 0;
       b.bottle.visible = chugging;
-      b.armR.sh.rotation.x = lerp(b.armR.sh.rotation.x, chugging ? -2.3 : -0.7, clamp01(dt * 10));
-      b.head.rotation.x = lerp(b.head.rotation.x, chugging ? -0.4 : 0, clamp01(dt * 10));
+
+      // THE MOVESET reads on the body: rear back on the windup, commit on the
+      // strike, slump on the recover. (sim: e.atk {kind, phase, k})
+      const atk = e.atk;
+      let lean = 0, armLX = -0.7, armRX = chugging ? -2.3 : -0.7, headX = chugging ? -0.4 : 0;
+      if (atk) {
+        if (atk.phase === 'windup') {
+          lean = -0.32 * atk.k;                                     // rearing back
+          if (atk.kind === 'slam') { armLX = armRX = lerp(-0.7, -2.7, atk.k); headX = -0.25 * atk.k; }
+          else { armLX = -1.1; armRX = lerp(-0.7, -1.6, atk.k); }   // fist drawn
+        } else if (atk.phase === 'strike') {
+          lean = atk.kind === 'lunge' ? 0.45 : 0.3;                 // committed
+          if (atk.kind === 'slam') { armLX = armRX = lerp(-2.7, 0.4, atk.k); }
+          else { armRX = 0.5; armLX = -0.9; }
+        } else {
+          lean = 0.14 * (1 - atk.k);                                // the opening
+        }
+      }
+      b.group.rotation.x = lerp(b.group.rotation.x, lean, clamp01(dt * 14));
+      b.armL.sh.rotation.x = lerp(b.armL.sh.rotation.x, armLX, clamp01(dt * 16));
+      b.armR.sh.rotation.x = lerp(b.armR.sh.rotation.x, armRX, clamp01(dt * 16));
+      b.head.rotation.x = lerp(b.head.rotation.x, headX, clamp01(dt * 10));
+
       const flash = e.hurtT > 0 ? 0.45 : 0;
       const lit = e.buffed ? 0.3 + Math.sin(t * 9) * 0.1 : 0;
-      b.torso.material.emissive.setRGB(Math.max(flash, lit), lit * 0.22, 0);    // hurt flash / lit glow
+      // the telegraph glows hotter as the strike closes in (red pulse)
+      const tele = atk && atk.phase === 'windup' ? atk.k * (0.4 + 0.25 * Math.sin(t * 22)) : 0;
+      b.torso.material.emissive.setRGB(Math.max(flash, lit, tele), lit * 0.22, 0);
     }
   }
 
