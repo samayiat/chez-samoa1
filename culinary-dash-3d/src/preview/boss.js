@@ -21,49 +21,58 @@ export function buildVince() {
   lean.position.y = 0;
   g.add(lean);
 
-  // legs — planted wide and heavy, thigh + shin with a slight bent-knee stance
+  // Rounded low-poly primitives — the same form vocabulary as the chef and the
+  // diners (tapered cylinder limbs, ball joints), scaled up to landlord bulk so
+  // the whole cast reads as one art pass. Faceted (flat) shading keeps the menace.
+  const cyl = (rt, rb, h, material, seg = 10) => { const m = new THREE.Mesh(new THREE.CylinderGeometry(rt, rb, h, seg), material); m.castShadow = true; return m; };
+  const orb = (r, material, sx = 1, sy = 1, sz = 1) => { const m = new THREE.Mesh(new THREE.SphereGeometry(r, 12, 10), material); m.scale.set(sx, sy, sz); m.castShadow = true; return m; };
+
+  // legs — planted wide and heavy: tapered thigh + shin, ball hips/knees, a slight
+  // bent-knee stance, and boots with a rounded toe
   const trouser = mat(SUIT_DK, { flat: true, rough: 0.85 });
   const shoe = mat(0x0d0e12, { flat: true, rough: 0.6 });
   for (const sx of [-0.5, 0.5]) {
     const hip = new THREE.Group(); hip.position.set(sx, 1.15, 0); hip.rotation.x = 0.12; lean.add(hip);
-    hip.add(put(box(0.62, 0.56, 0.66, trouser), 0, -0.28, 0));                 // thigh
+    hip.add(put(orb(0.34, trouser, 1, 0.9, 1), 0, 0, 0));                     // hip joint
+    hip.add(put(cyl(0.33, 0.28, 0.56, trouser), 0, -0.28, 0));                 // thigh (tapered)
     const knee = new THREE.Group(); knee.position.y = -0.56; knee.rotation.x = -0.22; hip.add(knee);
-    knee.add(put(box(0.58, 0.54, 0.64, trouser), 0, -0.27, 0));                // shin
-    knee.add(put(box(0.72, 0.28, 0.95, shoe), 0, -0.5, 0.12));                 // shoe
+    knee.add(put(orb(0.27, trouser), 0, 0, 0));                               // knee cap
+    knee.add(put(cyl(0.27, 0.23, 0.54, trouser), 0, -0.27, 0));                // shin (tapered)
+    knee.add(put(box(0.5, 0.24, 0.7, shoe), 0, -0.52, 0.1));                   // boot sole
+    knee.add(put(orb(0.28, shoe, 1, 0.7, 1.25), 0, -0.5, 0.35));              // rounded toe
   }
 
-  // torso — a tapered slab, broad up top. breathes.
+  // torso — a soft tapered barrel, broad up top, with big ball shoulders. breathes.
   const suit = mat(SUIT, { flat: true, rough: 0.78 });
   const belly = new THREE.Group();
   belly.position.y = 1.55;
   lean.add(belly);
-  belly.add(put(box(1.7, 1.5, 1.05, suit), 0, 0.1, 0));
-  // vest / shirt front
-  belly.add(put(box(0.9, 1.25, 0.06, mat(0xcbd3de, { rough: 0.6 })), 0, 0.12, 0.53));
-  // blood-red tie
-  belly.add(put(box(0.16, 0.9, 0.04, mat(TIE, { flat: true })), 0, 0.0, 0.57));
-  // shoulders — wide, imposing
-  const shoulders = put(box(2.35, 0.55, 1.1, suit), 0, 0.95, 0);
-  belly.add(shoulders);
+  const core = cyl(0.95, 0.8, 1.55, suit, 12); core.scale.z = 0.64; belly.add(put(core, 0, 0.12, 0));
+  belly.add(put(orb(0.46, suit, 1, 0.8, 0.9), -0.92, 0.85, 0));               // shoulder boulders
+  belly.add(put(orb(0.46, suit, 1, 0.8, 0.9), 0.92, 0.85, 0));
+  belly.add(put(orb(0.62, suit, 1.35, 0.55, 0.85), 0, 0.95, 0));              // trapezius mass
+  // vest / shirt front + blood-red tie
+  belly.add(put(box(0.82, 1.25, 0.06, mat(0xcbd3de, { rough: 0.6 })), 0, 0.12, 0.56));
+  belly.add(put(box(0.16, 0.9, 0.04, mat(TIE, { flat: true })), 0, 0.0, 0.6));
 
-  // head + neck
+  // head + neck — a faceted skull sphere with heavy jaw, keeping the scowl
   const head = new THREE.Group();
   head.position.set(0, 2.95, 0.05);
   lean.add(head);
-  head.add(put(box(0.34, 0.35, 0.34, mat(SKIN, { flat: true, rough: 0.7 })), 0, -0.42, 0)); // neck
-  const skull = put(box(0.78, 0.72, 0.8, mat(SKIN, { flat: true, rough: 0.72 })), 0, 0, 0);
+  head.add(put(cyl(0.24, 0.28, 0.4, mat(SKIN, { flat: true, rough: 0.7 }), 8), 0, -0.42, 0));  // neck
+  const skull = put(orb(0.42, mat(SKIN, { flat: true, rough: 0.72 }), 1.0, 0.92, 0.98), 0, 0, 0);
   head.add(skull);
   // heavy scowling brow
-  head.add(put(box(0.82, 0.16, 0.12, mat(SKIN, { flat: true, rough: 0.7 })), 0, 0.12, 0.38));
+  head.add(put(box(0.72, 0.15, 0.14, mat(SKIN, { flat: true, rough: 0.7 })), 0, 0.12, 0.34));
   // glowing angry eyes (bloom picks these up)
   const eyeMat = mat(0xff5a2a, { emissive: 0xff5a2a, emi: 2.4 });
-  const eyeL = put(box(0.15, 0.09, 0.06, eyeMat), -0.19, 0.02, 0.41);
-  const eyeR = put(box(0.15, 0.09, 0.06, eyeMat), 0.19, 0.02, 0.41);
+  const eyeL = put(box(0.15, 0.09, 0.06, eyeMat), -0.17, 0.02, 0.37);
+  const eyeR = put(box(0.15, 0.09, 0.06, eyeMat), 0.17, 0.02, 0.37);
   head.add(eyeL, eyeR);
   // grim mouth
-  head.add(put(box(0.34, 0.06, 0.05, mat(0x2a1810)), 0, -0.22, 0.4));
-  // jowls
-  head.add(put(box(0.86, 0.2, 0.6, mat(SKIN, { flat: true, rough: 0.75 })), 0, -0.28, 0.05));
+  head.add(put(box(0.3, 0.06, 0.05, mat(0x2a1810)), 0, -0.2, 0.36));
+  // jowls — a wide jaw ball
+  head.add(put(orb(0.34, mat(SKIN, { flat: true, rough: 0.75 }), 1.25, 0.6, 1.0), 0, -0.26, 0.02));
 
   // hard hat — foreman menace, faceted dome + brim
   const hat = new THREE.Group();
@@ -80,23 +89,26 @@ export function buildVince() {
   hat.add(brim);
   hat.add(put(box(0.3, 0.14, 0.02, mat(0x1a1a1f)), 0, 0.18, 0.5)); // hazard badge slot
 
-  // LEFT arm (his left) — free fist, upper arm + forearm hinged at an elbow
+  // LEFT arm (his left) — free fist: tapered upper arm + forearm, ball elbow
   const armL = new THREE.Group();
   armL.position.set(-1.12, 2.45, 0);
   belly.add(armL); // parented to belly so lean+breathe carry it
-  armL.add(put(box(0.42, 0.62, 0.46, suit), 0, -0.31, 0));                                  // upper arm
+  armL.add(put(orb(0.26, suit, 1, 0.9, 1), 0, 0, 0));                                      // shoulder round
+  armL.add(put(cyl(0.25, 0.21, 0.62, suit), 0, -0.31, 0));                                  // upper arm
   const armLElbow = new THREE.Group(); armLElbow.position.y = -0.62; armLElbow.rotation.x = 0.4; armL.add(armLElbow);
-  armLElbow.add(put(box(0.4, 0.58, 0.44, suit), 0, -0.29, 0));                              // forearm
-  armLElbow.add(put(box(0.5, 0.4, 0.5, mat(SKIN, { flat: true })), 0, -0.62, 0.05));        // fist
-
-  // RIGHT arm — upper arm + forearm at an elbow; the chain hangs from his grip hand.
+  armLElbow.add(put(orb(0.21, suit), 0, 0, 0));                                            // elbow
+  armLElbow.add(put(cyl(0.21, 0.18, 0.58, suit), 0, -0.29, 0));                             // forearm
+  armLElbow.add(put(orb(0.3, mat(SKIN, { flat: true }), 1, 0.9, 1.1), 0, -0.62, 0.05));    // fist
+  // RIGHT arm — same build; the chain hangs from his grip hand.
   const armR = new THREE.Group();
   armR.position.set(1.12, 2.45, 0);
   belly.add(armR);
-  armR.add(put(box(0.42, 0.62, 0.46, suit), 0, -0.31, 0));                                  // upper arm
+  armR.add(put(orb(0.26, suit, 1, 0.9, 1), 0, 0, 0));
+  armR.add(put(cyl(0.25, 0.21, 0.62, suit), 0, -0.31, 0));
   const armRElbow = new THREE.Group(); armRElbow.position.y = -0.62; armRElbow.rotation.x = 0.32; armR.add(armRElbow);
-  armRElbow.add(put(box(0.4, 0.58, 0.44, suit), 0, -0.29, 0));                              // forearm
-  armRElbow.add(put(box(0.52, 0.42, 0.52, mat(SKIN, { flat: true })), 0, -0.6, 0.08));      // grip hand
+  armRElbow.add(put(orb(0.21, suit), 0, 0, 0));
+  armRElbow.add(put(cyl(0.21, 0.18, 0.58, suit), 0, -0.29, 0));
+  armRElbow.add(put(orb(0.31, mat(SKIN, { flat: true }), 1, 0.9, 1.1), 0, -0.6, 0.08));    // grip hand
 
   // wrecking ball assembly — hangs from the grip hand (on the forearm), hauled up
   // for a slam. Lit brighter so it reads as the signature weapon.
