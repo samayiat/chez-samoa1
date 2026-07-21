@@ -15,7 +15,7 @@
 //  - Input BUFFERS (PUNCH_BUFFER), it never accelerates; cadence comes from the
 //    animation frame counts, not from mashing.
 
-import { COMBAT, COMBO, WORLD, STATIONS } from './data.js';
+import { COMBAT, COMBO, WORLD, STATIONS, TILL, DOOR, STEAL } from './data.js';
 import { moveChef, resolveCollision, forwardVec, lateralVec } from './movement.js';
 import { range } from './rng.js';
 
@@ -66,6 +66,8 @@ export function startBrawl(state, count = 4) {
       id: 'e' + i, kind, x, y, hp: a.hp, maxHp: a.hp,
       speed: a.speed, dmg: a.dmg, atkInterval: a.atkInterval, r: a.r,
       atkCd: range(state.rng, 0.3, 1.0), kx: 0, ky: 0, hurtT: 0,
+      // thieves don't fight — they make for the till, then run for the door
+      role: kind === 'thief' ? 'thief' : 'fighter', state: 'steal', carry: false,
     });
   }
   state.msg = 'THE BRAWL — clear them out!';
@@ -96,6 +98,14 @@ function landPunch(state) {
     if (Math.abs(lat) > COMBAT.PUNCH_YBAND) continue;
     e.hp -= chef.drinks >= BUZZED_AT ? 2 : 1;                       // courage hits harder
     e.hurtT = 0.18;
+    if (e.role === 'thief' && e.carry) {
+      // caught him — the cash drops and a bounty lands in the till (2D port)
+      e.carry = false;
+      state.money += STEAL.BOUNTY;
+      state.msg = `caught him! +$${STEAL.BOUNTY} back`;
+      state.msgT = 1.4;
+      if (state.sounds) state.sounds.push('coin');
+    }
     const send = impulse * Math.min(2, 1 + 0.25 * (chef.drinks || 0));
     e.kx += F.x * send;
     e.ky += F.y * send;
@@ -137,12 +147,40 @@ function updatePunch(state, dt, input) {
 
 function updateEnemies(state, dt) {
   const chef = state.chef;
+  let escaped = false;
   for (const e of state.enemies) {
     if (e.hurtT > 0) e.hurtT -= dt;
     // integrate knockback (matches the 2D integrator)
     e.x += e.kx * dt; e.y += e.ky * dt;
     const decay = Math.pow(0.80, dt * 60);
     e.kx *= decay; e.ky *= decay;
+
+    // THE STEAL (2D port): thieves don't fight. They make for the till, snatch
+    // the cash, then run for the door — catch them mid-flee to get it back.
+    if (e.role === 'thief') {
+      if (Math.hypot(e.kx, e.ky) < 20) {         // staggered thieves lose ground
+        const tgt = e.state === 'flee' ? DOOR : TILL;
+        const tx = tgt.x - e.x, ty = tgt.y - e.y;
+        const td = Math.hypot(tx, ty) || 1;
+        e.x += (tx / td) * e.speed * dt;
+        e.y += (ty / td) * e.speed * dt;
+        if (e.state !== 'flee' && td < STEAL.GRAB_R) {
+          e.state = 'flee'; e.carry = true;
+          state.msg = "he's got the till!"; state.msgT = 1.6;
+          if (state.sounds) state.sounds.push('grab');
+        } else if (e.state === 'flee' && td < STEAL.EXIT_R) {
+          e.hp = 0; escaped = true;              // out the door
+          if (e.carry) {
+            state.money -= STEAL.LOSS;
+            state.msg = `-$${STEAL.LOSS} STOLEN`; state.msgT = 2;
+            if (state.sounds) state.sounds.push('walkout');
+            emitHit(state, COMBAT.W.scuff, DOOR.x, DOOR.y, 0, 0);   // the door slams
+          }
+        }
+      }
+      resolveCollision(e, state.obstacles, e.r);
+      continue;
+    }
 
     const dx = chef.x - e.x, dy = chef.y - e.y;
     const d = Math.hypot(dx, dy) || 1;
@@ -162,6 +200,7 @@ function updateEnemies(state, dt) {
     }
     resolveCollision(e, state.obstacles, e.r);
   }
+  if (escaped) state.enemies = state.enemies.filter((e) => e.hp > 0);
   if (chef.hurtT > 0) chef.hurtT -= dt;
 }
 

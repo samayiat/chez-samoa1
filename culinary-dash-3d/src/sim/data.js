@@ -76,6 +76,18 @@ export const DAY_DRAIN_K = (day) => Math.min(1.8, 1 + 0.07 * ((day || 1) - 1));
 // or refuse and settle it with Vince in the alley.
 export const RENT_DUE = (day) => 40 + 15 * ((day || 1) - 1);
 
+// --- The till + the door (sim px) ------------------------------------------
+// The register lives by the bar; the front door is where everyone walks in —
+// and where the brawl's thieves run OUT. (2D port: REGISTER / DOOR / STEAL_*.)
+export const TILL = { x: 545, y: 78 };
+export const DOOR = { x: 592, y: 256 };
+export const STEAL = {
+  LOSS: 25,       // cash a thief runs off with (scaled from the 2D STEAL_LOSS)
+  BOUNTY: 8,      // coins you recover by catching him mid-flee (2D STEAL_BOUNTY)
+  GRAB_R: 14,     // reach to snatch the till
+  EXIT_R: 14,     // close enough to the door counts as gone
+};
+
 // --- Combat / impact spine (ported: src lines 835-2321) --------------------
 export const COMBAT = {
   // impact weights, ordered scuff < jab < hurt < heavy < stumble

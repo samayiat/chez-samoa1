@@ -6,6 +6,7 @@
 import * as THREE from 'three';
 import { mat, box, put, clamp01, lerp } from './util.js';
 import { rpos } from './kitchen-space.js';
+import { TILL, DOOR } from '../sim/data.js';
 
 const ARCH = {
   chaser:  { top: 0xc0392b, scale: 1.0 },
@@ -50,8 +51,15 @@ function buildBrawler(kind, seed) {
     elbow.add(put(cyl(0.055, 0.05, 0.22, skinMat), 0, -0.12, 0));
     elbow.add(put(ball(0.075, skinMat), 0, -0.26, 0));                        // fist
   }
+  // the loot — a knotted money sack slung over the shoulder, shown mid-flee
+  const loot = new THREE.Group(); loot.position.set(-0.24, 1.28, -0.18); loot.visible = false;
+  const sackMat = mat(0xc9a94e, { flat: true, rough: 0.8 });
+  loot.add(put(ball(0.17, sackMat, 1, 1.15, 1), 0, 0, 0));
+  loot.add(put(cyl(0.05, 0.08, 0.1, sackMat, 8), 0, 0.2, 0));                 // the knot
+  loot.add(put(box(0.1, 0.1, 0.02, mat(0x7a5c1e, { flat: true })), 0, 0, 0.17)); // the $ patch
+  g.add(loot);
   g.scale.setScalar(a.scale);
-  return { group: g, torso, head };
+  return { group: g, torso, head, loot };
 }
 
 export function createBrawlers(scene) {
@@ -85,9 +93,13 @@ export function createBrawlers(scene) {
     for (const e of enemies) {
       const b = map.get(e.id); if (!b) continue;
       const p = rpos(e.x, e.y);
-      const chefP = rpos(state.chef.x, state.chef.y);
+      // thieves face where they're running (till, then door); fighters square up
+      const aim = e.role === 'thief'
+        ? rpos((e.state === 'flee' ? DOOR : TILL).x, (e.state === 'flee' ? DOOR : TILL).y)
+        : rpos(state.chef.x, state.chef.y);
       b.group.position.set(p.x, Math.abs(Math.sin(t * 8 + p.x)) * 0.04, p.z);   // stomping bob
-      b.group.rotation.y = Math.atan2(chefP.x - p.x, chefP.z - p.z);            // square up on the chef
+      b.group.rotation.y = Math.atan2(aim.x - p.x, aim.z - p.z);
+      b.loot.visible = !!e.carry;
       const flash = e.hurtT > 0 ? 0.45 : 0;
       b.torso.material.emissive.setRGB(flash, 0, 0);                            // hurt flash
     }

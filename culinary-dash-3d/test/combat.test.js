@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { createState, stepSim } from '../src/sim/state.js';
 import { startBrawl } from '../src/sim/combat.js';
 import { forwardVec } from '../src/sim/movement.js';
-import { COMBAT, COMBO, STATIONS } from '../src/sim/data.js';
+import { COMBAT, COMBO, STATIONS, TILL, DOOR, STEAL } from '../src/sim/data.js';
 import { createImpactBus, impact, decayImpact } from '../src/fx/impact.js';
 
 const STEP = 1 / 60;
@@ -141,6 +141,49 @@ describe('impact spine', () => {
     const bus = createImpactBus();
     for (let i = 0; i < 20; i++) impact(bus, COMBAT.W.stumble, 0, 1, 0, 1, 0);
     expect(bus.hitstop).toBeLessThanOrEqual(COMBAT.STOP_MAX + 1e-9);
+  });
+});
+
+describe('the steal (brawl thieves)', () => {
+  // startBrawl(s, 3) spawns chaser, smasher, thief; park the fighters far away
+  function thiefBrawl() {
+    const s = createState(7);
+    startBrawl(s, 3);
+    for (const e of s.enemies) if (e.kind !== 'thief') { e.x = 30; e.y = 340; e.speed = 0; e.atkCd = 99; }
+    return [s, s.enemies.find((e) => e.kind === 'thief')];
+  }
+
+  it('the thief makes for the till, grabs the cash, then runs for the door', () => {
+    const [s, th] = thiefBrawl();
+    const d0 = Math.hypot(th.x - TILL.x, th.y - TILL.y);
+    drive(s, 60, null);
+    expect(Math.hypot(th.x - TILL.x, th.y - TILL.y)).toBeLessThan(d0);   // closing on the till
+    for (let i = 0; i < 900 && !th.carry; i++) stepSim(s, STEP, NO);
+    expect(th.carry).toBe(true);
+    expect(th.state).toBe('flee');
+    const f0 = Math.hypot(th.x - DOOR.x, th.y - DOOR.y);
+    drive(s, 60, null);
+    expect(Math.hypot(th.x - DOOR.x, th.y - DOOR.y)).toBeLessThan(f0);   // now closing on the door
+  });
+
+  it('an escaped thief runs off with the till money', () => {
+    const [s, th] = thiefBrawl();
+    th.state = 'flee'; th.carry = true; th.x = DOOR.x - 20; th.y = DOOR.y;
+    s.money = 10;
+    drive(s, 60, null);
+    expect(s.money).toBe(10 - STEAL.LOSS);
+    expect(s.enemies.find((e) => e.id === th.id)).toBeUndefined();       // gone out the door
+  });
+
+  it('punching the carrying thief drops the cash and pays the bounty', () => {
+    const [s, th] = thiefBrawl();
+    const chef = s.chef;
+    chef.x = 300; chef.y = 250; chef.facing = Math.PI / 2;               // face +x
+    th.state = 'flee'; th.carry = true; th.x = chef.x + 12; th.y = chef.y;
+    drive(s, 12, PRESS);
+    expect(th.carry).toBe(false);
+    expect(s.money).toBe(STEAL.BOUNTY);
+    expect(th.hp).toBe(th.maxHp - 1);                                    // hit, not necessarily KO'd
   });
 });
 
