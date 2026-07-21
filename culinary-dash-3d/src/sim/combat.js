@@ -15,7 +15,7 @@
 //  - Input BUFFERS (PUNCH_BUFFER), it never accelerates; cadence comes from the
 //    animation frame counts, not from mashing.
 
-import { COMBAT, COMBO } from './data.js';
+import { COMBAT, COMBO, WORLD } from './data.js';
 import { moveChef, resolveCollision, forwardVec, lateralVec } from './movement.js';
 import { range } from './rng.js';
 
@@ -52,9 +52,9 @@ export function startBrawl(state, count = 4) {
   for (let i = 0; i < count; i++) {
     const kind = kinds[i % kinds.length];
     const a = ARCHETYPES[kind];
-    // spawn spread along the front / sides of the room
-    const x = range(state.rng, 40, 280);
-    const y = range(state.rng, 120, 168);
+    // spawn spread across the dining floor (they storm back in from the front)
+    const x = range(state.rng, WORLD.w * 0.1, WORLD.w * 0.9);
+    const y = range(state.rng, WORLD.h * 0.55, WORLD.h * 0.92);
     state.enemies.push({
       id: 'e' + i, kind, x, y, hp: a.hp, maxHp: a.hp,
       speed: a.speed, dmg: a.dmg, atkInterval: a.atkInterval, r: a.r,

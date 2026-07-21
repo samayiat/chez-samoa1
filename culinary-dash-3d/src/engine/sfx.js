@@ -27,6 +27,17 @@ function arp(notes, stepMs, dur, type, gain) {
   notes.forEach((f, i) => setTimeout(() => beep(f, dur, type, gain), i * stepMs));
 }
 
+function noise(gain, dur) {
+  if (!ac) return;
+  try {
+    const n = Math.floor(ac.sampleRate * dur), buf = ac.createBuffer(1, n, ac.sampleRate), d = buf.getChannelData(0);
+    for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / n, 2);
+    const src = ac.createBufferSource(); src.buffer = buf;
+    const g = ac.createGain(); g.gain.value = gain;
+    src.connect(g).connect(ac.destination); src.start();
+  } catch (e) { /* keep swinging */ }
+}
+
 // the palette — names match the sim's sound cues (state.sounds)
 export function sfx(name) {
   switch (name) {
@@ -39,5 +50,9 @@ export function sfx(name) {
     case 'walkout': beep(320, 0.22, 'square', 0.11, 150); break;
     case 'burnt':   beep(120, 0.28, 'sawtooth', 0.12, 60); break;
     case 'dayend':  arp([523, 659, 784, 1047, 1319], 110, 0.16, 'square', 0.12); break;           // closing-time fanfare
+    // ---- the brawl's voice (the 2D fight's crack-and-thump, ported) ----
+    case 'hit':     noise(0.12, 0.1); beep(140, 0.09, 'sawtooth', 0.11, 46); break;
+    case 'ko':      noise(0.17, 0.18); beep(96, 0.24, 'sawtooth', 0.14, 38); setTimeout(() => beep(70, 0.2, 'triangle', 0.1, 32), 70); break;
+    case 'brawl':   beep(320, 0.16, 'sawtooth', 0.12, 150); setTimeout(() => beep(260, 0.2, 'sawtooth', 0.12, 120), 140); break;   // the mob storms in
   }
 }

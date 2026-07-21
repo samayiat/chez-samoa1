@@ -13,11 +13,13 @@ import { initInput, pollInput } from '../engine/input.js';
 import { initTouch } from '../engine/touch.js';
 import { PIXEL_CAP, RIM_LIGHT } from '../engine/quality.js';
 import { createState, stepSim } from '../sim/state.js';
+import { forwardVec } from '../sim/movement.js';
 import { STATIONS, DISHES, COMBAT, RENT_DUE } from '../sim/data.js';
 import { rpos } from './kitchen-space.js';
 import { buildKitchen } from './kitchen-room.js';
 import { createCustomers, DISH_COLOR } from './kitchen-customers.js';
 import { createCats } from './kitchen-cats.js';
+import { createBrawlers } from './kitchen-brawlers.js';
 import { loadRun, saveRun, loadChef, saveChef } from '../engine/run.js';
 import { initSfx, sfx } from '../engine/sfx.js';
 import { buildChef } from './chef.js';
@@ -50,7 +52,8 @@ const H = {
   pay: document.getElementById('payBtn'),
 };
 
-let renderer, scene, camera, kitchen, customers, cats, chef, cu, carry, composer, booted = false, lastT = 0;
+let renderer, scene, camera, kitchen, customers, cats, brawlers, chef, cu, carry, composer, booted = false, lastT = 0;
+let camShake = 0, lastPhase = 'service';
 let state, walkPhase = 0, facing = Math.PI, dayT = 80, ended = 0, workBurst = 0, lastCarryKey = null;
 const stationDef = Object.fromEntries(STATIONS.map((s) => [s.id, s]));
 
@@ -79,6 +82,7 @@ function boot() {
   kitchen = buildKitchen(scene);
   customers = createCustomers(scene, kitchen.tables);
   cats = createCats(scene);
+  brawlers = createBrawlers(scene);
   chef = buildChef({ male: chefSel === 'm' }); scene.add(chef); cu = chef.userData;
 
   // what the chef carries — the real dish/ingredient model, swapped when it changes
@@ -110,15 +114,31 @@ function tick(dt) {
     state.sounds.length = 0;
   }
 
-  // day clock + endings
-  dayT -= dt;
-  if (state.phase === 'brawl' || state.badOrders >= COMBAT.BRAWL_TRIGGER) return endDay('mob');
-  if (dayT <= 0 && state.customers.length === 0) return endDay('done');
+  // the brawl storming in / clearing out — stings + no day clock while fighting
+  if (state.phase !== lastPhase) {
+    if (state.phase === 'brawl') sfx('brawl');
+    else sfx(state.brawlResult === 'win' ? 'perfect' : 'burnt');
+    lastPhase = state.phase;
+  }
+  // weighted hit events -> the impact bus (camera shake + the crack-and-thump)
+  if (state.hits && state.hits.length) {
+    for (const h of state.hits) { camShake = Math.min(0.55, camShake + h.w * 0.09); sfx(h.w > 1.4 ? 'ko' : 'hit'); }
+    state.hits.length = 0;
+  }
+
+  // day clock + endings (the clock holds its breath during a brawl)
+  if (state.phase !== 'brawl') dayT -= dt;
+  if (dayT <= 0 && state.phase !== 'brawl' && state.customers.length === 0) return endDay('done');
 }
 
 function render(alpha, now) {
   const t = now / 1000; const rdt = Math.min(0.05, t - lastT); lastT = t;
   if (state) syncScene(rdt, t);
+  if (camShake > 0.002) {
+    camera.position.set(0.5 + (Math.random() - 0.5) * camShake, 13.6 + (Math.random() - 0.5) * camShake * 0.6, 15.4);
+    camera.lookAt(0, 0.4, -0.4);
+    camShake *= Math.exp(-7 * rdt);
+  }
   kitchen && kitchen.update(rdt, t, 1 - Math.max(0, dayT) / 80);   // third arg: day progress 0..1 (drives the sunset)
   cats && cats.update(rdt, t);
   updateHud();
@@ -217,6 +237,25 @@ function syncScene(dt, t) {
     }
   }
 
+  // THE BRAWL — face where the sim faces, guard up, and swing the combo arms
+  if (state.phase === 'brawl') {
+    const F = forwardVec(c.facing);
+    facing = Math.atan2(F.x, F.y);
+    chef.rotation.y = facing;
+    if (c.swing) {
+      const k = clamp01(c.swing.t / c.swing.dur);
+      const out = k < 0.42 ? k / 0.42 : 1 - (k - 0.42) / 0.58;
+      const right = c.swing.step !== 1;                       // jab R, cross L, hook R
+      const arm = right ? cu.armR : cu.armL, other = right ? cu.armL : cu.armR;
+      arm.rotation.x = lerp(0.3, -1.7, out);
+      arm.userData.elbow.rotation.x = lerp(1.5, 0.05, out);
+      other.rotation.x = -0.5; other.userData.elbow.rotation.x = 1.3;   // guard
+    } else {
+      cu.armL.rotation.x = -0.5; cu.armL.userData.elbow.rotation.x = 1.2;
+      cu.armR.rotation.x = -0.5; cu.armR.userData.elbow.rotation.x = 1.2;
+    }
+  }
+  brawlers && brawlers.sync(state, dt, t);
   customers.sync(state, dt, t);
 }
 
@@ -229,10 +268,13 @@ function updateHud() {
   const rentDue = RENT_DUE(run.day);
   H.rent.textContent = '$' + rentDue;
   H.rent.classList.toggle('ok', run.money + state.money >= rentDue);   // green once covered
-  // walkout danger pips (out of the trigger)
-  const bad = state.badOrders, max = COMBAT.BRAWL_TRIGGER;
+  // pips: walkout danger during service, chef hearts during the brawl
+  const brawl = state.phase === 'brawl';
+  const max = brawl ? COMBAT.CHEF_HP : COMBAT.BRAWL_TRIGGER;
+  const on = brawl ? Math.max(0, state.chef.hp) : state.badOrders;
   H.danger.innerHTML = '';
-  for (let i = 0; i < max; i++) { const d = document.createElement('span'); d.className = 'pip' + (i < bad ? ' on' : ''); H.danger.appendChild(d); }
+  for (let i = 0; i < max; i++) { const d = document.createElement('span'); d.className = 'pip' + (i < on ? ' on' : ''); H.danger.appendChild(d); }
+  if (brawl) { H.prompt.textContent = 'FIGHT! E / ACTION to punch'; H.prompt.style.opacity = '1'; }
   H.msg.textContent = state.msg || '';
   H.msg.style.opacity = state.msg ? '1' : '0';
   // action prompt
