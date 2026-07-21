@@ -32,10 +32,10 @@ export function buildVince() {
   const trouser = mat(SUIT_DK, { flat: true, rough: 0.85 });
   const shoe = mat(0x0d0e12, { flat: true, rough: 0.6 });
   for (const sx of [-0.5, 0.5]) {
-    const hip = new THREE.Group(); hip.position.set(sx, 1.15, 0); hip.rotation.x = 0.12; lean.add(hip);
+    const hip = new THREE.Group(); hip.position.set(sx, 1.15, 0); hip.rotation.x = -0.12; lean.add(hip);
     hip.add(put(orb(0.34, trouser, 1, 0.9, 1), 0, 0, 0));                     // hip joint
     hip.add(put(cyl(0.33, 0.28, 0.56, trouser), 0, -0.28, 0));                 // thigh (tapered)
-    const knee = new THREE.Group(); knee.position.y = -0.56; knee.rotation.x = -0.22; hip.add(knee);
+    const knee = new THREE.Group(); knee.position.y = -0.56; knee.rotation.x = 0.22; hip.add(knee);
     knee.add(put(orb(0.27, trouser), 0, 0, 0));                               // knee cap
     knee.add(put(cyl(0.27, 0.23, 0.54, trouser), 0, -0.27, 0));                // shin (tapered)
     knee.add(put(box(0.5, 0.24, 0.7, shoe), 0, -0.52, 0.1));                   // boot sole
@@ -95,7 +95,7 @@ export function buildVince() {
   belly.add(armL); // parented to belly so lean+breathe carry it
   armL.add(put(orb(0.26, suit, 1, 0.9, 1), 0, 0, 0));                                      // shoulder round
   armL.add(put(cyl(0.25, 0.21, 0.62, suit), 0, -0.31, 0));                                  // upper arm
-  const armLElbow = new THREE.Group(); armLElbow.position.y = -0.62; armLElbow.rotation.x = 0.4; armL.add(armLElbow);
+  const armLElbow = new THREE.Group(); armLElbow.position.y = -0.62; armLElbow.rotation.x = -0.4; armL.add(armLElbow);
   armLElbow.add(put(orb(0.21, suit), 0, 0, 0));                                            // elbow
   armLElbow.add(put(cyl(0.21, 0.18, 0.58, suit), 0, -0.29, 0));                             // forearm
   armLElbow.add(put(orb(0.3, mat(SKIN, { flat: true }), 1, 0.9, 1.1), 0, -0.62, 0.05));    // fist
@@ -105,7 +105,7 @@ export function buildVince() {
   belly.add(armR);
   armR.add(put(orb(0.26, suit, 1, 0.9, 1), 0, 0, 0));
   armR.add(put(cyl(0.25, 0.21, 0.62, suit), 0, -0.31, 0));
-  const armRElbow = new THREE.Group(); armRElbow.position.y = -0.62; armRElbow.rotation.x = 0.32; armR.add(armRElbow);
+  const armRElbow = new THREE.Group(); armRElbow.position.y = -0.62; armRElbow.rotation.x = -0.32; armR.add(armRElbow);
   armRElbow.add(put(orb(0.21, suit), 0, 0, 0));
   armRElbow.add(put(cyl(0.21, 0.18, 0.58, suit), 0, -0.29, 0));
   armRElbow.add(put(orb(0.31, mat(SKIN, { flat: true }), 1, 0.9, 1.1), 0, -0.6, 0.08));    // grip hand
@@ -164,10 +164,10 @@ export function buildInspector() {
 
   // legs — long, precise, planted narrow
   for (const sx of [-0.3, 0.3]) {
-    const hip = new THREE.Group(); hip.position.set(sx, 1.48, 0); hip.rotation.x = 0.04; lean.add(hip);
+    const hip = new THREE.Group(); hip.position.set(sx, 1.48, 0); hip.rotation.x = -0.04; lean.add(hip);
     hip.add(put(orb(0.21, slacks, 1, 0.9, 1), 0, 0, 0));
     hip.add(put(cyl(0.2, 0.16, 0.7, slacks), 0, -0.35, 0));
-    const knee = new THREE.Group(); knee.position.y = -0.7; knee.rotation.x = -0.08; hip.add(knee);
+    const knee = new THREE.Group(); knee.position.y = -0.7; knee.rotation.x = 0.08; hip.add(knee);
     knee.add(put(orb(0.16, slacks), 0, 0, 0));
     knee.add(put(cyl(0.16, 0.13, 0.66, slacks), 0, -0.33, 0));
     knee.add(put(box(0.26, 0.16, 0.5, mat(0x14161a, { flat: true, rough: 0.5 })), 0, -0.68, 0.08));
@@ -199,13 +199,13 @@ export function buildInspector() {
   // arms — slim; the RIGHT hand raises the clipboard like a sentence
   const armL = new THREE.Group(); armL.position.set(-0.58, 0.62, 0); belly.add(armL);
   armL.add(put(cyl(0.13, 0.11, 0.5, coat), 0, -0.25, 0));
-  const armLElbow = new THREE.Group(); armLElbow.position.y = -0.5; armLElbow.rotation.x = 0.35; armL.add(armLElbow);
+  const armLElbow = new THREE.Group(); armLElbow.position.y = -0.5; armLElbow.rotation.x = -0.35; armL.add(armLElbow);
   armLElbow.add(put(orb(0.11, coat), 0, 0, 0));
   armLElbow.add(put(cyl(0.1, 0.09, 0.44, coat), 0, -0.22, 0));
   armLElbow.add(put(orb(0.13, skinM), 0, -0.48, 0.03));
   const armR = new THREE.Group(); armR.position.set(0.58, 0.62, 0); belly.add(armR);
   armR.add(put(cyl(0.13, 0.11, 0.5, coat), 0, -0.25, 0));
-  const armRElbow = new THREE.Group(); armRElbow.position.y = -0.5; armRElbow.rotation.x = 0.5; armR.add(armRElbow);
+  const armRElbow = new THREE.Group(); armRElbow.position.y = -0.5; armRElbow.rotation.x = -0.5; armR.add(armRElbow);
   armRElbow.add(put(orb(0.11, coat), 0, 0, 0));
   armRElbow.add(put(cyl(0.1, 0.09, 0.44, coat), 0, -0.22, 0));
   armRElbow.add(put(orb(0.13, skinM), 0, -0.48, 0.03));
@@ -239,10 +239,10 @@ export function buildBruno() {
 
   // legs — a boxer's base, wide and springy
   for (const sx of [-0.42, 0.42]) {
-    const hip = new THREE.Group(); hip.position.set(sx, 1.1, 0); hip.rotation.x = 0.1; lean.add(hip);
+    const hip = new THREE.Group(); hip.position.set(sx, 1.1, 0); hip.rotation.x = -0.1; lean.add(hip);
     hip.add(put(orb(0.28, check, 1, 0.9, 1), 0, 0, 0));
     hip.add(put(cyl(0.27, 0.23, 0.52, check), 0, -0.26, 0));
-    const knee = new THREE.Group(); knee.position.y = -0.52; knee.rotation.x = -0.18; hip.add(knee);
+    const knee = new THREE.Group(); knee.position.y = -0.52; knee.rotation.x = 0.18; hip.add(knee);
     knee.add(put(orb(0.22, check), 0, 0, 0));
     knee.add(put(cyl(0.22, 0.19, 0.5, check), 0, -0.25, 0));
     knee.add(put(box(0.42, 0.2, 0.6, mat(0x0d0e12, { flat: true, rough: 0.6 })), 0, -0.48, 0.08));
@@ -282,14 +282,14 @@ export function buildBruno() {
   const armL = new THREE.Group(); armL.position.set(-0.92, 0.72, 0.05); belly.add(armL);
   armL.add(put(orb(0.22, whites, 1, 0.9, 1), 0, 0, 0));
   armL.add(put(cyl(0.21, 0.17, 0.52, whites), 0, -0.26, 0));
-  const armLElbow = new THREE.Group(); armLElbow.position.y = -0.52; armLElbow.rotation.x = 0.9; armL.add(armLElbow);
+  const armLElbow = new THREE.Group(); armLElbow.position.y = -0.52; armLElbow.rotation.x = -0.9; armL.add(armLElbow);
   armLElbow.add(put(orb(0.17, skinM), 0, 0, 0));
   armLElbow.add(put(cyl(0.16, 0.14, 0.46, skinM), 0, -0.23, 0));
   armLElbow.add(put(orb(0.24, mat(0xd9d2c2, { flat: true, rough: 0.8 }), 1, 0.9, 1.1), 0, -0.5, 0.05));
   const armR = new THREE.Group(); armR.position.set(0.92, 0.72, 0.05); belly.add(armR);
   armR.add(put(orb(0.22, whites, 1, 0.9, 1), 0, 0, 0));
   armR.add(put(cyl(0.21, 0.17, 0.52, whites), 0, -0.26, 0));
-  const armRElbow = new THREE.Group(); armRElbow.position.y = -0.52; armRElbow.rotation.x = 0.9; armR.add(armRElbow);
+  const armRElbow = new THREE.Group(); armRElbow.position.y = -0.52; armRElbow.rotation.x = -0.9; armR.add(armRElbow);
   armRElbow.add(put(orb(0.17, skinM), 0, 0, 0));
   armRElbow.add(put(cyl(0.16, 0.14, 0.46, skinM), 0, -0.23, 0));
   armRElbow.add(put(orb(0.24, mat(0xd9d2c2, { flat: true, rough: 0.8 }), 1, 0.9, 1.1), 0, -0.5, 0.05));

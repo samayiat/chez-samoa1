@@ -58,7 +58,7 @@ function buildBrawler(kind, seed) {
   for (const sx of [-0.28 * a.bulk, 0.28 * a.bulk]) {
     const sh = new THREE.Group(); sh.position.set(sx, 1.05, 0.02); sh.rotation.x = -0.7; g.add(sh);
     sh.add(put(cyl(0.07, 0.058, 0.26, topMat), 0, -0.14, 0));
-    const elbow = new THREE.Group(); elbow.position.y = -0.28; elbow.rotation.x = 1.5; sh.add(elbow);
+    const elbow = new THREE.Group(); elbow.position.y = -0.28; elbow.rotation.x = -1.5; sh.add(elbow);
     elbow.add(put(cyl(0.055, 0.05, 0.22, skinMat), 0, -0.12, 0));
     elbow.add(put(ball(a.boxer ? 0.105 : 0.075, gloveMat), 0, -0.26, 0));     // fist / glove
     arms.push({ sh, elbow });

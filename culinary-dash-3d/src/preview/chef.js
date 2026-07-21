@@ -288,9 +288,9 @@ export function createChef(scene, opts) {
       // shoulder thrusts forward while the elbow snaps from bent to straight — the
       // extension IS the strike (replaces the old scale-stretch).
       arm.rotation.x = lerp(0.3, -1.7, out);
-      arm.userData.elbow.rotation.x = lerp(1.5, 0.05, out);
+      arm.userData.elbow.rotation.x = lerp(-1.5, -0.05, out);
       other.rotation.x = lerp(other.rotation.x, -0.35, smooth(dt, 12));                          // guard up
-      other.userData.elbow.rotation.x = lerp(other.userData.elbow.rotation.x, 1.3, smooth(dt, 12));
+      other.userData.elbow.rotation.x = lerp(other.userData.elbow.rotation.x, -1.3, smooth(dt, 12));
       // squash body at the peak
       c.squash = Math.sin(clamp01(k / 0.5) * Math.PI) * 0.12;
       // trail
@@ -308,8 +308,8 @@ export function createChef(scene, opts) {
     } else {
       armR.rotation.x = lerp(armR.rotation.x, moving ? Math.sin(c.walkPhase) * 0.5 : 0, smooth(dt, 10));
       armL.rotation.x = lerp(armL.rotation.x, moving ? -Math.sin(c.walkPhase) * 0.5 : 0, smooth(dt, 10));
-      armR.userData.elbow.rotation.x = lerp(armR.userData.elbow.rotation.x, 0.35, smooth(dt, 10)); // relaxed bend
-      armL.userData.elbow.rotation.x = lerp(armL.userData.elbow.rotation.x, 0.35, smooth(dt, 10));
+      armR.userData.elbow.rotation.x = lerp(armR.userData.elbow.rotation.x, -0.35, smooth(dt, 10)); // relaxed bend
+      armL.userData.elbow.rotation.x = lerp(armL.userData.elbow.rotation.x, -0.35, smooth(dt, 10));
       u.trail.visible = false; u.trailMat.opacity = 0;
       c.squash = lerp(c.squash, 0, smooth(dt, 12));
     }

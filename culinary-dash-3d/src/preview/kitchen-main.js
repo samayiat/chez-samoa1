@@ -345,11 +345,11 @@ function syncScene(dt, t) {
       const right = c.swing.step !== 1;                       // jab R, cross L, hook R
       const arm = right ? cu.armR : cu.armL, other = right ? cu.armL : cu.armR;
       arm.rotation.x = lerp(0.3, -1.7, out);
-      arm.userData.elbow.rotation.x = lerp(1.5, 0.05, out);
-      other.rotation.x = -0.5; other.userData.elbow.rotation.x = 1.3;   // guard
+      arm.userData.elbow.rotation.x = lerp(-1.5, -0.05, out);
+      other.rotation.x = -0.5; other.userData.elbow.rotation.x = -1.3;   // guard
     } else {
-      cu.armL.rotation.x = -0.5; cu.armL.userData.elbow.rotation.x = 1.2;
-      cu.armR.rotation.x = -0.5; cu.armR.userData.elbow.rotation.x = 1.2;
+      cu.armL.rotation.x = -0.5; cu.armL.userData.elbow.rotation.x = -1.2;
+      cu.armR.rotation.x = -0.5; cu.armR.userData.elbow.rotation.x = -1.2;
     }
     // the slip: a hard lean along the dodge with a low duck
     if (c.dodge) {

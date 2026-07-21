@@ -71,7 +71,7 @@ export function createCustomers(scene, tables) {
     for (const sx of [-0.27, 0.27]) {
       const sh = new THREE.Group(); sh.position.set(sx, 0.95, 0.03); sh.rotation.x = -0.55; m.add(sh);
       sh.add(put(cyl(0.07, 0.058, 0.26, topMat), 0, -0.14, 0));
-      const elbow = new THREE.Group(); elbow.position.y = -0.28; elbow.rotation.x = 1.15; sh.add(elbow);
+      const elbow = new THREE.Group(); elbow.position.y = -0.28; elbow.rotation.x = -1.15; sh.add(elbow);
       elbow.add(put(ball(0.06, skinMat), 0, 0, 0));
       elbow.add(put(cyl(0.055, 0.048, 0.24, skinMat), 0, -0.13, 0));
       elbow.add(put(ball(0.065, skinMat), 0, -0.27, 0));                   // hand
