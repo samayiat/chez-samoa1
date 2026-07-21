@@ -36,6 +36,15 @@ function localeWorld() {
   const sky = wallQuad(90, -4.9, 14, 0x8fc9e8, -26);                  // sky, up past any aspect's view
   const haze = wallQuad(90, -6.1, -4.9, 0xbfe3ea, -25.9);             // pale band at the horizon hand-off
   const sea = wallQuad(90, -14, -6.1, 0x35839b, -25.9);               // distant sea below the horizon line
+  // ...and the SAME backdrop doubled on the +z side, facing back in — the
+  // fourth wall is glass now (the OTS brawl looks this way), and the flats
+  // SHARE materials so the sunset grade paints both sides at once. The sun,
+  // glint and sailboat stay unique to the back — one sun, ever.
+  const mirrorQuad = (src, z) => {
+    const m = new THREE.Mesh(src.geometry, src.material);
+    m.position.set(0, src.position.y, z); m.rotation.y = Math.PI; v.add(m); return m;
+  };
+  mirrorQuad(sky, 26); mirrorQuad(haze, 25.9); mirrorQuad(sea, 25.9);
   // the sun — a billboard in front of the flat; sinking below the far-sea shelf's
   // level hides it behind that shelf (the camera looks down over it)
   const sun = new THREE.Sprite(new THREE.SpriteMaterial({ color: 0xfff2cf, fog: false }));
@@ -45,24 +54,31 @@ function localeWorld() {
   isl.position.set(-7, -0.5, -9.5); isl.scale.set(1, 0.35, 0.6); v.add(isl);
   // the REAL ocean the diner floats on — a wide rectangle whose far edge is a
   // straight line parallel to the wall (this WAS the curved rim)
-  const ocean = new THREE.Mesh(new THREE.PlaneGeometry(90, 27), flat(0x3f97ad));
-  ocean.rotation.x = -Math.PI / 2; ocean.position.set(0, -0.45, -1.5); v.add(ocean);   // z -15 .. +12 (under the room too)
+  const ocean = new THREE.Mesh(new THREE.PlaneGeometry(90, 42), flat(0x3f97ad));
+  ocean.rotation.x = -Math.PI / 2; ocean.position.set(0, -0.45, 6); v.add(ocean);   // z -15 .. +27 (under the room AND past the glass wall)
   // far sea shelf — a lower rectangle from the ocean's far edge out to the flat,
-  // so looking down over the horizon shows deep water, never a void
+  // so looking down over the horizon shows deep water, never a void (both sides)
   const seaFar = new THREE.Mesh(new THREE.PlaneGeometry(90, 11), flat(0x35839b));
   seaFar.rotation.x = -Math.PI / 2; seaFar.position.set(0, -5.62, -20.5); v.add(seaFar);
+  const seaFarF = new THREE.Mesh(seaFar.geometry, seaFar.material);
+  seaFarF.rotation.x = -Math.PI / 2; seaFarF.position.set(0, -5.62, 22.5); v.add(seaFarF);
   // waves — DASHED strips lying on the water (per the 2D game: dashes are what
   // make the sideways drift VISIBLE; a solid line sliding shows nothing)
   const waves = [];
-  [[-7, 0x2f7088], [-9.5, 0x5fb0c4], [-12, 0x2f7088]].forEach(([z, col], row) => {
+  // three rows behind the back windows, three more past the front glass —
+  // rows pair up on shared materials so the dusk grade covers all six
+  [[-7, 0x2f7088], [-9.5, 0x5fb0c4], [-12, 0x2f7088], [12, null], [14.5, null], [17.5, null]].forEach(([z, col], row) => {
     const g2 = new THREE.Group(); g2.position.set(0, -0.42, z); v.add(g2);
-    const m = new THREE.MeshBasicMaterial({ color: col, fog: false });
+    const m = col !== null ? new THREE.MeshBasicMaterial({ color: col, fog: false }) : waves[row - 3].material;
     for (let x = -16; x <= 16; x += 2.6) {
-      const dash = new THREE.Mesh(new THREE.PlaneGeometry(1.4, 0.22 + row * 0.06), m);
+      const dash = new THREE.Mesh(new THREE.PlaneGeometry(1.4, 0.22 + (row % 3) * 0.06), m);
       dash.rotation.x = -Math.PI / 2; dash.position.x = x + (row % 2) * 1.3; g2.add(dash);
     }
     waves.push({ group: g2, material: m, row });
   });
+  // a second island mound off the front-right — something to sail your eye to
+  const islF = new THREE.Mesh(isl.geometry, isl.material);
+  islF.position.set(8.5, -0.5, 15.5); islF.scale.set(1.1, 0.32, 0.6); v.add(islF);
   // sun glint running along the water toward the sun's azimuth
   const glint = new THREE.Mesh(new THREE.PlaneGeometry(1.5, 8.5), flat(0xcdeef0));
   glint.rotation.x = -Math.PI / 2; glint.rotation.z = -0.17; glint.position.set(2.2, -0.41, -9.5); v.add(glint);
@@ -126,8 +142,20 @@ function localeWorld() {
   };
   palm(-10.4, -7.8, 3.6, false);   // outside the left window
   palm(10.2, -7.9, 3.3, true);     // outside the right window
+  // palms just past the front glass — they'd photobomb the diorama camera
+  // (which sits out there), so they live in a group the room can cut away
+  const frontDress = new THREE.Group(); v.add(frontDress);
+  {
+    const p1 = new THREE.Group(); p1.position.set(-11.2, -0.45, 12.4); frontDress.add(p1); palms.push(p1);
+    const a1 = palmCard(3.5); a1.rotation.y = Math.PI; p1.add(a1);
+    const b1 = palmCard(3.5); b1.rotation.y = Math.PI / 2; p1.add(b1);
+    const p2 = new THREE.Group(); p2.position.set(9.6, -0.45, 13.1); p2.scale.x = -1; frontDress.add(p2); palms.push(p2);
+    const a2 = palmCard(3.0); a2.rotation.y = Math.PI; p2.add(a2);
+    const b2 = palmCard(3.0); b2.rotation.y = Math.PI / 2; p2.add(b2);
+  }
   return {
     group: v,
+    frontDress,
     update(dt, t, day = 0) {
       // dashed strips slide continuously in alternating directions — visible motion
       for (let i = 0; i < waves.length; i++) {
@@ -255,6 +283,29 @@ export function buildKitchen(scene) {
   // the shared tropical panorama behind the wall, seen through every opening
   const locale = localeWorld(); g.add(locale.group);
 
+  // THE FOURTH WALL — one big glass window across the front, so running the
+  // room in 3D (the OTS brawl) never faces a void: more ocean, more palms.
+  // It sits between the diorama camera and the floor, so it CUTS AWAY (with
+  // the front palms) whenever the camera is up in the service view.
+  const frontWall = new THREE.Group(); g.add(frontWall);
+  {
+    const glassMat = new THREE.MeshStandardMaterial({
+      color: 0xcfe9ef, transparent: true, opacity: 0.13, roughness: 0.12, metalness: 0,
+      depthWrite: false, side: THREE.DoubleSide,
+    });
+    frontWall.add(put(box(28, 0.9, 0.4, wallMat), 0, 0.45, 9.1));                     // knee wall
+    frontWall.add(put(box(28, 0.18, 0.45, mat(BRASS, { metal: 0.6, rough: 0.4 })), 0, 0.95, 9.1)); // brass sill
+    frontWall.add(put(box(28, 0.5, 0.4, wallMat), 0, 5.35, 9.1));                     // header
+    for (const px of [-13.8, -7, 0, 7, 13.8]) frontWall.add(put(box(0.42, 4.6, 0.42, mat(WOOD, { rough: 0.75 })), px, 3.15, 9.1)); // posts
+    for (const px of [-10.4, -3.5, 3.5, 10.4]) {
+      const pane = put(box(6.4, 4.3, 0.06, glassMat), px, 3.15, 9.1);
+      pane.castShadow = false; pane.receiveShadow = false; frontWall.add(pane);
+      frontWall.add(put(box(6.4, 0.1, 0.2, mat(WOOD, { rough: 0.75 })), px, 3.15, 9.1)); // mid muntin
+    }
+  }
+  frontWall.visible = false; locale.frontDress.visible = false;
+  const setFront = (on) => { frontWall.visible = on; locale.frontDress.visible = on; };
+
   // window frames over the openings
   const addWindow = (x, w, h) => {
     const win = new THREE.Group(); win.position.set(x, 3.25, -6.2); g.add(win);
@@ -353,7 +404,7 @@ export function buildKitchen(scene) {
   if (RIM_LIGHT) { const rim = new THREE.DirectionalLight(0x6d84ff, 0.95); rim.position.set(-6, 7, -9); scene.add(rim); }   // cold back rim → edge separation
 
   return {
-    stations, tables, officeDoor,
+    stations, tables, officeDoor, setFront,
     update(dt, t, day) {
       for (const s of steamers) s.update(dt, t);
       for (let i = 0; i < lamps.length; i++) lamps[i].rotation.z = Math.sin(t * 0.7 + i) * 0.02;

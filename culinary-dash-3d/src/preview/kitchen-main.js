@@ -212,6 +212,7 @@ function render(alpha, now) {
   if (sway) camera.rotation.z += sway * 0.25;
   camShake *= Math.exp(-7 * rdt);
   kitchen && kitchen.update(rdt, t, 1 - Math.max(0, dayT) / 80);   // third arg: day progress 0..1 (drives the sunset)
+  kitchen && kitchen.setFront(fightCam > 0.1);   // the glass fourth wall exists only when the camera is inside
   cats && cats.update(rdt, t);
   updateHud();
   composer.render();
