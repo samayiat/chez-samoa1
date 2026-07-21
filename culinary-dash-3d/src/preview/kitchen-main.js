@@ -19,6 +19,7 @@ import { buildKitchen } from './kitchen-room.js';
 import { createCustomers, DISH_COLOR } from './kitchen-customers.js';
 import { createCats } from './kitchen-cats.js';
 import { loadRun, saveRun } from '../engine/run.js';
+import { initSfx, sfx } from '../engine/sfx.js';
 import { buildChef } from './chef.js';
 import { carriedModel } from './food.js';
 import { lerp, smooth, clamp01, mat, box, put } from './util.js';
@@ -90,9 +91,12 @@ function tick(dt) {
   if (ended) return;
   const input = pollInput();
   stepSim(state, dt, input);
-  // action cues (grab/plate/cook/serve) -> a quick "prepping" flourish
+  // action cues -> the shared beep-synth voice + a quick "prepping" flourish
   if (state.sounds && state.sounds.length) {
-    for (const s of state.sounds) if (s === 'grab' || s === 'plate' || s === 'cook' || s === 'serve') workBurst = 1;
+    for (const s of state.sounds) {
+      if (s === 'grab' || s === 'plate' || s === 'cook' || s === 'serve') workBurst = 1;
+      sfx(s);
+    }
     state.sounds.length = 0;
   }
 
@@ -241,6 +245,7 @@ function endDay(kind) {
   const win = kind === 'done';
   // bank the day into the run — every close is rent night, so the fight is next
   saveRun({ ...run, money: run.money + state.money, served: run.served + state.served });
+  sfx(win ? 'dayend' : 'burnt');
   H.end.querySelector('h2').textContent = win ? 'Closing time' : 'The mob is at the door';
   H.end.querySelector('p').innerHTML = win
     ? `Day ${run.day}: served <b>${state.served}</b>, banked <b>$${state.money}</b> ($${run.money + state.money} total).<br>Vince is at the door about the rent.`
@@ -262,6 +267,8 @@ function begin() {
     if (startEl && !document.getElementById('glnote')) startEl.appendChild(note); return;
   }
   initInput(window); initTouch({ primaryLabel: 'ACTION', dodge: false });
+  initSfx();                                       // unlock audio on the start tap
+  window.addEventListener('pointerdown', initSfx);  // and keep it unlocked on mobile
   const touch = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
   if (touch) { const el = document.documentElement; try { (el.requestFullscreen || el.webkitRequestFullscreen)?.call(el); } catch (e) {} try { screen.orientation?.lock?.('landscape').catch(() => {}); } catch (e) {} }
   startEl.classList.add('gone'); setTimeout(() => startEl && startEl.remove(), 400);
