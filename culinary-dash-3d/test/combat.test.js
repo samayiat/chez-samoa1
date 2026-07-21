@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { createState, stepSim } from '../src/sim/state.js';
 import { startBrawl } from '../src/sim/combat.js';
 import { forwardVec } from '../src/sim/movement.js';
-import { COMBAT, COMBO, STATIONS, TILL, DOOR, STEAL } from '../src/sim/data.js';
+import { COMBAT, COMBO, STATIONS, TABLES, TILL, DOOR, STEAL, WEAPONS } from '../src/sim/data.js';
 import { createImpactBus, impact, decayImpact } from '../src/fx/impact.js';
 
 const STEP = 1 / 60;
@@ -233,6 +233,61 @@ describe('the moveset (telegraph -> strike -> recover)', () => {
     drive(s, 12, PRESS);                                // knock him off his swing
     expect(e.atk).toBe(null);
     expect(e.hp).toBe(8);
+  });
+});
+
+describe('wrecking the place (raids, table flips, weapons)', () => {
+  const fryer = STATIONS.find((s) => s.id === 'fryer');
+
+  it('a raider chips the fryer dead — three hits and it is WRECKED', () => {
+    const s = createState(7); startBrawl(s, 1);
+    const e = s.enemies[0];
+    e.thirstAt = Infinity; e.raidAt = 0; e.x = fryer.x; e.y = fryer.y + 20;
+    s.chef.x = 60; s.chef.y = 300;
+    for (let i = 0; i < 60 * 4 && !s.broken.fryer; i++) stepSim(s, STEP, NO);
+    expect(s.broken.fryer).toBe(true);
+    expect(e.job).toBe('chase');                       // done wrecking, back on you
+  });
+
+  it('a wrecked station refuses to cook until repaired', () => {
+    const s = createState(7, 1, null, { fryer: true });
+    s.nextSpawn = 999;
+    s.chef.x = fryer.x; s.chef.y = fryer.y + 14;
+    stepSim(s, STEP, PRESS);
+    expect(s.stations.fryer.cooking).toBe(false);
+    expect(s.msg).toMatch(/WRECKED/);
+  });
+
+  it('a brawler barrelling past a table flips it, and nobody sits there after', () => {
+    const s = createState(7); startBrawl(s, 1);
+    const tb = TABLES[0];
+    const e = s.enemies[0];
+    e.thirstAt = Infinity; e.raidAt = Infinity; e.x = tb.x + 2; e.y = tb.y + 2;
+    stepSim(s, STEP, NO);
+    expect(s.flipped[tb.id]).toBe(true);
+    // clear the room and let service seat someone — never at the flipped table
+    s.enemies = []; stepSim(s, STEP, NO);              // brawl resolves as a win
+    for (const t of TABLES) if (t.id !== tb.id) s.flipped[t.id] = true;   // only the flipped one left... none
+    s.flipped[tb.id] = true;
+    s.nextSpawn = 0.01;
+    for (let i = 0; i < 30; i++) stepSim(s, STEP, NO);
+    expect(s.customers.length).toBe(0);                // every table flipped -> nobody seats
+  });
+
+  it('the frying pan: picked up at the stove, +1 damage, and it wears out', () => {
+    const s = createState(7); startBrawl(s, 1);
+    const pot = STATIONS.find((x) => x.id === 'pot');
+    s.enemies[0].x = 40; s.enemies[0].y = 340; s.enemies[0].speed = 0; s.enemies[0].thirstAt = Infinity; s.enemies[0].raidAt = Infinity;
+    s.chef.x = pot.x; s.chef.y = pot.y + 20;
+    stepSim(s, STEP, NO);
+    expect(s.chef.weapon && s.chef.weapon.id).toBe('pan');
+    // square up: a panned jab should deal 2 to a 3hp chaser
+    const e = s.enemies[0];
+    e.x = 300; e.y = 250; s.chef.x = 285; s.chef.y = 250; s.chef.facing = Math.PI / 2;
+    s.chef.weapon.hits = 1;                            // last swing in it
+    drive(s, 12, PRESS);
+    expect(e.hp).toBe(1);                              // 3 - (1 + pan)
+    expect(s.chef.weapon).toBe(null);                  // ...and the pan gave out
   });
 });
 

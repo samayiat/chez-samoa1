@@ -38,7 +38,8 @@ function cue(state, name) { if (state.sounds) state.sounds.push(name); }
 // A free table with no customer, or null.
 function freeTable(state) {
   const taken = new Set(state.customers.map((c) => c.table));
-  const open = TABLES.filter((t) => !taken.has(t.id));
+  // a flipped table seats nobody until it's righted overnight
+  const open = TABLES.filter((t) => !taken.has(t.id) && !state.flipped[t.id]);
   return open.length ? open : null;
 }
 
@@ -82,6 +83,12 @@ function interact(state) {
   }
 
   if (!near) return;
+
+  // a wrecked station cooks nothing (2D rule) — the office sells repairs
+  if (state.broken[near.id]) {
+    flash(state, `the ${near.label || near.id} is WRECKED — repair it in the back office`);
+    return;
+  }
 
   // 1b) the pass: set a carried item down, or pick the last one back up
   if (near.kind === 'pass') {

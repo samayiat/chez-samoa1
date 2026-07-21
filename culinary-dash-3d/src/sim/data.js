@@ -88,6 +88,16 @@ export const STEAL = {
   EXIT_R: 14,     // close enough to the door counts as gone
 };
 
+// --- Wrecking + weapons (2D raid system, ported + armed) ---------------------
+export const STATION_HP = 3;       // chips a raider needs to wreck a station
+export const REPAIR_COST = (id) => (id === 'bar' ? 40 : 25);   // office repairs (2D 300/500, scaled)
+// Real kitchen appliances = real weapons. Walk past the right station in a
+// brawl with empty hands and it's yours; each has a feel and a lifespan.
+export const WEAPONS = {
+  pan:     { station: 'pot',   label: 'frying pan', dmg: 1, knock: 1.5, reach: 0,  band: 0, hits: 8 },
+  spatula: { station: 'fryer', label: 'spatula',    dmg: 0, knock: 1.1, reach: 10, band: 5, hits: 12 },
+};
+
 // --- Combat / impact spine (ported: src lines 835-2321) --------------------
 export const COMBAT = {
   // impact weights, ordered scuff < jab < hurt < heavy < stumble

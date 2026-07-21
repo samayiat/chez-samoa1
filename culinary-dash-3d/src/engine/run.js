@@ -5,7 +5,7 @@
 const KEY = 'chez.run.v1';
 let mem = null;
 
-export const freshRun = () => ({ day: 1, money: 0, served: 0, upgrades: {}, stats: {}, bossWins: 0 });
+export const freshRun = () => ({ day: 1, money: 0, served: 0, upgrades: {}, stats: {}, bossWins: 0, broken: {} });
 
 export function loadRun() {
   try {

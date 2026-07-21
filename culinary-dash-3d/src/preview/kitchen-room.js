@@ -319,12 +319,12 @@ export function buildKitchen(scene) {
     stations[s.id] = buildStation(g, p.x, p.z, s, steamers);
   }
 
-  // ---- tables (static; customers are added dynamically) ----
+  // ---- tables (customers are added dynamically; brawls can flip them) ----
   const tables = {};
   for (const t of TABLES) {
     const p = rpos(t.x, t.y);
-    tables[t.id] = { x: p.x, z: p.z };
-    diningTable(g, p.x, p.z);
+    const built = diningTable(g, p.x, p.z);
+    tables[t.id] = { x: p.x, z: p.z, ...built };
   }
 
   // ---- warm hanging lamps ----
@@ -490,9 +490,28 @@ function buildStation(g, x, z, def, steamers) {
   const ready = put(new THREE.Mesh(new THREE.SphereGeometry(0.14, 12, 8), mat(0xffcf6a, { emissive: 0xffcf6a, emi: 0.6 })), 0, 0.05, 0); ready.visible = false; label.add(ready);
   const ring = put(new THREE.Mesh(new THREE.TorusGeometry(0.55, 0.05, 8, 22), mat(0xffe6a0, { emissive: 0xffd98a, emi: 0.8 })), 0, -1.85, 0); ring.rotation.x = -Math.PI / 2; ring.visible = false; s.add(ring);
 
-  let nearT = 0, glowT = 0;
+  let nearT = 0, glowT = 0, wrecked = false, debris = null;
   return {
     group: s,
+    // wrecked by the mob: the whole unit slumps, debris scatters, the glow dies
+    setBroken(b) {
+      if (b === wrecked) return;
+      wrecked = b;
+      s.rotation.z = b ? 0.13 : 0;
+      s.rotation.x = b ? -0.06 : 0;
+      s.position.y = b ? -0.08 : 0;
+      if (b && !debris) {
+        debris = new THREE.Group();
+        const dk = mat(0x2a2018, { flat: true, rough: 0.95 });
+        debris.add(put(box(0.34, 0.1, 0.22, dk), -0.9, 0.05, 0.7));
+        debris.add(put(box(0.22, 0.08, 0.3, dk), 0.8, 0.04, 0.85));
+        const shard = put(box(0.3, 0.06, 0.16, dk), 0.2, 0.03, 1.05); shard.rotation.y = 0.7;
+        debris.add(shard);
+        s.add(debris);
+      }
+      if (debris) debris.visible = b;
+      if (b) { glowT = 0; if (steam) steam.setRate(0); }
+    },
     // cooking: bool, frac: 0..1 within cook window, phase: 'raw'|'perfect'|'burnt'
     setCook(cooking, frac, phase) {
       if (steam) steam.setRate(cooking ? 1 : 0);
@@ -530,14 +549,18 @@ function buildStation(g, x, z, def, steamers) {
 
 function diningTable(g, x, z) {
   const t = new THREE.Group(); t.position.set(x, 0, z); g.add(t);
-  t.add(put(box(0.16, 0.85, 0.16, mat(0x3a2a1a)), 0, 0.42, 0));
+  // the table proper on its own pivot so a brawl can FLIP it (rotates about
+  // the rim, chairs stay put and get knocked separately)
+  const body = new THREE.Group(); t.add(body);
+  body.add(put(box(0.16, 0.85, 0.16, mat(0x3a2a1a)), 0, 0.42, 0));
   const top = put(new THREE.Mesh(new THREE.CylinderGeometry(0.66, 0.66, 0.1, 20), mat(WOOD, { rough: 0.6 })), 0, 0.88, 0);
-  top.castShadow = true; top.receiveShadow = true; t.add(top);
-  t.add(put(new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 0.16, 8), mat(CREAM)), 0, 0.98, 0));
-  t.add(put(new THREE.Mesh(new THREE.SphereGeometry(0.04, 8, 6), mat(0xffb040, { emissive: 0xffa030, emi: 1.3 })), 0, 1.08, 0));
+  top.castShadow = true; top.receiveShadow = true; body.add(top);
+  body.add(put(new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 0.16, 8), mat(CREAM)), 0, 0.98, 0));
+  body.add(put(new THREE.Mesh(new THREE.SphereGeometry(0.04, 8, 6), mat(0xffb040, { emissive: 0xffa030, emi: 1.3 })), 0, 1.08, 0));
   // two chairs
-  t.add(put(box(0.46, 0.5, 0.46, mat(0x4a3a2a, { rough: 0.8 })), 0, 0.25, 0.92));
-  t.add(put(box(0.46, 0.5, 0.46, mat(0x4a3a2a, { rough: 0.8 })), 0, 0.25, -0.92));
+  const chairA = put(box(0.46, 0.5, 0.46, mat(0x4a3a2a, { rough: 0.8 })), 0, 0.25, 0.92); t.add(chairA);
+  const chairB = put(box(0.46, 0.5, 0.46, mat(0x4a3a2a, { rough: 0.8 })), 0, 0.25, -0.92); t.add(chairB);
+  return { group: t, body, chairA, chairB, flipK: 0 };
 }
 
 function makeSteam(parent, x, y, z) {

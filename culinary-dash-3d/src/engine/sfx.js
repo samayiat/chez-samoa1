@@ -57,6 +57,8 @@ export function sfx(name) {
     case 'coin':    arp([1047, 1568, 2093], 40, 0.06, 'square', 0.1); break;                      // the bounty lands in the till
     case 'door':    beep(110, 0.2, 'triangle', 0.09, 68); setTimeout(() => beep(84, 0.12, 'triangle', 0.07), 140); break;   // the office door creaks
     case 'cheer':   noise(0.09, 0.14); arp([392, 523, 659], 55, 0.09, 'square', 0.11); break;     // a brawler hits the bottle — the mob roars
+    case 'smash':   noise(0.14, 0.13); beep(150, 0.12, 'square', 0.1, 58); break;                 // equipment wrecked / a table goes over (2D pot-shatter)
+    case 'clang':   noise(0.07, 0.07); beep(880, 0.1, 'square', 0.12, 220); break;                // cast iron meets jaw
     case 'brawl':   beep(320, 0.16, 'sawtooth', 0.12, 150); setTimeout(() => beep(260, 0.2, 'sawtooth', 0.12, 120), 140); break;   // the mob storms in
   }
 }

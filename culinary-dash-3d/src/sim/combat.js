@@ -15,7 +15,7 @@
 //  - Input BUFFERS (PUNCH_BUFFER), it never accelerates; cadence comes from the
 //    animation frame counts, not from mashing.
 
-import { COMBAT, COMBO, WORLD, STATIONS, TILL, DOOR, STEAL } from './data.js';
+import { COMBAT, COMBO, WORLD, STATIONS, TABLES, TABLE_R, TILL, DOOR, STEAL, STATION_HP, WEAPONS } from './data.js';
 import { moveChef, resolveCollision, forwardVec, lateralVec } from './movement.js';
 import { range } from './rng.js';
 
@@ -72,6 +72,7 @@ export function startBrawl(state, count = 4) {
   state.hits = [];
   state.brawlResult = null;
 
+  chef.weapon = null;
   const kinds = Object.keys(ARCHETYPES);
   for (let i = 0; i < count; i++) {
     const kind = kinds[i % kinds.length];
@@ -88,6 +89,9 @@ export function startBrawl(state, count = 4) {
       // fighters get thirsty: most of them will break for the bar mid-fight
       job: 'chase', chugT: 0, buffed: false,
       thirstAt: range(state.rng, 0, 1) < 0.6 ? state.t + range(state.rng, 1.5, 6) : Infinity,
+      // ...and some come to WRECK the place (2D raid system)
+      raidAt: range(state.rng, 0, 1) < 0.5 ? state.t + range(state.rng, 1, 5) : Infinity,
+      raidT: 0, tgt: null,
     });
   }
   state.msg = 'THE BRAWL — clear them out!';
@@ -105,8 +109,10 @@ function landPunch(state) {
   const step = COMBO[chef.swing.step];
   const F = forwardVec(chef.facing);
   const L = lateralVec(chef.facing);
-  const baseW = COMBAT.W[step.weight];
-  const impulse = COMBAT.BRAWL_KNOCK * (COMBAT.MOVE_KNOCK[step.move] ?? 1);
+  // an armed swing: the pan lands heavier + sends harder, the spatula sweeps wider
+  const wp = chef.weapon ? WEAPONS[chef.weapon.id] : null;
+  const baseW = COMBAT.W[step.weight] + (wp && wp.dmg ? 0.15 : 0);
+  const impulse = COMBAT.BRAWL_KNOCK * (COMBAT.MOVE_KNOCK[step.move] ?? 1) * (wp ? wp.knock : 1);
 
   let bodies = 0, anyKO = false;
   for (const e of state.enemies) {
@@ -114,10 +120,10 @@ function landPunch(state) {
     const dx = e.x - chef.x, dy = e.y - chef.y;
     const fwd = dx * F.x + dy * F.y;
     const lat = dx * L.x + dy * L.y;
-    if (fwd < -COMBAT.PUNCH_BACK || fwd > COMBAT.PUNCH_REACH + e.r) continue;
-    if (Math.abs(lat) > COMBAT.PUNCH_YBAND) continue;
-    // courage hits harder; Heavy Hands (the shop) stacks on top
-    e.hp -= (chef.drinks >= BUZZED_AT ? 2 : 1) + ((state.mods && state.mods.pow) || 0);
+    if (fwd < -COMBAT.PUNCH_BACK || fwd > COMBAT.PUNCH_REACH + (wp ? wp.reach : 0) + e.r) continue;
+    if (Math.abs(lat) > COMBAT.PUNCH_YBAND + (wp ? wp.band : 0)) continue;
+    // courage hits harder; Heavy Hands (the shop) and the pan stack on top
+    e.hp -= (chef.drinks >= BUZZED_AT ? 2 : 1) + ((state.mods && state.mods.pow) || 0) + (wp ? wp.dmg : 0);
     e.hurtT = 0.18;
     if (e.role === 'thief' && e.carry) {
       // caught him — the cash drops and a bounty lands in the till (2D port)
@@ -139,6 +145,11 @@ function landPunch(state) {
       e.atk = null;
       e.atkCd = Math.max(e.atkCd || 0, 0.6);
     }
+    if (e.job === 'raid') {
+      // beaten off the equipment — they'll circle back for it later
+      e.job = 'chase'; e.raidT = 0; e.tgt = null;
+      e.raidAt = state.t + 4;
+    }
     const send = impulse * Math.min(2, 1 + 0.25 * (chef.drinks || 0));
     e.kx += F.x * send;
     e.ky += F.y * send;
@@ -152,6 +163,16 @@ function landPunch(state) {
     const cy = chef.y + F.y * COMBAT.PUNCH_REACH * 0.5;
     emitHit(state, w, cx, cy, F.x, F.y);
     state.enemies = state.enemies.filter((e) => e.hp > 0);
+    if (wp) {
+      // every landed swing wears the tool down — appliances aren't forever
+      if (state.sounds) state.sounds.push('clang');
+      chef.weapon.hits -= 1;
+      if (chef.weapon.hits <= 0) {
+        chef.weapon = null;
+        state.msg = `the ${wp.label} gave out!`;
+        state.msgT = 1.6;
+      }
+    }
   }
 }
 
@@ -217,7 +238,20 @@ function updateEnemies(state, dt) {
 
     // THE MOB DRINKS TOO (2D smash/buffed port): when the thirst hits, break
     // for the bar, chug, come back LIT — unless the chef spills it first.
-    if (!e.buffed && e.job !== 'drink' && !e.atk && state.t >= e.thirstAt) e.job = 'drink';
+    // a body barrelling past an upright table tips it over — procedural mayhem,
+    // and every flipped table is a seat nobody fills for the rest of the day
+    for (const tb of TABLES) {
+      if (state.flipped[tb.id]) continue;
+      if (Math.hypot(tb.x - e.x, tb.y - e.y) < TABLE_R + e.r + 3) {
+        state.flipped[tb.id] = true;
+        emitHit(state, COMBAT.W.jab, tb.x, tb.y, 0, 0);
+        if (state.sounds) state.sounds.push('smash');
+        if (!state.msg) { state.msg = 'they flipped a table!'; state.msgT = 1.4; }
+      }
+    }
+
+    if (e.job === 'chase' && !e.atk && state.t >= e.thirstAt && !e.buffed) e.job = 'drink';
+    if (e.job === 'chase' && !e.atk && state.t >= e.raidAt) { e.job = 'raid'; e.tgt = null; }
     if (e.job === 'drink') {
       const bx = BAR_SPOT.x - e.x, by = BAR_SPOT.y - e.y;
       const bd = Math.hypot(bx, by);
@@ -234,6 +268,45 @@ function updateEnemies(state, dt) {
           state.msg = 'he hit the bottle — he\'s LIT!';
           state.msgT = 1.8;
           if (state.sounds) state.sounds.push('cheer');
+        }
+      }
+      e.atkCd = Math.max(0, e.atkCd - dt);
+      resolveCollision(e, state.obstacles, e.r);
+      continue;
+    }
+
+    // THE RAID (2D port): wreckers walk to a station and chip it dead. Every
+    // chip shakes the room; the third one WRECKS it — no cooking there until
+    // the back office sells you the repair.
+    if (e.job === 'raid') {
+      const s = e.tgt ? STATIONS.find((x) => x.id === e.tgt) : null;
+      if (!s || state.broken[s.id]) {
+        const nt = raidTarget(state, e);
+        if (nt) e.tgt = nt.id;
+        else { e.job = 'chase'; e.raidAt = Infinity; }    // nothing left to wreck
+      } else {
+        const sx = s.x - e.x, sy = s.y + 16 - e.y;
+        const sd = Math.hypot(sx, sy);
+        if (sd > 8) {
+          if (Math.hypot(e.kx, e.ky) < 20) { e.x += (sx / sd) * e.speed * dt; e.y += (sy / sd) * e.speed * dt; }
+          e.raidT = 0;
+        } else {
+          e.raidT += dt;
+          if (e.raidT >= 0.6) {                           // one chip every 0.6s (2D cadence)
+            e.raidT = 0;
+            const hp = (state.stationHp[s.id] ?? STATION_HP) - 1;
+            state.stationHp[s.id] = hp;
+            emitHit(state, COMBAT.W.scuff, s.x, s.y, 0, 0);
+            if (hp <= 0) {
+              state.broken[s.id] = true;
+              state.msg = `they WRECKED the ${s.id}!`;
+              state.msgT = 2;
+              if (state.sounds) state.sounds.push('smash');
+              emitHit(state, COMBAT.W.hurt, s.x, s.y, 0, 0);
+              e.job = 'chase'; e.tgt = null;
+              e.raidAt = state.t + range(state.rng, 3, 7);
+            }
+          }
         }
       }
       e.atkCd = Math.max(0, e.atkCd - dt);
@@ -290,12 +363,24 @@ function updateEnemies(state, dt) {
   if (chef.hurtT > 0) chef.hurtT -= dt;
 }
 
+// the nearest intact, wreckable station (the pass and the bar are off the list)
+function raidTarget(state, e) {
+  let best = null, bd = 1e9;
+  for (const s of STATIONS) {
+    if (s.kind === 'pass' || s.id === 'bar' || state.broken[s.id]) continue;
+    const d = Math.hypot(s.x - e.x, s.y - e.y);
+    if (d < bd) { bd = d; best = s; }
+  }
+  return best;
+}
+
 function endBrawl(state, won) {
   state.brawlResult = won ? 'win' : 'lose';
   state.phase = 'service';
   state.badOrders = 0;               // the reckoning is over either way
   state.enemies = [];
   state.chef.swing = null;
+  state.chef.weapon = null;          // the pan goes back on the hook
   state.msg = won ? 'you cleared the brawl!' : 'KO! …you live to cook again';
   state.msgT = 2.4;
 }
@@ -318,6 +403,21 @@ function tryDrink(state) {
 
 export function updateCombat(state, dt, input) {
   if (state.msgT > 0) { state.msgT -= dt; if (state.msgT <= 0) state.msg = ''; }
+
+  // real appliances are real weapons: empty hands near the right station arms you
+  if (!state.chef.weapon) {
+    for (const id in WEAPONS) {
+      const w = WEAPONS[id];
+      const st = STATIONS.find((s) => s.id === w.station);
+      if (st && !state.broken[st.id] && Math.hypot(state.chef.x - st.x, state.chef.y - st.y) < 26) {
+        state.chef.weapon = { id, hits: w.hits };
+        state.msg = `grabbed the ${w.label}!`;
+        state.msgT = 1.6;
+        if (state.sounds) state.sounds.push('grab');
+        break;
+      }
+    }
+  }
 
   const drank = input.primaryDown && !state.chef.swing && tryDrink(state);
   updatePunch(state, dt, drank ? { ...input, primaryDown: false } : input);

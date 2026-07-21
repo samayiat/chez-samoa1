@@ -14,7 +14,7 @@ import { initTouch } from '../engine/touch.js';
 import { PIXEL_CAP, RIM_LIGHT } from '../engine/quality.js';
 import { createState, stepSim } from '../sim/state.js';
 import { forwardVec } from '../sim/movement.js';
-import { STATIONS, DISHES, COMBAT, RENT_DUE } from '../sim/data.js';
+import { STATIONS, DISHES, COMBAT, RENT_DUE, REPAIR_COST, WEAPONS } from '../sim/data.js';
 import { rpos } from './kitchen-space.js';
 import { buildKitchen } from './kitchen-room.js';
 import { createCustomers, DISH_COLOR } from './kitchen-customers.js';
@@ -59,6 +59,7 @@ let state, walkPhase = 0, facing = Math.PI, dayT = 80, ended = 0, workBurst = 0,
 // the PARTNER — whichever chef you didn't pick. They open the day on the floor
 // with you, then walk off into the back office to run the books.
 let partner = null, pu = null, partnerWalk = null, partnerPhase = 0;
+let weaponRig = null;   // the pan + spatula meshes riding the chef's fist
 const stationDef = Object.fromEntries(STATIONS.map((s) => [s.id, s]));
 
 function boot() {
@@ -82,7 +83,7 @@ function boot() {
   camera = new THREE.PerspectiveCamera(46, vw() / vh(), 0.1, 100);
   camera.position.set(0.5, 13.6, 15.4); camera.lookAt(0, 0.4, -0.4);   // pulled back for the 1.5x floor
 
-  state = createState((Date_now_safe() & 0x7fffffff) || 12345, run.day, modsFor(run));
+  state = createState((Date_now_safe() & 0x7fffffff) || 12345, run.day, modsFor(run), run.broken);
   kitchen = buildKitchen(scene);
   customers = createCustomers(scene, kitchen.tables);
   cats = createCats(scene);
@@ -98,6 +99,21 @@ function boot() {
   // what the chef carries — the real dish/ingredient model, swapped when it changes
   carry = new THREE.Group();
   carry.position.set(0, 1.02, 0.42); carry.visible = false; chef.add(carry);
+
+  // brawl weapons — a frying pan and a spatula that live in the right fist
+  {
+    const fist = cu.armR.userData.elbow;
+    const pan = new THREE.Group(); pan.position.set(0, -0.52, 0.03);
+    pan.add(put(box(0.045, 0.26, 0.045, mat(0x1c1c20, { rough: 0.8 })), 0, -0.1, 0));
+    const disc = new THREE.Mesh(new THREE.CylinderGeometry(0.17, 0.19, 0.05, 16), mat(0x3a3f45, { metal: 0.7, rough: 0.4 }));
+    disc.rotation.x = Math.PI / 2; disc.position.y = -0.34; disc.castShadow = true; pan.add(disc);
+    const spat = new THREE.Group(); spat.position.set(0, -0.52, 0.03);
+    spat.add(put(box(0.035, 0.3, 0.035, mat(0x6a4526, { rough: 0.8 })), 0, -0.12, 0));
+    spat.add(put(box(0.16, 0.2, 0.02, mat(0xb9bec4, { metal: 0.6, rough: 0.35 })), 0, -0.36, 0));
+    pan.visible = spat.visible = false;
+    fist.add(pan, spat);
+    weaponRig = { pan, spatula: spat };
+  }
 
   composer = new EffectComposer(renderer);
   composer.addPass(new RenderPass(scene, camera));
@@ -252,6 +268,31 @@ function syncScene(dt, t) {
     } else if (s.kind === 'pass') {
       ref.setSlots(state.stations[s.id]?.slots || []);
     }
+    ref.setBroken && ref.setBroken(!!state.broken[s.id]);
+  }
+
+  // flipped tables tip over the rim with a little hop; chairs go with them
+  for (const id in kitchen.tables) {
+    const tb = kitchen.tables[id];
+    if (tb.body === undefined) continue;
+    const want = state.flipped[id] ? 1 : 0;
+    if (tb.flipK !== want) {
+      tb.flipK = lerp(tb.flipK, want, clamp01(dt * 7));
+      if (Math.abs(tb.flipK - want) < 0.01) tb.flipK = want;
+      const k = tb.flipK;
+      tb.body.rotation.z = k * 1.45;
+      tb.body.position.x = k * 0.62;
+      tb.body.position.y = Math.sin(Math.min(1, k) * Math.PI) * 0.3;
+      tb.chairA.rotation.z = k * 0.9; tb.chairA.position.x = k * 0.4;
+      tb.chairB.rotation.x = -k * 1.1; tb.chairB.position.z = -0.92 - k * 0.35;
+    }
+  }
+
+  // the fist only shows a weapon during the brawl
+  if (weaponRig) {
+    const wid = state.phase === 'brawl' && state.chef.weapon ? state.chef.weapon.id : null;
+    weaponRig.pan.visible = wid === 'pan';
+    weaponRig.spatula.visible = wid === 'spatula';
   }
 
   // THE BRAWL — face where the sim faces, guard up, and swing the combo arms
@@ -298,7 +339,8 @@ function updateHud() {
   for (let i = 0; i < max; i++) { const d = document.createElement('span'); d.className = 'pip' + (i < on ? ' on' : ''); H.danger.appendChild(d); }
   if (brawl) {
     const dr = state.chef.drinks || 0;
-    H.prompt.textContent = 'FIGHT! E / ACTION to punch' +
+    const wpn = state.chef.weapon ? ` · armed: ${WEAPONS[state.chef.weapon.id].label}` : '';
+    H.prompt.textContent = 'FIGHT! E / ACTION to punch' + wpn +
       (dr >= 5 ? ` · WASTED (${dr} shots)` : dr > 0 ? ` · ${dr} shot${dr > 1 ? 's' : ''} of courage` : ' · drink at the bar for courage');
     H.prompt.style.opacity = '1';
   }
@@ -327,7 +369,9 @@ function endDay(kind) {
   const win = kind === 'done';
   const total = run.money + state.money;
   const rent = RENT_DUE(run.day);
-  // bank the day; the choice below decides whether the rent leaves the bank
+  // bank the day (wrecked equipment carries over; flipped tables right themselves
+  // overnight); the choice below decides whether the rent leaves the bank
+  run.broken = { ...state.broken };
   saveRun({ ...run, money: total, served: run.served + state.served });
   sfx(win ? 'dayend' : 'burnt');
   // THE DECISION: pay up and sleep safe, or refuse and settle it in the alley.
@@ -405,7 +449,7 @@ function updatePartnerWalk(dt) {
 // next day. Every purchase saves immediately, so a mid-shop refresh keeps it.
 function openOffice(bank) {
   const o = { ...run, day: run.day + 1, money: bank, served: run.served + state.served,
-    upgrades: { ...(run.upgrades || {}) }, stats: { ...(run.stats || {}) } };
+    upgrades: { ...(run.upgrades || {}) }, stats: { ...(run.stats || {}) }, broken: { ...(run.broken || {}) } };
   saveRun(o);
   H.end.classList.remove('show');
   const off = document.getElementById('office');
@@ -427,6 +471,12 @@ function openOffice(bank) {
   const redraw = () => {
     bankEl.textContent = `$${o.money} in the bank`;
     itemsEl.innerHTML = '';
+    // repairs come first (2D office order) — wrecked stations stay dead until paid
+    for (const id of Object.keys(o.broken).filter((k) => o.broken[k])) {
+      const cost = REPAIR_COST(id);
+      row(`Repair the ${id}`, '', 'wrecked in the brawl — cooks nothing until fixed', `$${cost}`, '', o.money >= cost,
+        () => { delete o.broken[id]; o.money -= cost; saveRun(o); sfx('plate'); redraw(); });
+    }
     for (const u of UPGRADES) {
       const owned = !!o.upgrades[u.id];
       row(u.name, '', u.desc, owned ? 'OWNED' : `$${u.cost}`, owned ? 'owned' : '', !owned && o.money >= u.cost,
