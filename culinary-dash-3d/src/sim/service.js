@@ -10,6 +10,7 @@
 import {
   DISHES, MENU, STATIONS, TABLES,
   HEARTS_MAX, PATIENCE_DRAIN, SPEED_TIP_MAX, SPEED_TIP_WINDOW, ORDER_INTERVAL,
+  DAY_SPAWN_K, DAY_DRAIN_K,
   COMBAT,
 } from './data.js';
 import { range, pick } from './rng.js';
@@ -203,7 +204,7 @@ export function updateService(state, dt, input) {
   state.nextSpawn -= dt;
   if (state.nextSpawn <= 0) {
     spawnCustomer(state);
-    state.nextSpawn = range(state.rng, ORDER_INTERVAL[0], ORDER_INTERVAL[1]);
+    state.nextSpawn = range(state.rng, ORDER_INTERVAL[0], ORDER_INTERVAL[1]) * DAY_SPAWN_K(state.day);
   }
 
   // patience + departures
@@ -213,7 +214,7 @@ export function updateService(state, dt, input) {
       if (c.readT <= 0) { c.state = 'waiting'; cue(state, 'order'); }
     } else if (c.state === 'waiting') {
       c.orderAge += dt;
-      c.hearts -= PATIENCE_DRAIN * dt;
+      c.hearts -= PATIENCE_DRAIN * DAY_DRAIN_K(state.day) * dt;
       if (c.hearts <= 0) {
         c.hearts = 0; c.state = 'leaving'; c.leaveT = 0.6;
         state.badOrders += 1;

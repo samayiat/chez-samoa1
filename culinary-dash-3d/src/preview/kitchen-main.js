@@ -18,11 +18,18 @@ import { rpos } from './kitchen-space.js';
 import { buildKitchen } from './kitchen-room.js';
 import { createCustomers, DISH_COLOR } from './kitchen-customers.js';
 import { createCats } from './kitchen-cats.js';
+import { loadRun, saveRun } from '../engine/run.js';
 import { buildChef } from './chef.js';
 import { carriedModel } from './food.js';
 import { lerp, smooth, clamp01, mat, box, put } from './util.js';
 
 const app = document.getElementById('app');
+// the persistent RUN — day number + banked money, carried across the fight hop
+const run = loadRun();
+if (run.day > 1) {
+  const k = document.querySelector('#start .kicker');
+  if (k) k.textContent = `DAY ${run.day} · $${run.money} BANKED`;
+}
 const startEl = document.getElementById('start');
 const H = {
   money: document.getElementById('money'), served: document.getElementById('served'),
@@ -56,7 +63,7 @@ function boot() {
   camera = new THREE.PerspectiveCamera(46, vw() / vh(), 0.1, 100);
   camera.position.set(0.5, 13.6, 15.4); camera.lookAt(0, 0.4, -0.4);   // pulled back for the 1.5x floor
 
-  state = createState((Date_now_safe() & 0x7fffffff) || 12345);
+  state = createState((Date_now_safe() & 0x7fffffff) || 12345, run.day);
   kitchen = buildKitchen(scene);
   customers = createCustomers(scene, kitchen.tables);
   cats = createCats(scene);
@@ -202,9 +209,9 @@ function syncScene(dt, t) {
 // ---------- HUD ----------
 function updateHud() {
   if (!state) return;
-  H.money.textContent = '$' + state.money;
+  H.money.textContent = '$' + (run.money + state.money);
   H.served.textContent = '★ ' + state.served;
-  H.day.textContent = Math.max(0, Math.ceil(dayT)) + 's';
+  H.day.textContent = run.day + ' · ' + Math.max(0, Math.ceil(dayT)) + 's';
   // walkout danger pips (out of the trigger)
   const bad = state.badOrders, max = COMBAT.BRAWL_TRIGGER;
   H.danger.innerHTML = '';
@@ -232,13 +239,15 @@ function updateHud() {
 function endDay(kind) {
   if (ended) return; ended = kind === 'mob' ? -1 : 1;
   const win = kind === 'done';
-  H.end.querySelector('h2').textContent = win ? 'Day complete' : 'The mob is at the door';
+  // bank the day into the run — every close is rent night, so the fight is next
+  saveRun({ ...run, money: run.money + state.money, served: run.served + state.served });
+  H.end.querySelector('h2').textContent = win ? 'Closing time' : 'The mob is at the door';
   H.end.querySelector('p').innerHTML = win
-    ? `You served <b>${state.served}</b> and banked <b>$${state.money}</b>.`
-    : `Too many walkouts. Vince came to collect — <b>step into the fight?</b>`;
+    ? `Day ${run.day}: served <b>${state.served}</b>, banked <b>$${state.money}</b> ($${run.money + state.money} total).<br>Vince is at the door about the rent.`
+    : `Too many walkouts — and Vince came to collect anyway. <b>Step into the fight.</b>`;
   const link = H.end.querySelector('a');
-  link.style.display = win ? 'none' : 'inline-block';
-  link.href = '../vince/';
+  link.style.display = 'inline-block';
+  link.href = '../vince/?rent=1';
   H.end.classList.add('show');
 }
 

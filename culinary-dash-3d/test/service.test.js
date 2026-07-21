@@ -127,6 +127,16 @@ describe('service loop', () => {
     expect(c.hearts).toBeLessThan(3);       // now the clock runs
   });
 
+  it('later days escalate — patience drains harder', () => {
+    const d1 = createState(1, 1), d8 = createState(1, 8);
+    for (const st of [d1, d8]) {
+      st.nextSpawn = 999;
+      st.customers = [{ id: 'e', table: 't0', x: TABLES[0].x, y: TABLES[0].y, dish: 'salad', hearts: 3, orderAge: 0, state: 'waiting', leaveT: 0 }];
+    }
+    idle(d1, 5); idle(d8, 5);
+    expect(d8.customers[0].hearts).toBeLessThan(d1.customers[0].hearts);
+  });
+
   it('counts a walkout as a bad order when patience runs out', () => {
     seat(s, 'salad');
     const before = s.badOrders;

@@ -68,6 +68,10 @@ export const PATIENCE_DRAIN = 0.10;      // hearts/sec
 export const SPEED_TIP_MAX = 0.5;        // +50% tip for an instant serve
 export const SPEED_TIP_WINDOW = 12;      // decays over 12s
 export const ORDER_INTERVAL = [3.0, 6.0]; // seconds between new arrivals (slice)
+// Day escalation: later days spawn faster and drain patience harder, clamped so
+// the game stays winnable. Day 1 is exactly the classic tuning (k = 1).
+export const DAY_SPAWN_K = (day) => Math.max(0.55, Math.pow(0.93, ((day || 1) - 1)));
+export const DAY_DRAIN_K = (day) => Math.min(1.8, 1 + 0.07 * ((day || 1) - 1));
 
 // --- Combat / impact spine (ported: src lines 835-2321) --------------------
 export const COMBAT = {

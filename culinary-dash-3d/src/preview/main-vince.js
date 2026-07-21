@@ -19,6 +19,7 @@ import { initTouch } from '../engine/touch.js';
 import { PIXEL_CAP, RIM_LIGHT } from '../engine/quality.js';
 import { buildArena } from './arena.js';
 import { createBoss } from './boss.js';
+import { loadRun, saveRun, clearRun } from '../engine/run.js';
 import { createChef } from './chef.js';
 import { createFx } from './fx.js';
 import { clamp01, lerp, smooth } from './util.js';
@@ -88,6 +89,9 @@ let ended = 0, lastT = 0, resultPosted = false;
 // the host (chef HP, etc.) and posts the result back, per docs/SEAM_CONTRACT.md.
 // Standalone (the /vince/ preview) is unchanged.
 const EMBED = new URLSearchParams(location.search).has('embed') || window.parent !== window;
+// RENT NIGHT — launched from the kitchen's day end; the run is on the line
+const RENT = new URLSearchParams(location.search).has('rent');
+const run = loadRun();
 let fightPayload = { chefHp: 6 };
 function postToHost(msg) { try { window.parent.postMessage(msg, '*'); } catch (e) { /* no host */ } }
 const camPos = new THREE.Vector3(0, 6, 10);
@@ -144,12 +148,28 @@ function tick(dt) {
   cameraRelative(input);                    // stick maps to the screen, not world axes
   chef.update(dt, { input, bossPos: boss.pos, hud, onPunch, spawnGhost, sound });
   boss.update(dt, { chefPos: chef.pos, chefInvuln: chef.invuln > 0, hud, fx, resolveStrike, onGroundStrike, sound });
-  const sub = EMBED ? 'returning to the restaurant…' : 'tap to rematch';
-  if (boss.dead && boss.winT > 1.3 && !ended) { ended = 1; showBanner('VINCE IS DOWN', 'Your lease is safe — ' + sub); reportResult('win'); }
-  if (chef.hp <= 0 && !ended) { ended = -1; showBanner('EVICTED', 'Vince got the better of you — ' + sub); reportResult('lose'); }
+  const sub = RENT ? '' : EMBED ? 'returning to the restaurant…' : 'tap to rematch';
+  if (boss.dead && boss.winT > 1.3 && !ended) {
+    ended = 1;
+    showBanner('VINCE IS DOWN', RENT ? `Rent paid — day ${run.day + 1} starts tomorrow…` : 'Your lease is safe — ' + sub);
+    reportResult('win'); settleRent('win');
+  }
+  if (chef.hp <= 0 && !ended) {
+    ended = -1;
+    showBanner('EVICTED', RENT ? 'He took the restaurant. Starting over…' : 'Vince got the better of you — ' + sub);
+    reportResult('lose'); settleRent('lose');
+  }
 }
 // hand the outcome back to the 2D game (it maps win/lose -> Beli + wrecked
 // stations via its existing bossNightWin/Lose path). Held ~1.6s so the KO reads.
+// rent night verdict: a win banks the day and unlocks the next (harder) one; a
+// loss ends the run. Either way we ride back to the kitchen after the KO beat.
+function settleRent(outcome) {
+  if (!RENT) return;
+  if (outcome === 'win') saveRun({ ...run, day: run.day + 1 });
+  else clearRun();
+  setTimeout(() => { location.href = '../kitchen/'; }, 3200);
+}
 function reportResult(outcome) {
   if (!EMBED || resultPosted) return;
   resultPosted = true;
@@ -271,6 +291,11 @@ function boot() {
   arena = buildArena(scene, renderer);
   fx = createFx(scene);
   boss = createBoss(scene);
+  if (RENT && run.day > 1) {
+    // Vince gets meaner as the days stack up
+    const k = 1 + 0.15 * (run.day - 1);
+    boss.hp = Math.round(boss.hp * k); boss.maxHp = boss.hp;
+  }
   chef = createChef(scene);
 
   composer = new EffectComposer(renderer);

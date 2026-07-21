@@ -9,9 +9,10 @@ import { initService, updateService } from './service.js';
 import { updateCombat } from './combat.js';
 import { buildObstacles, moveChef, findNearStation } from './movement.js';
 
-export function createState(seed = 12345) {
+export function createState(seed = 12345, day = 1) {
   const state = {
     t: 0,
+    day,                      // 1-based run day; drives service escalation
     phase: 'service', // 'service' | 'brawl'
     rng: makeRng(seed),
     chef: {
