@@ -54,6 +54,28 @@
       box-shadow: 0 8px 24px rgba(79,154,62,.32); }
     #hud #rent { color: #ffab7a; } #hud #rent.ok { color: #8be27a; }
 
+    /* the back office — between-days shop, shown after the rent is paid */
+    #office { position: fixed; inset: 0; z-index: 21; display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 10px; text-align: center; padding: 18px; opacity: 0; pointer-events: none; transition: opacity .4s ease;
+      background: radial-gradient(120% 90% at 50% 45%, rgba(34,26,18,.72), rgba(11,7,5,.94)); }
+    #office.show { opacity: 1; pointer-events: auto; }
+    #office h2 { margin: 0; font-size: clamp(24px, 5vw, 44px); font-weight: 900;
+      background: linear-gradient(180deg, #ffe0a6, #e0a53a); -webkit-background-clip: text; background-clip: text; color: transparent; }
+    #office #obank { margin: 0; color: #ffd76a; font-weight: 800; font-size: 15px; }
+    #oitems { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 7px; width: min(680px, 94vw); }
+    .orow { display: flex; align-items: center; justify-content: space-between; gap: 10px; text-align: left;
+      background: rgba(42,30,20,.8); border: 1px solid #3a2c1e; border-radius: 10px; padding: 8px 8px 8px 12px; }
+    .orow .nm { color: #ffe9c7; font-weight: 800; font-size: 13px; }
+    .orow .nm em { font-style: normal; color: #d8b46a; font-size: 11px; letter-spacing: .06em; margin-left: 5px; }
+    .orow .ds { color: #b79974; font-size: 11px; }
+    .orow button { cursor: pointer; border: 0; border-radius: 8px; padding: 8px 12px; font-weight: 800; font-size: 12px;
+      color: #241811; background: linear-gradient(180deg, #ffe0a6, #f0a83a); white-space: nowrap; }
+    .orow button:disabled { cursor: default; opacity: .45; background: #4a3a2a; color: #b79974; }
+    .orow button.owned { background: #2f4a2a; color: #8be27a; opacity: 1; }
+    #office #openBtn { margin-top: 6px; cursor: pointer; border: 0; color: #12240f; font-weight: 800; letter-spacing: .04em;
+      font-size: 15px; border-radius: 10px; padding: 12px 26px; background: linear-gradient(180deg, #a6e28a, #4f9a3e);
+      box-shadow: 0 8px 24px rgba(79,154,62,.32); }
+
     #start { position: fixed; inset: 0; z-index: 10; display: flex; flex-direction: column; align-items: center; justify-content: center;
       gap: 14px; text-align: center; padding: 24px; transition: opacity .4s ease;
       background: radial-gradient(120% 90% at 50% 20%, #3a2a1c 0%, #241811 60%, #160e09 100%); color: #ffe9c7; }
@@ -92,6 +114,13 @@
   <div id="dayend"><h2>—</h2><p>—</p>
     <button id="payBtn" type="button">Pay the rent</button>
     <a href="../vince/">Face him →</a>
+  </div>
+
+  <div id="office">
+    <h2>The back office</h2>
+    <p id="obank">$0 in the bank</p>
+    <div id="oitems"></div>
+    <button id="openBtn" type="button">Open →</button>
   </div>
 
   <div id="start">

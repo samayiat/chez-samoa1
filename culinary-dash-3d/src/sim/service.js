@@ -182,7 +182,7 @@ function serve(state, c) {
   // speed tip: decays over SPEED_TIP_WINDOW from the moment the order was taken
   const speed = Math.max(0, 1 - c.orderAge / SPEED_TIP_WINDOW);
   const tip = SPEED_TIP_MAX * speed;
-  const pay = Math.round(base * (1 + tip));
+  const pay = Math.round(base * (1 + tip) * ((state.mods && state.mods.tip) || 1));
   state.money += pay;
   state.served += 1;
   c.state = 'served'; c.leaveT = 0.6;
@@ -204,7 +204,8 @@ export function updateService(state, dt, input) {
   state.nextSpawn -= dt;
   if (state.nextSpawn <= 0) {
     spawnCustomer(state);
-    state.nextSpawn = range(state.rng, ORDER_INTERVAL[0], ORDER_INTERVAL[1]) * DAY_SPAWN_K(state.day);
+    state.nextSpawn = range(state.rng, ORDER_INTERVAL[0], ORDER_INTERVAL[1]) * DAY_SPAWN_K(state.day)
+      * ((state.mods && state.mods.spawn) || 1);   // Neon Sign: a busier house
   }
 
   // patience + departures
@@ -214,7 +215,7 @@ export function updateService(state, dt, input) {
       if (c.readT <= 0) { c.state = 'waiting'; cue(state, 'order'); }
     } else if (c.state === 'waiting') {
       c.orderAge += dt;
-      c.hearts -= PATIENCE_DRAIN * DAY_DRAIN_K(state.day) * dt;
+      c.hearts -= PATIENCE_DRAIN * DAY_DRAIN_K(state.day) * ((state.mods && state.mods.patience) || 1) * dt;
       if (c.hearts <= 0) {
         c.hearts = 0; c.state = 'leaving'; c.leaveT = 0.6;
         state.badOrders += 1;

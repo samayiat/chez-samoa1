@@ -9,10 +9,16 @@ import { initService, updateService } from './service.js';
 import { updateCombat } from './combat.js';
 import { buildObstacles, moveChef, findNearStation } from './movement.js';
 
-export function createState(seed = 12345, day = 1) {
+// `mods` = the back office's purchases collapsed to multipliers/bonuses (see
+// engine/shop.js modsFor). Everything defaults neutral, so states created
+// without them behave exactly as before the shop existed.
+const NEUTRAL = { tip: 1, patience: 1, spawn: 1, hp: 0, pow: 0, speed: 1 };
+
+export function createState(seed = 12345, day = 1, mods = null) {
   const state = {
     t: 0,
     day,                      // 1-based run day; drives service escalation
+    mods: { ...NEUTRAL, ...(mods || {}) },
     phase: 'service', // 'service' | 'brawl'
     rng: makeRng(seed),
     chef: {

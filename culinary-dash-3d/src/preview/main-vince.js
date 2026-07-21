@@ -20,6 +20,7 @@ import { PIXEL_CAP, RIM_LIGHT } from '../engine/quality.js';
 import { buildArena } from './arena.js';
 import { createBoss } from './boss.js';
 import { loadRun, saveRun, clearRun, loadChef } from '../engine/run.js';
+import { modsFor } from '../engine/shop.js';
 import { createChef } from './chef.js';
 import { createFx } from './fx.js';
 import { clamp01, lerp, smooth } from './util.js';
@@ -92,7 +93,8 @@ const EMBED = new URLSearchParams(location.search).has('embed') || window.parent
 // RENT NIGHT — launched from the kitchen's day end; the run is on the line
 const RENT = new URLSearchParams(location.search).has('rent');
 const run = loadRun();
-let fightPayload = { chefHp: 6 };
+const mods = modsFor(run);                       // the back office's fight stats
+let fightPayload = { chefHp: 6 + mods.hp };      // Iron Gut carries into boss night
 function postToHost(msg) { try { window.parent.postMessage(msg, '*'); } catch (e) { /* no host */ } }
 const camPos = new THREE.Vector3(0, 6, 10);
 const camLook = new THREE.Vector3(0, 1.2, 0);
@@ -105,7 +107,7 @@ function onPunch(move, fistWorld) {
   const reach = 1.6 + move.reach * 0.7;   // boss radius folded in
   if (d < reach && !boss.dead) {
     const nx = dx / (d || 1), nz = dz / (d || 1);
-    boss.hit(move.w);
+    boss.hit(move.w * (1 + 0.22 * mods.pow));    // Heavy Hands (the back office)
     impact(move.w, nx, nz);
     fx.sparkBurst(fistWorld, move.w, nx, nz);
     fx.flash(fistWorld, 0.5 + move.w * 0.3, 0xfff2c8);

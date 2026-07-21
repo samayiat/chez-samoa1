@@ -34,11 +34,12 @@ export function resolveCollision(ent, obstacles, r = CHEF.r) {
 // the current facing (used mid-punch so a swing commits to its direction).
 export function moveChef(state, dt, mx, my, speed = CHEF.speed, faceLock = false) {
   const chef = state.chef;
+  const quick = (state.mods && state.mods.speed) || 1;   // Quick Feet (the shop)
   const mag = Math.hypot(mx, my);
   if (mag > 1) { mx /= mag; my /= mag; }
   if (mag > 0.001) {
-    chef.vx = mx * speed;
-    chef.vy = my * speed;
+    chef.vx = mx * speed * quick;
+    chef.vy = my * speed * quick;
     if (!faceLock) chef.facing = Math.atan2(mx, -my);
   } else {
     chef.vx = 0; chef.vy = 0;

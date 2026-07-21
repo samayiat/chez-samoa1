@@ -21,6 +21,7 @@ import { createCustomers, DISH_COLOR } from './kitchen-customers.js';
 import { createCats } from './kitchen-cats.js';
 import { createBrawlers } from './kitchen-brawlers.js';
 import { loadRun, saveRun, loadChef, saveChef } from '../engine/run.js';
+import { UPGRADES, STATS, statCost, modsFor } from '../engine/shop.js';
 import { initSfx, sfx } from '../engine/sfx.js';
 import { buildChef } from './chef.js';
 import { carriedModel } from './food.js';
@@ -78,7 +79,7 @@ function boot() {
   camera = new THREE.PerspectiveCamera(46, vw() / vh(), 0.1, 100);
   camera.position.set(0.5, 13.6, 15.4); camera.lookAt(0, 0.4, -0.4);   // pulled back for the 1.5x floor
 
-  state = createState((Date_now_safe() & 0x7fffffff) || 12345, run.day);
+  state = createState((Date_now_safe() & 0x7fffffff) || 12345, run.day, modsFor(run));
   kitchen = buildKitchen(scene);
   customers = createCustomers(scene, kitchen.tables);
   cats = createCats(scene);
@@ -96,7 +97,7 @@ function boot() {
 
   lastT = performance.now() / 1000;
   startLoop({ tick, render });
-  window.__kitchen = { state, stepSim, scene, chef, camera, THREE, setDay: (v) => { dayT = v; } };
+  window.__kitchen = { state, stepSim, scene, chef, camera, THREE, setDay: (v) => { dayT = v; }, openOffice };
 }
 // createState wants a seed; avoid Date.now() being unavailable in some sandboxes
 function Date_now_safe() { try { return Date.now(); } catch (e) { return 12345; } }
@@ -281,7 +282,7 @@ function updateHud() {
   H.rent.classList.toggle('ok', run.money + state.money >= rentDue);   // green once covered
   // pips: walkout danger during service, chef hearts during the brawl
   const brawl = state.phase === 'brawl';
-  const max = brawl ? COMBAT.CHEF_HP : COMBAT.BRAWL_TRIGGER;
+  const max = brawl ? (state.chef.maxHp || COMBAT.CHEF_HP) : COMBAT.BRAWL_TRIGGER;
   const on = brawl ? Math.max(0, state.chef.hp) : state.badOrders;
   H.danger.innerHTML = '';
   for (let i = 0; i < max; i++) { const d = document.createElement('span'); d.className = 'pip' + (i < on ? ' on' : ''); H.danger.appendChild(d); }
@@ -330,15 +331,57 @@ function endDay(kind) {
   H.pay.style.display = canPay ? 'inline-block' : 'none';
   H.pay.textContent = `Pay the $${rent}`;
   H.pay.onclick = () => {
-    saveRun({ day: run.day + 1, money: total - rent, served: run.served + state.served });
     sfx('serve');
-    location.reload();                       // sleep; next day opens in the kitchen
+    openOffice(total - rent);                // rent's paid — the office is open
   };
   const link = H.end.querySelector('a');
   link.style.display = 'inline-block';
   link.textContent = canPay ? `Refuse — fight him →` : `Face him →`;
   link.href = '../vince/?rent=1';
   H.end.classList.add('show');
+}
+
+// THE BACK OFFICE — the 2D game's between-days shop. The rent is paid, the bank
+// is what's left; spend it on service upgrades and fight stats, then open the
+// next day. Every purchase saves immediately, so a mid-shop refresh keeps it.
+function openOffice(bank) {
+  const o = { ...run, day: run.day + 1, money: bank, served: run.served + state.served,
+    upgrades: { ...(run.upgrades || {}) }, stats: { ...(run.stats || {}) } };
+  saveRun(o);
+  H.end.classList.remove('show');
+  const off = document.getElementById('office');
+  const bankEl = document.getElementById('obank');
+  const itemsEl = document.getElementById('oitems');
+  const openBtn = document.getElementById('openBtn');
+  openBtn.textContent = `Open for day ${o.day} →`;
+  openBtn.onclick = () => { saveRun(o); sfx('dayend'); location.reload(); };
+
+  const row = (name, tag, desc, btnLabel, cls, enabled, onBuy) => {
+    const r = document.createElement('div'); r.className = 'orow';
+    const left = document.createElement('div');
+    left.innerHTML = `<div class="nm">${name}${tag ? ` <em>${tag}</em>` : ''}</div><div class="ds">${desc}</div>`;
+    const b = document.createElement('button'); b.type = 'button';
+    b.textContent = btnLabel; if (cls) b.className = cls; b.disabled = !enabled;
+    if (onBuy) b.onclick = onBuy;
+    r.append(left, b); itemsEl.appendChild(r);
+  };
+  const redraw = () => {
+    bankEl.textContent = `$${o.money} in the bank`;
+    itemsEl.innerHTML = '';
+    for (const u of UPGRADES) {
+      const owned = !!o.upgrades[u.id];
+      row(u.name, '', u.desc, owned ? 'OWNED' : `$${u.cost}`, owned ? 'owned' : '', !owned && o.money >= u.cost,
+        owned ? null : () => { o.upgrades[u.id] = true; o.money -= u.cost; saveRun(o); sfx('coin'); redraw(); });
+    }
+    for (const s of STATS) {
+      const lvl = o.stats[s.id] | 0, maxed = lvl >= s.cap, cost = statCost(s.id, lvl);
+      row(s.name, '●'.repeat(lvl) + '○'.repeat(s.cap - lvl), s.desc, maxed ? 'MAXED' : `$${cost}`,
+        maxed ? 'owned' : '', !maxed && o.money >= cost,
+        maxed ? null : () => { o.stats[s.id] = lvl + 1; o.money -= cost; saveRun(o); sfx('coin'); redraw(); });
+    }
+  };
+  redraw();
+  off.classList.add('show');
 }
 
 // ---------- start / lifecycle (WebGL-safe) ----------

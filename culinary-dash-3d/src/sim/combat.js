@@ -44,8 +44,8 @@ export function startBrawl(state, count = 4) {
   state.customers = [];
   const chef = state.chef;
   chef.drinks = 0;
-  chef.hp = COMBAT.CHEF_HP;
-  chef.maxHp = COMBAT.CHEF_HP;
+  chef.hp = COMBAT.CHEF_HP + ((state.mods && state.mods.hp) || 0);   // Iron Gut
+  chef.maxHp = chef.hp;
   chef.swing = null;
   chef.comboIdx = 0;
   chef.comboT = 0;
@@ -96,7 +96,8 @@ function landPunch(state) {
     const lat = dx * L.x + dy * L.y;
     if (fwd < -COMBAT.PUNCH_BACK || fwd > COMBAT.PUNCH_REACH + e.r) continue;
     if (Math.abs(lat) > COMBAT.PUNCH_YBAND) continue;
-    e.hp -= chef.drinks >= BUZZED_AT ? 2 : 1;                       // courage hits harder
+    // courage hits harder; Heavy Hands (the shop) stacks on top
+    e.hp -= (chef.drinks >= BUZZED_AT ? 2 : 1) + ((state.mods && state.mods.pow) || 0);
     e.hurtT = 0.18;
     if (e.role === 'thief' && e.carry) {
       // caught him — the cash drops and a bounty lands in the till (2D port)
