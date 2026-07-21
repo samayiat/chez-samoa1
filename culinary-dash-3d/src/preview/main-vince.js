@@ -18,7 +18,7 @@ import { initInput, pollInput } from '../engine/input.js';
 import { initTouch } from '../engine/touch.js';
 import { PIXEL_CAP, RIM_LIGHT } from '../engine/quality.js';
 import { buildArena } from './arena.js';
-import { createBoss } from './boss.js';
+import { createBoss, BOSS_DEFS, ROSTER } from './boss.js';
 import { loadRun, saveRun, clearRun, loadChef } from '../engine/run.js';
 import { modsFor } from '../engine/shop.js';
 import { createChef } from './chef.js';
@@ -95,6 +95,24 @@ const RENT = new URLSearchParams(location.search).has('rent');
 const run = loadRun();
 const mods = modsFor(run);                       // the back office's fight stats
 let fightPayload = { chefHp: 6 + mods.hp };      // Iron Gut carries into boss night
+
+// WHO you meet tonight: the roster rotates with every boss already put down
+// (2D BOSSES[] order: Vince -> the Inspector -> Bruno -> back around, harder).
+// ?boss=inspector deep-links any of them for a straight rematch.
+const qBoss = new URLSearchParams(location.search).get('boss');
+const bossId = qBoss && BOSS_DEFS[qBoss] ? qBoss
+  : RENT ? ROSTER[(run.bossWins || 0) % ROSTER.length] : 'vince';
+const DEF = BOSS_DEFS[bossId];
+{
+  // re-skin the page for tonight's opponent
+  document.title = `${DEF.h1} — ${DEF.kicker} (3D boss fight)`;
+  const set = (sel, v) => { const el = document.querySelector(sel); if (el) el.textContent = v; };
+  set('#start .kicker', DEF.kicker); set('#start h1', DEF.h1);
+  const blurbEl = document.querySelector('#start p'); if (blurbEl) blurbEl.textContent = DEF.blurb;
+  set('#startBtn', DEF.cta);
+  const nameEl = document.getElementById('bossNameT');
+  if (nameEl) nameEl.innerHTML = `${DEF.name} <small>${DEF.sub}</small>`;
+}
 function postToHost(msg) { try { window.parent.postMessage(msg, '*'); } catch (e) { /* no host */ } }
 const camPos = new THREE.Vector3(0, 6, 10);
 const camLook = new THREE.Vector3(0, 1.2, 0);
@@ -107,6 +125,13 @@ function onPunch(move, fistWorld) {
   const reach = 1.6 + move.reach * 0.7;   // boss radius folded in
   if (d < reach && !boss.dead) {
     const nx = dx / (d || 1), nz = dz / (d || 1);
+    if (boss.countering) {
+      // Bruno's stance: the thrown punch is the mistake — it comes right back
+      resolveStrike(boss.pos, reach + 0.6, 1, { x: -nx, z: -nz });
+      fx.flash(fistWorld, 1.1, 0x4ad2ff);
+      audio.whiff();
+      return;
+    }
     boss.hit(move.w * (1 + 0.22 * mods.pow));    // Heavy Hands (the back office)
     impact(move.w, nx, nz);
     fx.sparkBurst(fistWorld, move.w, nx, nz);
@@ -153,12 +178,13 @@ function tick(dt) {
   const sub = RENT ? '' : EMBED ? 'returning to the restaurant…' : 'tap to rematch';
   if (boss.dead && boss.winT > 1.3 && !ended) {
     ended = 1;
-    showBanner('VINCE IS DOWN', RENT ? `Rent waived — day ${run.day + 1} starts tomorrow…` : 'Your lease is safe — ' + sub);
+    const bounty = DEF.reward ? ` +$${DEF.reward} bounty!` : '';
+    showBanner(DEF.ko, RENT ? `Rent waived${bounty} — day ${run.day + 1} starts tomorrow…` : 'Your lease is safe — ' + sub);
     reportResult('win'); settleRent('win');
   }
   if (chef.hp <= 0 && !ended) {
     ended = -1;
-    showBanner('EVICTED', RENT ? 'He took the restaurant. Starting over…' : 'Vince got the better of you — ' + sub);
+    showBanner(DEF.lose, RENT ? `${DEF.name} took the restaurant. Starting over…` : `${DEF.name} got the better of you — ` + sub);
     reportResult('lose'); settleRent('lose');
   }
 }
@@ -168,14 +194,16 @@ function tick(dt) {
 // loss ends the run. Either way we ride back to the kitchen after the KO beat.
 function settleRent(outcome) {
   if (!RENT) return;
-  if (outcome === 'win') saveRun({ ...run, day: run.day + 1 });
-  else clearRun();
+  if (outcome === 'win') {
+    // rent waived, the roster advances, and the later bosses pay a bounty
+    saveRun({ ...run, day: run.day + 1, bossWins: (run.bossWins || 0) + 1, money: run.money + (DEF.reward || 0) });
+  } else clearRun();
   setTimeout(() => { location.href = '../kitchen/'; }, 3200);
 }
 function reportResult(outcome) {
   if (!EMBED || resultPosted) return;
   resultPosted = true;
-  setTimeout(() => postToHost({ type: 'chez:fightResult', result: { outcome, boss: 'vince', chefHpLeft: Math.max(0, chef.hp) } }), 1600);
+  setTimeout(() => postToHost({ type: 'chez:fightResult', result: { outcome, boss: bossId, chefHpLeft: Math.max(0, chef.hp) } }), 1600);
 }
 function render(alpha, now) {
   const t = now / 1000;
@@ -292,9 +320,9 @@ function boot() {
 
   arena = buildArena(scene, renderer);
   fx = createFx(scene);
-  boss = createBoss(scene);
+  boss = createBoss(scene, bossId);
   if (RENT && run.day > 1) {
-    // Vince gets meaner as the days stack up
+    // whoever shows up gets meaner as the days stack up
     const k = 1 + 0.15 * (run.day - 1);
     boss.hp = Math.round(boss.hp * k); boss.maxHp = boss.hp;
   }

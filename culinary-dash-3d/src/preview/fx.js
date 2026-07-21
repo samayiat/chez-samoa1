@@ -60,16 +60,19 @@ export function createFx(scene) {
   }
   let gh = 0;
 
-  // ---- telegraph danger footprint (persistent: a disc that fills + a ring) ----
-  const dDisc = new THREE.Mesh(new THREE.CircleGeometry(1, 44),
-    new THREE.MeshBasicMaterial({ color: 0xff5a2a, transparent: true, opacity: 0, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending }));
-  const dRing = new THREE.Mesh(new THREE.RingGeometry(0.9, 1.0, 48),
-    new THREE.MeshBasicMaterial({ color: 0xff5a2a, transparent: true, opacity: 0, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending }));
-  dDisc.rotation.x = dRing.rotation.x = -Math.PI / 2;
-  dDisc.position.y = 0.04; dRing.position.y = 0.05;
-  dDisc.visible = dRing.visible = false;
-  group.add(dDisc, dRing);
-  let dangerSet = false;
+  // ---- telegraph danger footprints (a pool: zoner bosses drop several at once) ----
+  const dangers = [];
+  for (let i = 0; i < 4; i++) {
+    const disc = new THREE.Mesh(new THREE.CircleGeometry(1, 44),
+      new THREE.MeshBasicMaterial({ color: 0xff5a2a, transparent: true, opacity: 0, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending }));
+    const ring = new THREE.Mesh(new THREE.RingGeometry(0.9, 1.0, 48),
+      new THREE.MeshBasicMaterial({ color: 0xff5a2a, transparent: true, opacity: 0, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending }));
+    disc.rotation.x = ring.rotation.x = -Math.PI / 2;
+    disc.position.y = 0.04; ring.position.y = 0.05;
+    disc.visible = ring.visible = false;
+    group.add(disc, ring);
+    dangers.push({ disc, ring, set: false });
+  }
 
   // ---- charge aim-line (persistent quad from boss toward the lunge target) ----
   const aim = new THREE.Mesh(new THREE.PlaneGeometry(1, 1),
@@ -88,13 +91,14 @@ export function createFx(scene) {
   }
   let pp = 0;
 
-  function setDanger(x, z, r, k, color = 0xff5a2a) {
-    dangerSet = true;
-    dDisc.visible = dRing.visible = true;
-    dDisc.position.set(x, 0.04, z); dRing.position.set(x, 0.05, z);
-    dDisc.scale.setScalar(r); dRing.scale.setScalar(r * (0.96 + Math.sin(k * 12) * 0.03));
-    dDisc.material.color.setHex(color); dRing.material.color.setHex(color);
-    dDisc.material.opacity = k * 0.28; dRing.material.opacity = 0.35 + k * 0.6;
+  function setDanger(x, z, r, k, color = 0xff5a2a, slot = 0) {
+    const d = dangers[slot % dangers.length];
+    d.set = true;
+    d.disc.visible = d.ring.visible = true;
+    d.disc.position.set(x, 0.04, z); d.ring.position.set(x, 0.05, z);
+    d.disc.scale.setScalar(r); d.ring.scale.setScalar(r * (0.96 + Math.sin(k * 12) * 0.03));
+    d.disc.material.color.setHex(color); d.ring.material.color.setHex(color);
+    d.disc.material.opacity = k * 0.28; d.ring.material.opacity = 0.35 + k * 0.6;
   }
   function setAim(ax, az, bx, bz, k, w = 0.5) {
     aimSet = true; aim.visible = true;
@@ -195,16 +199,19 @@ export function createFx(scene) {
     }
 
     // telegraph decorations fade out on any frame the boss didn't refresh them
-    if (!dangerSet) {
-      dDisc.material.opacity = Math.max(0, dDisc.material.opacity - dt * 3);
-      dRing.material.opacity = Math.max(0, dRing.material.opacity - dt * 3);
-      if (dRing.material.opacity <= 0) dDisc.visible = dRing.visible = false;
+    for (const d of dangers) {
+      if (!d.set) {
+        d.disc.material.opacity = Math.max(0, d.disc.material.opacity - dt * 3);
+        d.ring.material.opacity = Math.max(0, d.ring.material.opacity - dt * 3);
+        if (d.ring.material.opacity <= 0) d.disc.visible = d.ring.visible = false;
+      }
+      d.set = false;
     }
     if (!aimSet) {
       aim.material.opacity = Math.max(0, aim.material.opacity - dt * 4);
       if (aim.material.opacity <= 0) aim.visible = false;
     }
-    dangerSet = false; aimSet = false;
+    aimSet = false;
 
     // papers: fly, spin, land or strike the chef
     for (const p of papers) {

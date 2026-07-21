@@ -323,11 +323,14 @@ function endDay(kind) {
   // THE DECISION: pay up and sleep safe, or refuse and settle it in the alley.
   // A mob night (or an empty wallet) takes the choice away — Vince is coming.
   const canPay = win && total >= rent;
+  // who's collecting tonight — mirrors the boss.js ROSTER rotation by wins
+  const BOSS_NAMES = ['Vince', 'the Inspector', 'Bruno'];
+  const who = BOSS_NAMES[(run.bossWins || 0) % BOSS_NAMES.length];
   H.end.querySelector('h2').textContent = win ? 'Closing time' : 'The mob is at the door';
   H.end.querySelector('p').innerHTML = win
     ? `Day ${run.day}: served <b>${state.served}</b>, banked <b>$${state.money}</b> — <b>$${total}</b> in the till.<br>` +
-      (canPay ? `Vince wants <b>$${rent}</b> rent. Pay him… or don't.` : `Vince wants <b>$${rent}</b> rent — and you don't have it.`)
-    : `Too many walkouts — and Vince came for the <b>$${rent}</b> rent anyway. <b>Step into the fight.</b>`;
+      (canPay ? `${who} wants <b>$${rent}</b> rent. Pay… or don't.` : `${who} wants <b>$${rent}</b> rent — and you don't have it.`)
+    : `Too many walkouts — and ${who} came for the <b>$${rent}</b> rent anyway. <b>Step into the fight.</b>`;
   H.pay.style.display = canPay ? 'inline-block' : 'none';
   H.pay.textContent = `Pay the $${rent}`;
   H.pay.onclick = () => {
@@ -336,7 +339,7 @@ function endDay(kind) {
   };
   const link = H.end.querySelector('a');
   link.style.display = 'inline-block';
-  link.textContent = canPay ? `Refuse — fight him →` : `Face him →`;
+  link.textContent = canPay ? `Refuse — fight ${who} →` : `Face ${who} →`;
   link.href = '../vince/?rent=1';
   H.end.classList.add('show');
 }
