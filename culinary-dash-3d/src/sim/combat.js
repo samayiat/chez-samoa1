@@ -70,6 +70,10 @@ const COUNTER_WINDOW = 1.1;
 const METER_MAX = 10;
 const FLURRY_SWINGS = 4;
 const FLURRY_TEMPO = 0.55;
+// the slip (glass jaw Q/E + the vince fight's dodge): a fast burst with
+// i-frames — a strike that passes through the afterimage is a WHIFF, and
+// whiffs open the counter window. Slipping is how you make them miss.
+const DODGE = { speed: 380, dur: 0.2, invuln: 0.42, cd: 0.55 };
 
 function openCounter(state) {
   state.counterT = COUNTER_WINDOW;
@@ -95,6 +99,9 @@ export function startBrawl(state, count = 4) {
 
   chef.weapon = null;
   chef.flurryN = 0;
+  chef.dodge = null;       // the slip (glass jaw dodge-and-weave): burst + i-frames
+  chef.invuln = 0;
+  chef.dodgeCd = 0;
   state.combo = 0;         // landed-punch streak (glass-jaw combo)
   state.comboT = 0;
   state.meter = 0;         // fills as punches land; full = a FLURRY is loaded
@@ -123,7 +130,7 @@ export function startBrawl(state, count = 4) {
       raidT: 0, tgt: null,
     });
   }
-  state.msg = 'THE BRAWL — clear them out!';
+  state.msg = 'THE MOB SENT PROS — clear them out!';
   state.msgT = 2;
 }
 
@@ -410,7 +417,7 @@ function updateEnemies(state, dt) {
         if (mv.kind === 'lunge') {
           e.x += a.dx * mv.speed * dt; e.y += a.dy * mv.speed * dt;
           const cd = Math.hypot(chef.x - e.x, chef.y - e.y);
-          if (!a.hit && cd < mv.reach + 6) {
+          if (!a.hit && cd < mv.reach + 6 && chef.invuln <= 0) {   // a slip = it never landed
             a.hit = true;
             chef.hp -= e.dmg; chef.hurtT = 0.25;
             state.combo = 0;                                // eating one ends the streak
@@ -419,7 +426,7 @@ function updateEnemies(state, dt) {
         } else if (!a.hit && a.t >= mv.dur * 0.5) {         // slam lands mid-swing
           a.hit = true;
           emitHit(state, COMBAT.W.jab, a.cx, a.cy, 0, 0);   // the floor jumps either way
-          if (Math.hypot(chef.x - a.cx, chef.y - a.cy) < mv.r) {
+          if (Math.hypot(chef.x - a.cx, chef.y - a.cy) < mv.r && chef.invuln <= 0) {
             chef.hp -= e.dmg; chef.hurtT = 0.3;
             state.combo = 0;
           } else {
@@ -490,6 +497,8 @@ function endBrawl(state, won) {
   state.enemies = [];
   state.chef.swing = null;
   state.chef.weapon = null;          // the pan goes back on the hook
+  state.chef.dodge = null;
+  state.chef.invuln = 0;
   state.msg = won ? 'you cleared the brawl!' : 'KO! …you live to cook again';
   state.msgT = 2.4;
 }
@@ -535,7 +544,23 @@ export function updateCombat(state, dt, input) {
 
   // movement: rooted during a swing (with a short forward drive), else free
   const chef = state.chef;
-  if (chef.swing) {
+  if (chef.invuln > 0) chef.invuln -= dt;
+  if (chef.dodgeCd > 0) chef.dodgeCd -= dt;
+  // THE SLIP: secondary press bursts sideways/along the stick with i-frames
+  if (input.secondaryDown && !chef.swing && !chef.dodge && chef.dodgeCd <= 0) {
+    let dx = input.move.x, dy = input.move.y;
+    if (Math.hypot(dx, dy) < 0.2) { const L = lateralVec(chef.facing); dx = L.x; dy = L.y; }
+    const m = Math.hypot(dx, dy) || 1;
+    chef.dodge = { t: 0, dx: dx / m, dy: dy / m };
+    chef.invuln = DODGE.invuln;
+    chef.dodgeCd = DODGE.cd;
+    if (state.sounds) state.sounds.push('dodge');
+  }
+  if (chef.dodge) {
+    chef.dodge.t += dt;
+    if (chef.dodge.t >= DODGE.dur) chef.dodge = null;
+    else moveChef(state, dt, chef.dodge.dx, chef.dodge.dy, DODGE.speed, true);
+  } else if (chef.swing) {
     if (chef.swing.t < chef.swing.dur * DRIVE_WINDOW) {
       const F = forwardVec(chef.facing);
       moveChef(state, dt, F.x, F.y, LUNGE_SPEED, true);

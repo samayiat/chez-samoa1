@@ -301,6 +301,38 @@ describe('glass-jaw grammar (guards, counters, the flurry)', () => {
   });
 });
 
+describe('the slip (dodge with i-frames)', () => {
+  const SLIP = { move: { x: 0, y: 1 }, primary: false, primaryDown: false, secondary: true, secondaryDown: true };
+
+  it('a dodge is a burst of ground with i-frames and a cooldown', () => {
+    const s = createState(7); startBrawl(s, 1);
+    s.enemies[0].x = 40; s.enemies[0].y = 40; s.enemies[0].speed = 0; s.enemies[0].thirstAt = Infinity; s.enemies[0].raidAt = Infinity;
+    const chef = s.chef; chef.x = 300; chef.y = 200;
+    const y0 = chef.y;
+    stepSim(s, STEP, SLIP);
+    expect(chef.invuln).toBeGreaterThan(0);
+    for (let i = 0; i < 12; i++) stepSim(s, STEP, NO);
+    expect(chef.y - y0).toBeGreaterThan(30);       // covered real ground, fast
+    expect(chef.dodgeCd).toBeGreaterThan(0);       // and it can't be spammed
+  });
+
+  it('a slipped lunge never lands — and leaves him wide open (counter)', () => {
+    const s = createState(7); startBrawl(s, 1);
+    const chef = s.chef; chef.x = 300; chef.y = 250; chef.facing = Math.PI / 2;
+    s.enemies = [{ id: 'L', kind: 'chaser', x: chef.x + 30, y: chef.y, hp: 9, maxHp: 9,
+      speed: 0, dmg: 1, atkInterval: 9, r: 7, atkCd: 0, kx: 0, ky: 0, hurtT: 0,
+      role: 'fighter', job: 'chase', thirstAt: Infinity, raidAt: Infinity, buffed: false,
+      chugT: 0, guard: 0, punish: false, circle: 1, circleT: 9 }];
+    const e = s.enemies[0];
+    for (let i = 0; i < 40 && !(e.atk && e.atk.phase === 'strike'); i++) stepSim(s, STEP, NO);
+    const hp0 = chef.hp;
+    stepSim(s, STEP, SLIP);                        // slip as it arrives
+    for (let i = 0; i < 30; i++) stepSim(s, STEP, NO);
+    expect(chef.hp).toBe(hp0);                     // it went through the afterimage
+    expect(s.counterT).toBeGreaterThan(0);         // he missed — COUNTER
+  });
+});
+
 describe('wrecking the place (raids, table flips, weapons)', () => {
   const fryer = STATIONS.find((s) => s.id === 'fryer');
 

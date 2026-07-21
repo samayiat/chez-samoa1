@@ -1,8 +1,9 @@
-// The BRAWL's angry customers — walkouts who stormed back in swinging. One
-// standing figure per sim enemy (state.enemies), in the cast's shared form
-// vocabulary, tinted by archetype: the red CHASER, the big purple SMASHER, the
-// quick orange THIEF. Purely a render layer over sim/combat.js — position,
-// facing, hurt flashes and deaths all read from the sim.
+// The BRAWL's muscle — the mob stopped sending angry diners and started
+// sending PROS off the Glass Jaw card. One standing figure per sim enemy
+// (state.enemies): BULL OKONKWO the swarmer (chaser), DEACON WILLS the
+// counter-puncher (smasher), and the street thief who only wants the till.
+// Boxers fight bare-chested in their card colors: trunks, gloves, boots.
+// Purely a render layer over sim/combat.js.
 import * as THREE from 'three';
 import { mat, box, put, clamp01, lerp } from './util.js';
 import { rpos } from './kitchen-space.js';
@@ -10,32 +11,39 @@ import { TILL, DOOR, STATIONS } from '../sim/data.js';
 
 const BAR = STATIONS.find((s) => s.id === 'bar');
 
+// roster colors straight from glass jaw's ROSTER entries
 const ARCH = {
-  chaser:  { top: 0xc0392b, scale: 1.3 },    // bigger across the board — they
-  smasher: { top: 0x8e44ad, scale: 1.55 },   // should crowd the room, not
-  thief:   { top: 0xe67e22, scale: 1.1 },    // blend in with the diners
+  chaser:  { boxer: true, skin: 0x6B4A34, trunk: 0xB8320F, glove: 0xFF6A1E, scale: 1.35, bulk: 1.18 },  // "BULL" OKONKWO
+  smasher: { boxer: true, skin: 0x8A5F3F, trunk: 0x2B2438, glove: 0xC9B8FF, scale: 1.55, bulk: 1.05 },  // DEACON WILLS
+  thief:   { boxer: false, top: 0xe67e22, scale: 1.1, bulk: 1 },
 };
 const SKINS = [0x7a4328, 0x8a5a3a, 0xb07a4e, 0x633119];
 
 function buildBrawler(kind, seed) {
   const a = ARCH[kind] || ARCH.chaser;
-  const skin = SKINS[seed % SKINS.length];
+  const skin = a.boxer ? a.skin : SKINS[seed % SKINS.length];
   const g = new THREE.Group();
-  const topMat = mat(a.top, { flat: true, rough: 0.7 });
   const skinMat = mat(skin, { rough: 0.7 });
-  const trouser = mat(0x2e2e38, { flat: true, rough: 0.85 });
+  // a boxer's chest is bare — the flash/glow channel rides the skin itself
+  const topMat = a.boxer ? mat(skin, { flat: true, rough: 0.65 }) : mat(a.top, { flat: true, rough: 0.7 });
+  const trouser = a.boxer ? mat(a.trunk, { flat: true, rough: 0.8 }) : mat(0x2e2e38, { flat: true, rough: 0.85 });
+  const gloveMat = a.boxer ? mat(a.glove, { flat: true, rough: 0.55 }) : skinMat;
   const cyl = (rt, rb, h, mt, seg = 10) => { const m = new THREE.Mesh(new THREE.CylinderGeometry(rt, rb, h, seg), mt); m.castShadow = true; return m; };
   const ball = (r, mt, sx = 1, sy = 1, sz = 1) => { const m = new THREE.Mesh(new THREE.SphereGeometry(r, 10, 8), mt); m.scale.set(sx, sy, sz); m.castShadow = true; return m; };
 
-  // standing legs
+  // standing legs (a boxer's are bare shin over ring boots)
   for (const sx of [-0.13, 0.13]) {
-    g.add(put(cyl(0.095, 0.075, 0.52, trouser), sx, 0.28, 0));
-    g.add(put(ball(0.08, mat(0x1a1a20, { flat: true }), 1, 0.7, 1.25), sx, 0.05, 0.05));
+    g.add(put(cyl(0.095, 0.075, 0.52, a.boxer ? skinMat : trouser), sx, 0.28, 0));
+    g.add(put(ball(0.08, mat(a.boxer ? 0x14161c : 0x1a1a20, { flat: true }), 1, 0.7, 1.25), sx, 0.05, 0.05));
   }
-  // torso + shoulders + neck
-  const torso = cyl(0.24, 0.2, 0.55, topMat, 10); torso.scale.z = 0.72; torso.position.y = 0.82; g.add(torso);
-  g.add(put(ball(0.11, topMat, 1, 0.85, 0.9), -0.21, 1.05, 0));
-  g.add(put(ball(0.11, topMat, 1, 0.85, 0.9), 0.21, 1.05, 0));
+  // torso + shoulders + neck (+ trunks with a waistband for the boxers)
+  const torso = cyl(0.24 * a.bulk, 0.2 * a.bulk, 0.55, topMat, 10); torso.scale.z = 0.72; torso.position.y = 0.82; g.add(torso);
+  if (a.boxer) {
+    const trunks = cyl(0.21 * a.bulk, 0.19 * a.bulk, 0.24, trouser, 10); trunks.scale.z = 0.75; trunks.position.y = 0.56; g.add(trunks);
+    g.add(put(box(0.4 * a.bulk, 0.05, 0.28, mat(0x14161c, { flat: true })), 0, 0.68, 0));   // the belt line
+  }
+  g.add(put(ball(0.11 * a.bulk, topMat, 1, 0.85, 0.9), -0.21 * a.bulk, 1.05, 0));
+  g.add(put(ball(0.11 * a.bulk, topMat, 1, 0.85, 0.9), 0.21 * a.bulk, 1.05, 0));
   g.add(put(cyl(0.075, 0.085, 0.14, skinMat, 8), 0, 1.15, 0.02));
   // head — ANGRY: knitted brows over the eyes
   const head = new THREE.Group(); head.position.set(0, 1.36, 0); g.add(head);
@@ -45,14 +53,14 @@ function buildBrawler(kind, seed) {
   head.add(put(box(0.045, 0.045, 0.03, mat(0x120a06)), 0.07, 0.0, 0.19));
   const browL = put(box(0.09, 0.03, 0.03, mat(0x120a06)), -0.07, 0.06, 0.2); browL.rotation.z = -0.45; head.add(browL);
   const browR = put(box(0.09, 0.03, 0.03, mat(0x120a06)), 0.07, 0.06, 0.2); browR.rotation.z = 0.45; head.add(browR);
-  // arms up in a guard, fists ready
+  // arms up in a guard — boxers wear the card gloves, big and unmistakable
   const arms = [];
-  for (const sx of [-0.28, 0.28]) {
+  for (const sx of [-0.28 * a.bulk, 0.28 * a.bulk]) {
     const sh = new THREE.Group(); sh.position.set(sx, 1.05, 0.02); sh.rotation.x = -0.7; g.add(sh);
     sh.add(put(cyl(0.07, 0.058, 0.26, topMat), 0, -0.14, 0));
     const elbow = new THREE.Group(); elbow.position.y = -0.28; elbow.rotation.x = 1.5; sh.add(elbow);
     elbow.add(put(cyl(0.055, 0.05, 0.22, skinMat), 0, -0.12, 0));
-    elbow.add(put(ball(0.075, skinMat), 0, -0.26, 0));                        // fist
+    elbow.add(put(ball(a.boxer ? 0.105 : 0.075, gloveMat), 0, -0.26, 0));     // fist / glove
     arms.push({ sh, elbow });
   }
   // the whiskey bottle — amber glass in the right fist, out only mid-chug

@@ -55,6 +55,11 @@ const H = {
 
 let renderer, scene, camera, kitchen, customers, cats, brawlers, chef, cu, carry, composer, booted = false, lastT = 0;
 let camShake = 0, lastPhase = 'service';
+// the brawl camera: the diorama drops OVER THE SHOULDER (the vince fight's
+// framing) while the mob is in the room, and swoops back up when it's over
+let fightCam = 0;
+const fcPos = new THREE.Vector3(0.5, 13.6, 15.4);
+const fcLook = new THREE.Vector3(0, 0.4, -0.4);
 let state, walkPhase = 0, facing = Math.PI, dayT = 80, ended = 0, workBurst = 0, lastCarryKey = null;
 // the PARTNER — whichever chef you didn't pick. They open the day on the floor
 // with you, then walk off into the back office to run the books.
@@ -130,6 +135,18 @@ function Date_now_safe() { try { return Date.now(); } catch (e) { return 12345; 
 function tick(dt) {
   if (ended) return;
   const input = pollInput();
+  // over the shoulder, the stick is CAMERA-relative (the vince fight's rule:
+  // "up" is always away from the camera) — sim XY is render XZ, so the same
+  // rotation applies directly
+  if (state.phase === 'brawl' && fightCam > 0.25) {
+    const p = rpos(state.chef.x, state.chef.y);
+    let fx = p.x - camera.position.x, fz = p.z - camera.position.z;
+    const m = Math.hypot(fx, fz) || 1; fx /= m; fz /= m;
+    const rx = -fz, rz = fx;
+    const ix = input.move.x, iy = input.move.y;
+    input.move.x = ix * rx + (-iy) * fx;
+    input.move.y = ix * rz + (-iy) * fz;
+  }
   stepSim(state, dt, input);
   // action cues -> the shared beep-synth voice + a quick "prepping" flourish
   if (state.sounds && state.sounds.length) {
@@ -161,17 +178,39 @@ function render(alpha, now) {
   const t = now / 1000; const rdt = Math.min(0.05, t - lastT); lastT = t;
   if (partnerWalk && !partnerWalk.done) updatePartnerWalk(rdt);
   if (state) syncScene(rdt, t);
-  // impact shake + the drunk lean (buzzed brawling tilts the whole room a touch)
-  const drinks = state && state.phase === 'brawl' ? state.chef.drinks || 0 : 0;
+  // camera: the diorama drops over the shoulder for the brawl (vince framing),
+  // with impact shake + the drunk lean layered on top of whichever frame wins
+  const brawlNow = state && state.phase === 'brawl';
+  fightCam = lerp(fightCam, brawlNow ? 1 : 0, smooth(rdt, brawlNow ? 2.6 : 2.0));
+  const drinks = brawlNow ? state.chef.drinks || 0 : 0;
   const sway = drinks >= 3 ? Math.sin(t * 1.3) * 0.12 * Math.min(1, (drinks - 2) / 3) : 0;
-  if (camShake > 0.002 || sway) {
-    camera.position.set(0.5 + (Math.random() - 0.5) * camShake + sway * 2, 13.6 + (Math.random() - 0.5) * camShake * 0.6, 15.4);
-    camera.lookAt(0, 0.4, -0.4);
-    camera.rotation.z += sway * 0.25;
-    camShake *= Math.exp(-7 * rdt);
-  } else if (camera.rotation.z !== 0) {
-    camera.position.set(0.5, 13.6, 15.4); camera.lookAt(0, 0.4, -0.4);
+  if (fightCam > 0.002 && state) {
+    const c = state.chef;
+    const p = rpos(c.x, c.y);
+    const F = forwardVec(c.facing);                    // sim fwd -> render (x, z)
+    // behind her, biased to the right shoulder, looking past her at the fight
+    const k = smooth(rdt, 4.2);
+    fcPos.x = lerp(fcPos.x, p.x - F.x * 3.9 - F.y * 1.15, k);
+    fcPos.y = lerp(fcPos.y, 2.75, k);
+    fcPos.z = lerp(fcPos.z, p.z - F.y * 3.9 + F.x * 1.15, k);
+    fcLook.x = lerp(fcLook.x, p.x + F.x * 2.4, smooth(rdt, 5));
+    fcLook.y = lerp(fcLook.y, 1.0, k);
+    fcLook.z = lerp(fcLook.z, p.z + F.y * 2.4, smooth(rdt, 5));
+  } else {
+    // park the fight rig back at the diorama so the next drop-in starts clean
+    const k = smooth(rdt, 2);
+    fcPos.x = lerp(fcPos.x, 0.5, k); fcPos.y = lerp(fcPos.y, 13.6, k); fcPos.z = lerp(fcPos.z, 15.4, k);
+    fcLook.x = lerp(fcLook.x, 0, k); fcLook.y = lerp(fcLook.y, 0.4, k); fcLook.z = lerp(fcLook.z, -0.4, k);
   }
+  const eK = fightCam * fightCam * (3 - 2 * fightCam);   // eased blend
+  camera.position.set(
+    lerp(0.5, fcPos.x, eK) + (Math.random() - 0.5) * camShake + sway * 2,
+    lerp(13.6, fcPos.y, eK) + (Math.random() - 0.5) * camShake * 0.6,
+    lerp(15.4, fcPos.z, eK)
+  );
+  camera.lookAt(lerp(0, fcLook.x, eK), lerp(0.4, fcLook.y, eK), lerp(-0.4, fcLook.z, eK));
+  if (sway) camera.rotation.z += sway * 0.25;
+  camShake *= Math.exp(-7 * rdt);
   kitchen && kitchen.update(rdt, t, 1 - Math.max(0, dayT) / 80);   // third arg: day progress 0..1 (drives the sunset)
   cats && cats.update(rdt, t);
   updateHud();
@@ -312,11 +351,22 @@ function syncScene(dt, t) {
       cu.armL.rotation.x = -0.5; cu.armL.userData.elbow.rotation.x = 1.2;
       cu.armR.rotation.x = -0.5; cu.armR.userData.elbow.rotation.x = 1.2;
     }
+    // the slip: a hard lean along the dodge with a low duck
+    if (c.dodge) {
+      const L = { x: Math.cos(c.facing), y: Math.sin(c.facing) };
+      const side = c.dodge.dx * L.x + c.dodge.dy * L.y;
+      chef.rotation.z = -side * 0.4;
+      chef.position.y = -0.12;
+    } else {
+      chef.rotation.z = lerp(chef.rotation.z, 0, clamp01(dt * 14));
+      chef.position.y = lerp(chef.position.y, 0, clamp01(dt * 14));
+    }
     // buzzed: the whole chef sways with the same rhythm steering the input drift
     const dr = c.drinks || 0;
     cu.body.rotation.z = dr >= 3 ? Math.sin(state.t * 6) * 0.07 * Math.min(1, (dr - 2) / 3) : 0;
-  } else if (cu.body.rotation.z !== 0) {
-    cu.body.rotation.z = 0;
+  } else {
+    if (cu.body.rotation.z !== 0) cu.body.rotation.z = 0;
+    if (chef.rotation.z !== 0) chef.rotation.z = lerp(chef.rotation.z, 0, clamp01(dt * 10));
   }
   brawlers && brawlers.sync(state, dt, t);
   customers.sync(state, dt, t);
@@ -342,7 +392,7 @@ function updateHud() {
     const wpn = state.chef.weapon ? ` · armed: ${WEAPONS[state.chef.weapon.id].label}` : '';
     const streak = (state.combo || 0) >= 2 ? ` · COMBO ×${state.combo}` : '';
     const fl = (state.meter || 0) >= 10 ? ' · ★ FLURRY READY' : '';
-    H.prompt.textContent = 'FIGHT! E / ACTION to punch' + wpn + streak + fl +
+    H.prompt.textContent = 'FIGHT! E punch · SHIFT slip' + wpn + streak + fl +
       (dr >= 5 ? ` · WASTED (${dr} shots)` : dr > 0 ? ` · ${dr} shot${dr > 1 ? 's' : ''} of courage` : ' · drink at the bar for courage');
     H.prompt.style.opacity = '1';
   }
@@ -505,7 +555,7 @@ function begin() {
     note.textContent = "This 3D preview needs WebGL, which isn't available in this view. Open it in your phone's browser (Chrome or Safari).";
     if (startEl && !document.getElementById('glnote')) startEl.appendChild(note); return;
   }
-  initInput(window); initTouch({ primaryLabel: 'ACTION', dodge: false });
+  initInput(window); initTouch({ primaryLabel: 'ACTION' });   // dodge button on — the brawl slips now
   initSfx();                                       // unlock audio on the start tap
   window.addEventListener('pointerdown', initSfx);  // and keep it unlocked on mobile
   const touch = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;

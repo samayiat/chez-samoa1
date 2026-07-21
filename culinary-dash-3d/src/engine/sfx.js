@@ -60,6 +60,7 @@ export function sfx(name) {
     case 'smash':   noise(0.14, 0.13); beep(150, 0.12, 'square', 0.1, 58); break;                 // equipment wrecked / a table goes over (2D pot-shatter)
     case 'clang':   noise(0.07, 0.07); beep(880, 0.1, 'square', 0.12, 220); break;                // cast iron meets jaw
     case 'block':   noise(0.1, 0.11); beep(420, 0.1, 'square', 0.05, 300); break;                 // a punch dies on a raised guard (glass jaw)
+    case 'dodge':   beep(500, 0.12, 'triangle', 0.06, 900); break;                                // the slip (the vince fight's dash)
     case 'brawl':   beep(320, 0.16, 'sawtooth', 0.12, 150); setTimeout(() => beep(260, 0.2, 'sawtooth', 0.12, 120), 140); break;   // the mob storms in
   }
 }
