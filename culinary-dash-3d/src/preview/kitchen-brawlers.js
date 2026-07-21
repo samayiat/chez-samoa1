@@ -6,7 +6,9 @@
 import * as THREE from 'three';
 import { mat, box, put, clamp01, lerp } from './util.js';
 import { rpos } from './kitchen-space.js';
-import { TILL, DOOR } from '../sim/data.js';
+import { TILL, DOOR, STATIONS } from '../sim/data.js';
+
+const BAR = STATIONS.find((s) => s.id === 'bar');
 
 const ARCH = {
   chaser:  { top: 0xc0392b, scale: 1.0 },
@@ -44,13 +46,21 @@ function buildBrawler(kind, seed) {
   const browL = put(box(0.09, 0.03, 0.03, mat(0x120a06)), -0.07, 0.06, 0.2); browL.rotation.z = -0.45; head.add(browL);
   const browR = put(box(0.09, 0.03, 0.03, mat(0x120a06)), 0.07, 0.06, 0.2); browR.rotation.z = 0.45; head.add(browR);
   // arms up in a guard, fists ready
+  const arms = [];
   for (const sx of [-0.28, 0.28]) {
     const sh = new THREE.Group(); sh.position.set(sx, 1.05, 0.02); sh.rotation.x = -0.7; g.add(sh);
     sh.add(put(cyl(0.07, 0.058, 0.26, topMat), 0, -0.14, 0));
     const elbow = new THREE.Group(); elbow.position.y = -0.28; elbow.rotation.x = 1.5; sh.add(elbow);
     elbow.add(put(cyl(0.055, 0.05, 0.22, skinMat), 0, -0.12, 0));
     elbow.add(put(ball(0.075, skinMat), 0, -0.26, 0));                        // fist
+    arms.push({ sh, elbow });
   }
+  // the whiskey bottle — amber glass in the right fist, out only mid-chug
+  const bottle = new THREE.Group(); bottle.position.set(0, -0.3, 0.06); bottle.visible = false;
+  const glassMat = mat(0xb8681e, { rough: 0.3, emissive: 0x5a2c08, emi: 0.5 });
+  bottle.add(put(cyl(0.045, 0.05, 0.16, glassMat, 8), 0, 0, 0));
+  bottle.add(put(cyl(0.02, 0.022, 0.09, glassMat, 8), 0, 0.11, 0));           // the neck
+  arms[1].elbow.add(bottle);
   // the loot — a knotted money sack slung over the shoulder, shown mid-flee
   const loot = new THREE.Group(); loot.position.set(-0.24, 1.28, -0.18); loot.visible = false;
   const sackMat = mat(0xc9a94e, { flat: true, rough: 0.8 });
@@ -59,7 +69,7 @@ function buildBrawler(kind, seed) {
   loot.add(put(box(0.1, 0.1, 0.02, mat(0x7a5c1e, { flat: true })), 0, 0, 0.17)); // the $ patch
   g.add(loot);
   g.scale.setScalar(a.scale);
-  return { group: g, torso, head, loot };
+  return { group: g, torso, head, loot, armR: arms[1], bottle };
 }
 
 export function createBrawlers(scene) {
@@ -93,15 +103,24 @@ export function createBrawlers(scene) {
     for (const e of enemies) {
       const b = map.get(e.id); if (!b) continue;
       const p = rpos(e.x, e.y);
-      // thieves face where they're running (till, then door); fighters square up
+      // thieves face where they're running (till, then door); a drink run faces
+      // the bar; fighters square up on the chef
       const aim = e.role === 'thief'
         ? rpos((e.state === 'flee' ? DOOR : TILL).x, (e.state === 'flee' ? DOOR : TILL).y)
-        : rpos(state.chef.x, state.chef.y);
+        : e.job === 'drink'
+          ? rpos(BAR.x, BAR.y)
+          : rpos(state.chef.x, state.chef.y);
       b.group.position.set(p.x, Math.abs(Math.sin(t * 8 + p.x)) * 0.04, p.z);   // stomping bob
       b.group.rotation.y = Math.atan2(aim.x - p.x, aim.z - p.z);
       b.loot.visible = !!e.carry;
+      // mid-chug: head back, bottle up. LIT: a hot ember glow under the shirt.
+      const chugging = e.job === 'drink' && !e.buffed && (e.chugT || 0) > 0;
+      b.bottle.visible = chugging;
+      b.armR.sh.rotation.x = lerp(b.armR.sh.rotation.x, chugging ? -2.3 : -0.7, clamp01(dt * 10));
+      b.head.rotation.x = lerp(b.head.rotation.x, chugging ? -0.4 : 0, clamp01(dt * 10));
       const flash = e.hurtT > 0 ? 0.45 : 0;
-      b.torso.material.emissive.setRGB(flash, 0, 0);                            // hurt flash
+      const lit = e.buffed ? 0.3 + Math.sin(t * 9) * 0.1 : 0;
+      b.torso.material.emissive.setRGB(Math.max(flash, lit), lit * 0.22, 0);    // hurt flash / lit glow
     }
   }
 

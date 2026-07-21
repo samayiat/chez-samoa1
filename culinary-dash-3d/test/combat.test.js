@@ -187,6 +187,41 @@ describe('the steal (brawl thieves)', () => {
   });
 });
 
+describe('the mob drinks too (enemy bar buffs)', () => {
+  // a lone chaser, thirsty NOW, parked by the bar spot; chef far away
+  function thirstyBrawl() {
+    const s = createState(7); startBrawl(s, 1);
+    const e = s.enemies[0];
+    e.thirstAt = 0; e.x = 545; e.y = 78;
+    s.chef.x = 60; s.chef.y = 300;
+    return [s, e];
+  }
+
+  it('a thirsty fighter chugs at the bar and comes back LIT', () => {
+    const [s, e] = thirstyBrawl();
+    const spd = e.speed, dmg = e.dmg, maxHp = e.maxHp;
+    for (let i = 0; i < 60 * 4 && !e.buffed; i++) stepSim(s, STEP, NO);
+    expect(e.buffed).toBe(true);
+    expect(e.job).toBe('chase');
+    expect(e.speed).toBeCloseTo(spd * 1.4);
+    expect(e.dmg).toBe(dmg + 1);
+    expect(e.maxHp).toBe(maxHp + 2);
+    expect(e.hp).toBe(e.maxHp);                       // topped up by the bottle
+  });
+
+  it('punching him mid-chug spills the bottle for good', () => {
+    const s = createState(7); startBrawl(s, 1);
+    const e = s.enemies[0];
+    const chef = s.chef;
+    chef.x = 300; chef.y = 250; chef.facing = Math.PI / 2;
+    e.thirstAt = 0; e.job = 'drink'; e.x = chef.x + 14; e.y = chef.y;
+    drive(s, 12, PRESS);
+    expect(e.buffed).toBe(false);
+    expect(e.job).toBe('chase');
+    expect(e.thirstAt).toBe(Infinity);                // he doesn't try again
+  });
+});
+
 describe('liquid courage (the drinking mechanic)', () => {
   const NO = { move: { x: 0, y: 0 }, primary: false, primaryDown: false, secondary: false, secondaryDown: false };
   const PRESS = { ...NO, primary: true, primaryDown: true };

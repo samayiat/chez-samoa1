@@ -25,6 +25,12 @@ const ENEMY_R = 6;
 // But the room starts to lean: 3+ shots wobble your steering, 5+ is WASTED.
 const BAR = STATIONS.find((s) => s.id === 'bar');
 const DRINK_REACH = 26, BUZZED_AT = 3, WASTED_AT = 5;
+// ...and the mob drinks too (2D smash/buffed port): thirsty fighters break for
+// the bar, chug, and come back LIT — quicker, harder-hitting, and tougher.
+// Punch them mid-chug and the bottle SPILLS (they don't try again).
+const BAR_SPOT = { x: BAR.x, y: BAR.y + 16 };   // where a body stands to drink
+const ENEMY_CHUG = 2.2;                          // seconds on the bottle
+const BUFF_SPD = 1.4, BUFF_DMG = 1, BUFF_HP = 2; // 2D BUFF_ESPD / +dmg / +hp
 const isSour = (d) => d === 'whiskey-sour' || d === 'gin-sour';
 const LUNGE_SPEED = 42;      // px/s forward drive during the first 45% of a swing
 const DRIVE_WINDOW = 0.45;
@@ -68,6 +74,9 @@ export function startBrawl(state, count = 4) {
       atkCd: range(state.rng, 0.3, 1.0), kx: 0, ky: 0, hurtT: 0,
       // thieves don't fight — they make for the till, then run for the door
       role: kind === 'thief' ? 'thief' : 'fighter', state: 'steal', carry: false,
+      // fighters get thirsty: most of them will break for the bar mid-fight
+      job: 'chase', chugT: 0, buffed: false,
+      thirstAt: range(state.rng, 0, 1) < 0.6 ? state.t + range(state.rng, 1.5, 6) : Infinity,
     });
   }
   state.msg = 'THE BRAWL — clear them out!';
@@ -106,6 +115,12 @@ function landPunch(state) {
       state.msg = `caught him! +$${STEAL.BOUNTY} back`;
       state.msgT = 1.4;
       if (state.sounds) state.sounds.push('coin');
+    }
+    if (e.job === 'drink' && !e.buffed) {
+      // knocked off the bottle (2D "SPILLED!") — and he doesn't get another
+      e.job = 'chase'; e.chugT = 0; e.thirstAt = Infinity;
+      state.msg = 'SPILLED!';
+      state.msgT = 1.4;
     }
     const send = impulse * Math.min(2, 1 + 0.25 * (chef.drinks || 0));
     e.kx += F.x * send;
@@ -179,6 +194,32 @@ function updateEnemies(state, dt) {
           }
         }
       }
+      resolveCollision(e, state.obstacles, e.r);
+      continue;
+    }
+
+    // THE MOB DRINKS TOO (2D smash/buffed port): when the thirst hits, break
+    // for the bar, chug, come back LIT — unless the chef spills it first.
+    if (!e.buffed && e.job !== 'drink' && state.t >= e.thirstAt) e.job = 'drink';
+    if (e.job === 'drink') {
+      const bx = BAR_SPOT.x - e.x, by = BAR_SPOT.y - e.y;
+      const bd = Math.hypot(bx, by);
+      if (bd > 8) {
+        if (Math.hypot(e.kx, e.ky) < 20) { e.x += (bx / bd) * e.speed * dt; e.y += (by / bd) * e.speed * dt; }
+        e.chugT = 0;
+      } else {
+        e.chugT += dt;                       // head back, bottle up
+        if (e.chugT >= ENEMY_CHUG) {
+          e.buffed = true; e.job = 'chase';
+          e.speed *= BUFF_SPD;
+          e.dmg += BUFF_DMG;
+          e.maxHp += BUFF_HP; e.hp = Math.min(e.hp + BUFF_HP, e.maxHp);
+          state.msg = 'he hit the bottle — he\'s LIT!';
+          state.msgT = 1.8;
+          if (state.sounds) state.sounds.push('cheer');
+        }
+      }
+      e.atkCd = Math.max(0, e.atkCd - dt);
       resolveCollision(e, state.obstacles, e.r);
       continue;
     }
